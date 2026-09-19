@@ -373,13 +373,16 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Nastavit Android SDK
-        uses: android-actions/setup-android@v3
-
+      # Ubuntu runnery uz maji Android SDK predinstalovane (ANDROID_HOME
+      # je nastavene). Externi akci setup-android nepotrebujeme - je
+      # dlouhodobe neudrzovana a casto padala. Jen doinstalujeme
+      # konkretni platformu a build-tools, ktere projekt potrebuje.
       - name: Doinstalovat SDK platformu
         run: |
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager "platforms;android-36" "build-tools;36.0.0" || true
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
       - name: Sestavit APK
         run: |

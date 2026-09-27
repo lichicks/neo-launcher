@@ -333,6 +333,18 @@ Možnosti:
 - Hledání aplikací
 - Paralaxa celé mřížky podle ukazatele (víc 3D)
 - Addon RedirectServices přenést do tohoto repa (viz rozbor výše)
+- **Lišta běžící aplikace (rozhodnuto 2026-09-27, udělat 29. 9. spolu
+  s addonem):** dole na panelu pilulka ve stylu ornamentu (napůl zanořená
+  do spodní hrany, `frame.bottom`), když na pozadí běží hra/aplikace:
+  náhled + skutečný název (Quest u sideloadů píše „Neznámá aplikace“, my
+  máme label z Androidu), tlačítka **Pokračovat** (znovu spustit = návrat
+  do běžící hry) a **Ukončit**. Obyčejná aplikace to na Androidu 14 neumí
+  (`killBackgroundProcesses` smí jen vlastní procesy, běžící cizí procesy
+  nejsou vidět, UsageStats řekne jen „naposledy na obrazovce“) → detekci
+  a ukončení dělá addon (služba přístupnosti): čte systémové menu Questu
+  (lišta s běžící aplikací) a klepne na jeho „Ukončit“; záložně Informace
+  o aplikaci → „Vynutit ukončení“. Uživatel NEchtěl jednodušší verzi
+  s odhadem ze statistik dřív (mohla by ukázat už zavřenou hru).
 - Rozložení jako v Lightning Launcheru: hry velké karty, aplikace malá
   kolečka dole (uživatel zvažuje místo záložek)
 - Karusel: podle zpětné vazby z headsetu buď vylepšit (paralaxa, zvuk,

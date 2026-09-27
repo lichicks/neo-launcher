@@ -79,8 +79,20 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
     // --- Rozmery z preview (dp) ----------------------------------------------
     private static final float FRAME_RADIUS = 28f;
-    private static final float TOPBAR_H = 60f;
-    private static final float GRID_TOP = 76f;
+    /**
+     * Plovouci horni lista ("ornament" jako ve visionOS) se zalozkami, casem
+     * a baterii - napul zanorena do horni hrany panelu (stred na frame.top).
+     */
+    private static final float ORN_H = 52f;
+    private static final float FRAME_TOP = 36f;
+    /** Mrizka zacina pod ornamentem (i zvetsena karta v prvni rade ho nezakryje). */
+    private static final float GRID_TOP = 50f;
+    /** Leva lista s ikonami (Knihovna, Karusel, Rychle menu, Nastaveni); po najeti se rozbali. */
+    private static final float RAIL_LEFT = 16f;
+    private static final float RAIL_W = 56f;
+    private static final float RAIL_GAP = 16f;
+    private static final float RAIL_EXPAND = 132f;
+    private static final float RAIL_ITEM = 44f;
     private static final float GRID_SIDE = 24f;
     private static final float GRID_BOTTOM = 24f;
     private static final float GAP = 15f;
@@ -128,6 +140,16 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private static final int ZONE_TAB0 = 2; // +index zalozky
     /** Cela pilulka s hodinami a baterii (klepnuti = rychle menu). */
     private static final int ZONE_BATTERY = 10;
+    private static final int ZONE_RAIL0 = 20; // +index polozky leve listy
+    private static final int ZONE_RAIL_BG = 30;
+    private static final int ZONE_ORN_BG = 31;
+
+    private static final String[] RAIL_LABELS = {"Knihovna", "Karusel", "Rychlé menu", "Nastavení"};
+    private static final int[] RAIL_ICONS = {Icons.COLUMNS, Icons.CAROUSEL, Icons.SLIDERS, Icons.GEAR};
+    private static final int RAIL_LIBRARY = 0;
+    private static final int RAIL_CAROUSEL = 1;
+    private static final int RAIL_QUICK = 2;
+    private static final int RAIL_SETTINGS = 3;
 
     private static final String[] TAB_NAMES = {"Hry", "Aplikace", "Vše"};
 
@@ -219,7 +241,16 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final Eased[] tabHover = {new Eased(0, 180, Eased.EASE_OUT),
             new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT)};
     private final Eased contentFade = new Eased(1, 280, Eased.EASE_OUT);
+    /** Logo Neo nahore v leve liste. */
     private final RectF brandRect = new RectF();
+    private final RectF ornRect = new RectF();
+    private final RectF railRect = new RectF();
+    private final RectF[] railRects = {new RectF(), new RectF(), new RectF(), new RectF()};
+    private final Eased[] railHover = {new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT),
+            new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT)};
+    private final Spring railExpand = new Spring(0, 0.36f, 0.82f, 0.002f);
+    private final Path chromePath = new Path();
+    private float ornDividerX;
     private final RectF tabsRect = new RectF();
     private final RectF[] tabRects = {new RectF(), new RectF(), new RectF()};
     private final RectF statusRect = new RectF();
@@ -242,7 +273,6 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final TextPaint clockText = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private final TextPaint batteryText = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private final TextPaint emptyText = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
-    private final Path topBarPath = new Path();
     private final Path framePath = new Path();
     private final Path boltPath = new Path();
     private final RectF tmp = new RectF();
@@ -251,12 +281,12 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     /** Svetle sklo ve stylu visionOS (volba v nastaveni), cache podle kryti. */
     private Shader visionGlass;
     private int visionGlassFor = -1;
-    private Shader barShadow;
     private ShadowSprite restShadow, hoverShadow, glowSprite;
     private float spriteForW = -1;
 
     private final RenderNode contentNode = new RenderNode("neo-content");
-    private final RenderNode backdropNode = new RenderNode("neo-topbar-backdrop");
+    /** Rozmazana kopie karet pod ornamentem = matne sklo horni listy. */
+    private final RenderNode backdropNode = new RenderNode("neo-ornament-backdrop");
     private final DepthBlur depthBlur = new DepthBlur();
     private RenderEffect backdropEffect;
     private ModalDepth modalDepth;
@@ -492,6 +522,11 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         return new RectF(brandRect);
     }
 
+    /** Tlacitko nastaveni v leve liste. */
+    public RectF settingsRect() {
+        return new RectF(railRects[RAIL_SETTINGS]);
+    }
+
     /** Hodiny + baterie (odtud "vyjede" rychle menu). */
     public RectF statusRect() {
         return new RectF(statusRect);
@@ -565,10 +600,12 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         final float w = getWidth(), h = getHeight();
         if (w <= 0 || h <= 0 || prefs == null) return;
         final boolean popout = prefs.popoutMargin();
-        final float mx = popout ? dp(POPOUT_MARGIN_X) : 0f;
-        final float my = popout ? dp(POPOUT_MARGIN_Y) : 0f;
-        frame.set(mx, my, w - mx, h - my);
-        topBarBottom = frame.top + dp(TOPBAR_H);
+        final float mx = popout ? dp(POPOUT_MARGIN_X) : dp(6);
+        final float my = popout ? dp(POPOUT_MARGIN_Y) : dp(6);
+        // Vlevo misto na listu s ikonami, nahore na polovinu ornamentu.
+        frame.set(dp(RAIL_LEFT + RAIL_W + RAIL_GAP), dp(FRAME_TOP), w - mx, h - my);
+        // Horni lista uz neni soucasti panelu - obsah zacina hned u horni hrany.
+        topBarBottom = frame.top;
         gridLeft = frame.left + dp(GRID_SIDE);
         gridRight = frame.right - dp(GRID_SIDE);
         gridTop = frame.top + dp(GRID_TOP);
@@ -599,32 +636,20 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         frameHighlight = new LinearGradient(0, frame.top, 0, frame.top + dp(22),
                 0x40FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
         visionGlassFor = -1;
-        barShadow = new LinearGradient(0, topBarBottom, 0, topBarBottom + dp(18),
-                0x47000000, 0x00000000, Shader.TileMode.CLAMP);
         framePath.reset();
         framePath.addRoundRect(frame, fr, fr, Path.Direction.CW);
-        topBarPath.reset();
-        topBarPath.addRoundRect(frame.left, frame.top, frame.right, topBarBottom,
-                new float[]{fr, fr, fr, fr, 0, 0, 0, 0}, Path.Direction.CW);
 
-        // Vrstva karet: pod horni listou az ke spodnimu okraji, dole zaoblena.
+        // Vrstva karet: cely panel, vsechny rohy zaoblene.
         contentNode.setPosition(Math.round(frame.left), Math.round(topBarBottom),
                 Math.round(frame.right), Math.round(frame.bottom));
         Outline o = new Outline();
-        o.setRoundRect(0, -Math.round(fr), Math.round(frame.width()),
+        o.setRoundRect(0, 0, Math.round(frame.width()),
                 Math.round(frame.bottom) - Math.round(topBarBottom), fr);
         contentNode.setOutline(o);
         contentNode.setClipToOutline(true);
 
-        // Kopie karet pod horni listou, silne rozmazana = "matne sklo".
-        backdropNode.setPosition(Math.round(frame.left), Math.round(frame.top),
-                Math.round(frame.right), Math.round(topBarBottom));
-        Outline ob = new Outline();
-        ob.setRoundRect(0, 0, Math.round(frame.width()),
-                Math.round(topBarBottom - frame.top) + Math.round(fr), fr);
-        backdropNode.setOutline(ob);
-        backdropNode.setClipToOutline(true);
-        final float sigma = dp(32); // backdrop-filter: blur(32px) z preview
+        // Kopie karet pod ornamentem, silne rozmazana = "matne sklo" (poloha se urci pri kresleni).
+        final float sigma = dp(24);
         final float radius = (sigma - 0.5f) / 0.57735f;
         backdropEffect = RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP);
         backdropNode.setRenderEffect(backdropEffect);
@@ -762,14 +787,30 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         for (int i = 0; i < tabHover.length; i++) {
             tabHover[i].set(hoverZone == ZONE_TAB0 + i ? 1f : 0f, now);
         }
+        for (int i = 0; i < railHover.length; i++) {
+            railHover[i].set(hoverZone == ZONE_RAIL0 + i ? 1f : 0f, now);
+        }
+        // Leva lista se po najeti rozbali a ukaze popisky (jako lista ve visionOS).
+        railExpand.set(isRailZone(hoverZone) ? 1f : 0f, now);
     }
 
     private int zoneAt(float x, float y) {
-        if (y < frame.top || y > topBarBottom || x < frame.left || x > frame.right) return ZONE_NONE;
-        if (brandRect.contains(x, y)) return ZONE_BRAND;
-        for (int i = 0; i < tabRects.length; i++) if (tabRects[i].contains(x, y)) return ZONE_TAB0 + i;
-        if (statusRect.contains(x, y)) return ZONE_BATTERY;
+        if (railRect.contains(x, y)) {
+            if (brandRect.contains(x, y)) return ZONE_BRAND;
+            for (int i = 0; i < railRects.length; i++) if (railRects[i].contains(x, y)) return ZONE_RAIL0 + i;
+            return ZONE_RAIL_BG;
+        }
+        if (ornRect.contains(x, y)) {
+            for (int i = 0; i < tabRects.length; i++) if (tabRects[i].contains(x, y)) return ZONE_TAB0 + i;
+            if (statusRect.contains(x, y)) return ZONE_BATTERY;
+            return ZONE_ORN_BG;
+        }
         return ZONE_NONE;
+    }
+
+    private boolean isRailZone(int zone) {
+        return zone == ZONE_BRAND || zone == ZONE_RAIL_BG
+                || (zone >= ZONE_RAIL0 && zone < ZONE_RAIL0 + RAIL_LABELS.length);
     }
 
     // =========================================================================
@@ -962,6 +1003,17 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 if (t != tab && host != null) host.onTabSelected(t);
             } else if (zone == ZONE_BATTERY) {
                 if (host != null) host.onOpenQuickMenu(new RectF(statusRect));
+            } else if (zone == ZONE_RAIL0 + RAIL_LIBRARY) {
+                // Uz jsme v knihovne - klepnuti odroluje nahoru.
+                flingV = 0;
+                scrollTarget = 0f;
+                kickScroll();
+            } else if (zone == ZONE_RAIL0 + RAIL_CAROUSEL) {
+                if (host != null) host.onToggleCarousel();
+            } else if (zone == ZONE_RAIL0 + RAIL_QUICK) {
+                if (host != null) host.onOpenQuickMenu(new RectF(railRects[RAIL_QUICK]));
+            } else if (zone == ZONE_RAIL0 + RAIL_SETTINGS) {
+                if (host != null) host.onOpenSettings();
             }
             return;
         }
@@ -1227,18 +1279,20 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         // Behem rolovani jede karta pod stojicim ukazatelem - fokus prepocitat kazdy snimek.
         if (again) updateFocus(now);
 
+        layoutChrome(now);
         drawGlass(canvas);
         if (canvas.isHardwareAccelerated()) {
             drawContentLayer(canvas, now);
-            drawTopBarBackdrop(canvas, now);
+            drawOrnamentBackdrop(canvas, now);
         } else {
             canvas.save();
             canvas.clipRect(frame.left, topBarBottom, frame.right, frame.bottom);
             drawCardsInto(canvas, now, frame.top, frame.bottom, 0f, false);
             canvas.restore();
         }
-        drawTopBar(canvas, now);
         drawEmptyState(canvas);
+        drawRail(canvas, now);
+        drawOrnament(canvas, now);
         drawFocusedCard(canvas, now);
         drawDraggedCard(canvas, now);
         drawLaunch(canvas, now);
@@ -1249,9 +1303,10 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private boolean isAnimating(long now) {
         if (blurAmount.active(now) || tabPos.active(now) || contentFade.active(now)
                 || brandHover.active(now) || brandTap.active(now) || batteryHover.active(now)
-                || dragLift.active(now)
+                || dragLift.active(now) || railExpand.active(now)
                 || dragTilt.active(now)) return true;
         for (Eased e : tabHover) if (e.active(now)) return true;
+        for (Eased e : railHover) if (e.active(now)) return true;
         for (Card k : cards) {
             if (k.hover.active(now) || k.rotX.active(now) || k.rotY.active(now)
                     || k.press.active(now) || k.x.active(now) || k.y.active(now)
@@ -1333,27 +1388,35 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         canvas.drawRenderNode(contentNode);
     }
 
-    /** Matne sklo horni listy: rozmazana kopie karet, ktere pod ni zajely. */
-    private void drawTopBarBackdrop(Canvas canvas, long now) {
+    /** Matne sklo ornamentu: rozmazana kopie karet, ktere pod nej zajely (spodni pulka je nad panelem). */
+    private void drawOrnamentBackdrop(Canvas canvas, long now) {
+        final float bottom = Math.min(ornRect.bottom, frame.bottom);
+        if (bottom <= frame.top) return;
         boolean any = false;
         for (Card k : cards) {
             if (k == focused || k == launchCard || (dragging && k == dragCard)) continue;
             float t = scrolledToScreenY(cardTop(k, now));
             float b = scrolledToScreenY(cardTop(k, now) + cardH);
-            if (b > frame.top && t < topBarBottom) {
+            if (b > frame.top && t < bottom) {
                 any = true;
                 break;
             }
         }
         if (!any) return;
-        final int w = Math.round(frame.width());
-        final int h = Math.round(topBarBottom) - Math.round(frame.top);
+        final int l = Math.round(ornRect.left), t = Math.round(ornRect.top);
+        final int w = Math.round(ornRect.width()), h = Math.round(ornRect.height());
+        backdropNode.setPosition(l, t, l + w, t + h);
+        Outline ob = new Outline();
+        ob.setRoundRect(0, 0, w, h, h / 2f);
+        backdropNode.setOutline(ob);
+        backdropNode.setClipToOutline(true);
         RecordingCanvas rc = backdropNode.beginRecording(w, h);
         try {
-            rc.translate(-Math.round(frame.left), -Math.round(frame.top));
-            // Kopie pod listou je silne rozmazana - naklon neni videt, kresli se plocha
-            // (a hlavne: RenderNode karty nesmi byt ve dvou rodicich naraz).
-            drawCardsInto(rc, now, frame.top, topBarBottom, 0f, false);
+            rc.translate(-l, -t);
+            // Jen cast uvnitr panelu (nad panelem je prostredi). Karty naplocho -
+            // RenderNode nakloneni karty nesmi byt ve dvou rodicich naraz.
+            rc.clipRect(frame.left, frame.top, frame.right, frame.bottom);
+            drawCardsInto(rc, now, frame.top, bottom, 0f, false);
         } finally {
             backdropNode.endRecording();
         }
@@ -1630,137 +1693,10 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         pillText.setAlpha(255);
     }
 
-    // --- Horni lista ------------------------------------------------------------
+    // --- Ornament (horni lista) a leva lista ---------------------------------------
 
-    private void drawTopBar(Canvas c, long now) {
-        // Svetle matne sklo rgba(255,255,255,.12).
-        fill.setShader(null);
-        fill.setColor(0x1FFFFFFF);
-        c.drawPath(topBarPath, fill);
-        // Stin listy dolu pres karty.
-        fill.setShader(barShadow);
-        fill.setColor(Color.WHITE);
-        c.save();
-        c.clipRect(frame.left + dp(1.5f), topBarBottom, frame.right - dp(1.5f), topBarBottom + dp(18));
-        c.drawRect(frame.left, topBarBottom, frame.right, topBarBottom + dp(18), fill);
-        c.restore();
-        fill.setShader(null);
-        // Spodni hrana 1.5px rgba(255,255,255,.24).
-        fill.setColor(0x3DFFFFFF);
-        c.drawRect(frame.left + dp(1.5f), topBarBottom - dp(1.5f), frame.right - dp(1.5f),
-                topBarBottom, fill);
-
-        final float midY = (frame.top + topBarBottom) / 2f;
-        drawBrand(c, now, midY);
-        drawStatus(c, now, midY);
-        drawTabs(c, now, midY);
-    }
-
-    /** Plochy (ostry, bez rozmazani) stin posunuty dolu - premium "flat shadow" detail. */
-    private void flatShadow(Canvas c, RectF r, float radius) {
-        fill.setShader(null);
-        fill.setColor(0x33000000);
-        c.drawRoundRect(r.left, r.top + dp(2), r.right, r.bottom + dp(2), radius, radius, fill);
-    }
-
-    private void drawBrand(Canvas c, long now, float midY) {
-        final float left = frame.left + dp(28);
-        final float icon = dp(32);
-        final float textX = left + icon + dp(12);
-        final float textW = brandText.measureText("Neo");
-        brandRect.set(left - dp(8), midY - dp(22), textX + textW + dp(10), midY + dp(22));
-
-        final float hv = brandHover.get(now);
-        if (hv > 0.004f) {
-            fill.setShader(null);
-            fill.setColor(Color.argb(Math.round(26 * hv), 255, 255, 255));
-            c.drawRoundRect(brandRect, dp(14), dp(14), fill);
-        }
-        // Ikona: cerny ctverec 32px, radius 8, ramecek rgba(255,255,255,.3), bila tecka 14px.
-        final float it = midY - icon / 2f;
-        fill.setShader(null);
-        fill.setColor(0x47000000);
-        c.drawRoundRect(left, it + dp(2), left + icon, it + icon + dp(2), dp(8), dp(8), fill);
-        fill.setColor(0xFF000000);
-        c.drawRoundRect(left, it, left + icon, it + icon, dp(8), dp(8), fill);
-        stroke.setShader(null);
-        stroke.setStrokeWidth(dp(1));
-        stroke.setColor(0x4DFFFFFF);
-        c.drawRoundRect(left + dp(0.5f), it + dp(0.5f), left + icon - dp(0.5f),
-                it + icon - dp(0.5f), dp(7.5f), dp(7.5f), stroke);
-        fill.setColor(Color.WHITE);
-        // Klepnuti: tecka kratce "pulzne" s modrou zari (odezva pro 5x klepnuti).
-        final float tap = brandTap.get(now);
-        if (tap > 0.004f) fill.setShadowLayer(dp(10) * tap, 0, 0, Color.argb(Math.round(220 * tap), 56, 189, 248));
-        c.drawCircle(left + icon / 2f, midY, dp(7) * (1f + 0.25f * tap), fill);
-        fill.clearShadowLayer();
-
-        final Paint.FontMetrics fm = brandText.getFontMetrics();
-        c.drawText("Neo", textX, midY - (fm.ascent + fm.descent) / 2f, brandText);
-    }
-
-    private void drawTabs(Canvas c, long now, float midY) {
-        final float padX = dp(16);
-        final float itemH = dp(34);
-        float[] widths = new float[TAB_NAMES.length];
-        float total = 0;
-        for (int i = 0; i < TAB_NAMES.length; i++) {
-            widths[i] = tabText.measureText(TAB_NAMES[i]) + 2 * padX;
-            total += widths[i];
-        }
-        final float inner = dp(4);
-        float left = frame.centerX() - total / 2f - inner;
-        // Nesmi se prekryvat se znackou ani se stavem.
-        left = Math.max(left, brandRect.right + dp(12));
-        left = Math.min(left, statusRect.left - dp(12) - total - 2 * inner);
-        tabsRect.set(left, midY - itemH / 2f - inner, left + total + 2 * inner, midY + itemH / 2f + inner);
-
-        fill.setShader(null);
-        flatShadow(c, tabsRect, tabsRect.height() / 2f);
-        fill.setColor(0x38000000);
-        c.drawRoundRect(tabsRect, tabsRect.height() / 2f, tabsRect.height() / 2f, fill);
-        stroke.setShader(null);
-        stroke.setStrokeWidth(dp(1));
-        stroke.setColor(0x24FFFFFF);
-        c.drawRoundRect(tabsRect, tabsRect.height() / 2f, tabsRect.height() / 2f, stroke);
-
-        float x = left + inner;
-        for (int i = 0; i < TAB_NAMES.length; i++) {
-            tabRects[i].set(x, midY - itemH / 2f, x + widths[i], midY + itemH / 2f);
-            x += widths[i];
-        }
-        // Posuvny indikator vybrane zalozky.
-        // Indikator jede na pruzine: muze lehce prejet za zalozku a vratit se.
-        final float pos = clamp(tabPos.get(now), -0.3f, TAB_NAMES.length - 0.7f);
-        final int i0 = (int) clamp((float) Math.floor(pos), 0f, TAB_NAMES.length - 2);
-        final int i1 = i0 + 1;
-        final float f = pos - i0;
-        final float il = lerp(tabRects[i0].left, tabRects[i1].left, f);
-        final float ir = lerp(tabRects[i0].right, tabRects[i1].right, f);
-        // Indikator: sklo s jemnou modrou zari.
-        fill.setColor(0x2EFFFFFF);
-        fill.setShadowLayer(dp(10), 0, 0, 0x5538BDF8);
-        c.drawRoundRect(il, midY - itemH / 2f, ir, midY + itemH / 2f, itemH / 2f, itemH / 2f, fill);
-        fill.clearShadowLayer();
-        stroke.setColor(0x6638BDF8);
-        c.drawRoundRect(il + dp(0.5f), midY - itemH / 2f + dp(0.5f), ir - dp(0.5f),
-                midY + itemH / 2f - dp(0.5f), itemH / 2f, itemH / 2f, stroke);
-
-        final Paint.FontMetrics fm = tabText.getFontMetrics();
-        final float base = midY - (fm.ascent + fm.descent) / 2f;
-        for (int i = 0; i < TAB_NAMES.length; i++) {
-            float hv = tabHover[i].get(now);
-            if (hv > 0.004f && i != tab) {
-                fill.setColor(Color.argb(Math.round(20 * hv), 255, 255, 255));
-                c.drawRoundRect(tabRects[i], itemH / 2f, itemH / 2f, fill);
-            }
-            float a = i == tab ? 1f : lerp(0.62f, 0.95f, hv);
-            tabText.setColor(Color.argb(Math.round(255 * a), 255, 255, 255));
-            c.drawText(TAB_NAMES[i], tabRects[i].centerX(), base, tabText);
-        }
-    }
-
-    private void drawStatus(Canvas c, long now, float midY) {
+    /** Rozmery ornamentu a leve listy (zavisi na sirce textu a rozbaleni listy). */
+    private void layoutChrome(long now) {
         final long minute = System.currentTimeMillis() / 60000L;
         if (minute != clockMinute) {
             clockMinute = minute;
@@ -1769,60 +1705,155 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                     cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE));
             clockDate = cal.get(Calendar.DAY_OF_MONTH) + ". " + (cal.get(Calendar.MONTH) + 1) + ".";
         }
-        // Baterie: pilulka s procenty, barva dle nabiti, bile blesky pri nabijeni.
+        // Ornament: [zalozky] | cas datum [baterie], stred na horni hrane panelu.
+        final float midY = frame.top;
+        final float padX = dp(18), itemH = dp(40), inner = dp(6);
+        float tabsW = 0;
+        final float[] widths = new float[TAB_NAMES.length];
+        for (int i = 0; i < TAB_NAMES.length; i++) {
+            widths[i] = tabText.measureText(TAB_NAMES[i]) + 2 * padX;
+            tabsW += widths[i];
+        }
+        final float statusW = dp(14) + clockText.measureText(clockTime) + dp(10)
+                + clockText.measureText(clockDate) + dp(12) + batteryWidth() + dp(8);
+        final float w = inner + tabsW + dp(20) + statusW + inner;
+        ornRect.set(frame.centerX() - w / 2f, midY - dp(ORN_H) / 2f, frame.centerX() + w / 2f, midY + dp(ORN_H) / 2f);
+        float x = ornRect.left + inner;
+        for (int i = 0; i < TAB_NAMES.length; i++) {
+            tabRects[i].set(x, midY - itemH / 2f, x + widths[i], midY + itemH / 2f);
+            x += widths[i];
+        }
+        tabsRect.set(tabRects[0].left, tabRects[0].top, x, tabRects[0].bottom);
+        ornDividerX = x + dp(10);
+        statusRect.set(ornDividerX + dp(4), midY - itemH / 2f, ornRect.right - inner, midY + itemH / 2f);
+
+        // Leva lista: logo, oddelovac, 4 polozky. Rozbaleni = sirsi (popisky).
+        final float e = Math.max(0f, railExpand.get(now));
+        final float it = dp(RAIL_ITEM), gapY = dp(6), pad = dp(6);
+        final float h = pad + it + dp(12) + RAIL_LABELS.length * it + (RAIL_LABELS.length - 1) * gapY + pad;
+        final float left = dp(RAIL_LEFT);
+        final float rw = dp(RAIL_W) + dp(RAIL_EXPAND) * e;
+        final float top = frame.centerY() - h / 2f;
+        railRect.set(left, top, left + rw, top + h);
+        float y = top + pad;
+        brandRect.set(left + pad, y, railRect.right - pad, y + it);
+        y += it + dp(12);
+        for (int i = 0; i < RAIL_LABELS.length; i++) {
+            railRects[i].set(left + pad, y, railRect.right - pad, y + it);
+            y += it + gapY;
+        }
+    }
+
+    private float batteryWidth() {
+        final String pct = batteryLevel >= 0 ? batteryLevel + "%" : "–";
+        final int bolts = charging ? (fastCharging ? 2 : 1) : 0;
+        return dp(10) + batteryText.measureText(pct)
+                + (bolts > 0 ? dp(5) + bolts * dp(8.5f) + (bolts - 1) * dp(1.5f) : 0) + dp(10);
+    }
+
+    /** Sklo plovouciho prvku (ornament, lista) - stejny styl jako panel, ale krycejsi. */
+    private void drawChromeGlass(Canvas c, RectF r, float radius) {
+        final boolean vision = prefs.glassStyle() == Prefs.GLASS_VISION;
+        fill.setShader(null);
+        // Mekky stin pod plovoucim prvkem (visionOS "ornament" se vznasi pred oknem).
+        fill.setColor(vision ? 0xE0585C66 : 0xE6141922);
+        fill.setShadowLayer(dp(18), 0, dp(6), 0x66000000);
+        c.drawRoundRect(r, radius, radius, fill);
+        fill.clearShadowLayer();
+        // Svetla horni hrana.
+        chromePath.reset();
+        chromePath.addRoundRect(r, radius, radius, Path.Direction.CW);
+        c.save();
+        c.clipPath(chromePath);
+        fill.setShader(new LinearGradient(0, r.top, 0, r.top + r.height() * 0.6f,
+                vision ? 0x33FFFFFF : 0x1FFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP));
+        c.drawRect(r, fill);
+        fill.setShader(null);
+        c.restore();
+        stroke.setShader(null);
+        stroke.setStrokeWidth(dp(1));
+        stroke.setColor(vision ? 0x66FFFFFF : 0x40FFFFFF);
+        c.drawRoundRect(r.left + dp(0.5f), r.top + dp(0.5f), r.right - dp(0.5f), r.bottom - dp(0.5f),
+                radius, radius, stroke);
+    }
+
+    /** Horni "ornament": zalozky s posuvnym indikatorem, oddelovac, hodiny, datum a baterie. */
+    private void drawOrnament(Canvas c, long now) {
+        final float midY = ornRect.centerY();
+        final float itemH = tabRects[0].height();
+        drawChromeGlass(c, ornRect, ornRect.height() / 2f);
+
+        // Indikator vybrane zalozky jede na pruzine (muze lehce prejet a vratit se).
+        final float pos = clamp(tabPos.get(now), -0.3f, TAB_NAMES.length - 0.7f);
+        final int i0 = (int) clamp((float) Math.floor(pos), 0f, TAB_NAMES.length - 2);
+        final float f = pos - i0;
+        final float il = lerp(tabRects[i0].left, tabRects[i0 + 1].left, f);
+        final float ir = lerp(tabRects[i0].right, tabRects[i0 + 1].right, f);
+        fill.setShader(null);
+        fill.setColor(0x33FFFFFF);
+        fill.setShadowLayer(dp(10), 0, 0, 0x5538BDF8);
+        c.drawRoundRect(il, midY - itemH / 2f, ir, midY + itemH / 2f, itemH / 2f, itemH / 2f, fill);
+        fill.clearShadowLayer();
+        stroke.setStrokeWidth(dp(1));
+        stroke.setColor(0x6638BDF8);
+        c.drawRoundRect(il + dp(0.5f), midY - itemH / 2f + dp(0.5f), ir - dp(0.5f),
+                midY + itemH / 2f - dp(0.5f), itemH / 2f, itemH / 2f, stroke);
+        final Paint.FontMetrics fm = tabText.getFontMetrics();
+        final float base = midY - (fm.ascent + fm.descent) / 2f;
+        for (int i = 0; i < TAB_NAMES.length; i++) {
+            final float hv = tabHover[i].get(now);
+            if (hv > 0.004f && i != tab) {
+                fill.setColor(Color.argb(Math.round(22 * hv), 255, 255, 255));
+                c.drawRoundRect(tabRects[i], itemH / 2f, itemH / 2f, fill);
+            }
+            final float a = i == tab ? 1f : lerp(0.66f, 0.95f, hv);
+            tabText.setColor(Color.argb(Math.round(255 * a), 255, 255, 255));
+            c.drawText(TAB_NAMES[i], tabRects[i].centerX(), base, tabText);
+        }
+
+        // Oddelovac.
+        fill.setColor(0x33FFFFFF);
+        c.drawRect(ornDividerX - dp(0.5f), midY - dp(12), ornDividerX + dp(0.5f), midY + dp(12), fill);
+
+        // Stav: hover rozsviti (klepnuti = rychle menu).
+        final float sh = batteryHover.get(now);
+        if (sh > 0.004f) {
+            fill.setColor(Color.argb(Math.round(26 * sh), 255, 255, 255));
+            c.drawRoundRect(statusRect, itemH / 2f, itemH / 2f, fill);
+        }
+        final Paint.FontMetrics cfm = clockText.getFontMetrics();
+        final float cbase = midY - (cfm.ascent + cfm.descent) / 2f;
+        float x = ornDividerX + dp(14);
+        clockText.setColor(0xF2FFFFFF);
+        c.drawText(clockTime, x, cbase, clockText);
+        x += clockText.measureText(clockTime) + dp(10);
+        clockText.setColor(0xB3FFFFFF);
+        c.drawText(clockDate, x, cbase, clockText);
+        clockText.setColor(0xF2FFFFFF);
+        x += clockText.measureText(clockDate) + dp(12);
+        drawBattery(c, x, midY);
+    }
+
+    /** Pilulka baterie: procenta v barve nabiti, bile blesky pri nabijeni. */
+    private void drawBattery(Canvas c, float x, float midY) {
         final String pct = batteryLevel >= 0 ? batteryLevel + "%" : "–";
         final int bolts = charging ? (fastCharging ? 2 : 1) : 0;
         final float boltW = dp(8.5f), boltH = dp(12f), boltGap = dp(1.5f);
-        final float pctW = batteryText.measureText(pct);
-        final float batW = dp(10) + pctW + (bolts > 0 ? dp(5) + bolts * boltW + (bolts - 1) * boltGap : 0)
-                + dp(10);
-        final float batH = dp(24);
-
-        final float timeW = clockText.measureText(clockTime);
-        final float dateW = clockText.measureText(clockDate);
-        final float widgetW = dp(16) + timeW + dp(20) + dateW + dp(16) + batW + dp(16);
-        final float widgetH = dp(36);
-        final float right = frame.right - dp(28);
-        statusRect.set(right - widgetW, midY - widgetH / 2f, right, midY + widgetH / 2f);
-
-        // Pri hoveru se cela pilulka rozsviti (klepnuti otevre rychle menu).
-        final float sh = batteryHover.get(now);
-        fill.setShader(null);
-        flatShadow(c, statusRect, dp(14));
-        fill.setColor(0x40000000);
-        c.drawRoundRect(statusRect, dp(14), dp(14), fill);
-        if (sh > 0.004f) {
-            fill.setColor(Color.argb(Math.round(26 * sh), 255, 255, 255));
-            c.drawRoundRect(statusRect, dp(14), dp(14), fill);
-        }
-        stroke.setShader(null);
-        stroke.setStrokeWidth(dp(1));
-        stroke.setColor(Color.argb(Math.round(lerp(0x2E, 0x70, sh)), 255, 255, 255));
-        c.drawRoundRect(statusRect, dp(14), dp(14), stroke);
-
-        final Paint.FontMetrics fm = clockText.getFontMetrics();
-        final float base = midY - (fm.ascent + fm.descent) / 2f;
-        float x = statusRect.left + dp(16);
-        c.drawText(clockTime, x, base, clockText);
-        x += timeW + dp(20);
-        c.drawText(clockDate, x, base, clockText);
-        x += dateW + dp(16);
-
-        batteryRect.set(x, midY - batH / 2f, x + batW, midY + batH / 2f);
+        final float batH = dp(26);
+        batteryRect.set(x, midY - batH / 2f, x + batteryWidth(), midY + batH / 2f);
         final int color = batteryColor();
-        final float bh = batteryHover.get(now);
-        fill.setColor(Color.argb(Math.round(lerp(102, 51, bh)), bh > 0.5f ? 255 : 0,
-                bh > 0.5f ? 255 : 0, bh > 0.5f ? 255 : 0));
-        c.drawRoundRect(batteryRect, dp(8), dp(8), fill);
+        fill.setShader(null);
+        fill.setColor(0x59000000);
+        c.drawRoundRect(batteryRect, batH / 2f, batH / 2f, fill);
+        stroke.setStrokeWidth(dp(1));
         stroke.setColor((color & 0x00FFFFFF) | 0x66000000);
         c.drawRoundRect(batteryRect.left + dp(0.5f), batteryRect.top + dp(0.5f),
-                batteryRect.right - dp(0.5f), batteryRect.bottom - dp(0.5f), dp(7.5f), dp(7.5f), stroke);
-
+                batteryRect.right - dp(0.5f), batteryRect.bottom - dp(0.5f), batH / 2f, batH / 2f, stroke);
         final Paint.FontMetrics bfm = batteryText.getFontMetrics();
         batteryText.setColor(color);
         float bx = batteryRect.left + dp(10);
         c.drawText(pct, bx, midY - (bfm.ascent + bfm.descent) / 2f, batteryText);
-        bx += pctW + dp(5);
+        bx += batteryText.measureText(pct) + dp(5);
         if (bolts > 0) {
             fill.setColor(Color.WHITE);
             fill.setShadowLayer(dp(2), 0, 0, 0xCCFFFFFF);
@@ -1837,6 +1868,80 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             }
             fill.clearShadowLayer();
         }
+    }
+
+    /**
+     * Leva lista (jako tab bar ve visionOS): logo Neo a ikony Knihovna, Karusel,
+     * Rychle menu, Nastaveni. Po najeti se na pruzine rozbali a ukaze popisky.
+     */
+    private void drawRail(Canvas c, long now) {
+        final float e = clamp(railExpand.get(now), 0f, 1f);
+        final float rr = dp(RAIL_W) / 2f;
+        drawChromeGlass(c, railRect, rr);
+        final float ic = dp(RAIL_ITEM) / 2f; // polomer kolecka ikony
+        final float iconX = railRect.left + dp(6) + ic;
+        c.save();
+        chromePath.reset();
+        chromePath.addRoundRect(railRect, rr, rr, Path.Direction.CW);
+        c.clipPath(chromePath);
+
+        // Logo Neo (5x klepnout = karusel, 1x = nastaveni).
+        final float ly = brandRect.centerY();
+        final float hv = brandHover.get(now);
+        if (hv > 0.004f) {
+            fill.setShader(null);
+            fill.setColor(Color.argb(Math.round(26 * hv), 255, 255, 255));
+            c.drawRoundRect(brandRect, ic, ic, fill);
+        }
+        final float icon = dp(32);
+        fill.setShader(null);
+        fill.setColor(0xFF000000);
+        c.drawRoundRect(iconX - icon / 2f, ly - icon / 2f, iconX + icon / 2f, ly + icon / 2f, dp(8), dp(8), fill);
+        stroke.setStrokeWidth(dp(1));
+        stroke.setColor(0x4DFFFFFF);
+        c.drawRoundRect(iconX - icon / 2f + dp(0.5f), ly - icon / 2f + dp(0.5f), iconX + icon / 2f - dp(0.5f),
+                ly + icon / 2f - dp(0.5f), dp(7.5f), dp(7.5f), stroke);
+        final float tap = brandTap.get(now);
+        fill.setColor(Color.WHITE);
+        if (tap > 0.004f) fill.setShadowLayer(dp(10) * tap, 0, 0, Color.argb(Math.round(220 * tap), 56, 189, 248));
+        c.drawCircle(iconX, ly, dp(7) * (1f + 0.25f * tap), fill);
+        fill.clearShadowLayer();
+        if (e > 0.01f) {
+            final Paint.FontMetrics bfm = brandText.getFontMetrics();
+            brandText.setAlpha(Math.round(255 * e));
+            c.drawText("Neo", iconX + ic + dp(10), ly - (bfm.ascent + bfm.descent) / 2f, brandText);
+            brandText.setAlpha(255);
+        }
+        // Oddelovac pod logem.
+        fill.setColor(0x26FFFFFF);
+        final float dy = brandRect.bottom + dp(6);
+        c.drawRect(railRect.left + dp(12), dy - dp(0.5f), railRect.right - dp(12), dy + dp(0.5f), fill);
+
+        final Paint.FontMetrics fm = tabText.getFontMetrics();
+        for (int i = 0; i < RAIL_LABELS.length; i++) {
+            final RectF r = railRects[i];
+            final float cy = r.centerY();
+            final float h = railHover[i].get(now);
+            final boolean selected = i == RAIL_LIBRARY;
+            // Vybrana polozka = bile kolecko s tmavou ikonou (jako ve visionOS), hover = svetle pozadi radku.
+            if (h > 0.004f) {
+                fill.setColor(Color.argb(Math.round(30 * h), 255, 255, 255));
+                c.drawRoundRect(r, ic, ic, fill);
+            }
+            if (selected) {
+                fill.setColor(0xF2FFFFFF);
+                c.drawCircle(iconX, cy, ic - dp(2), fill);
+            }
+            Icons.draw(c, RAIL_ICONS[i], iconX, cy, dp(20), selected ? Glass.INK : Color.WHITE,
+                    dp(1.9f), 1f, fill);
+            if (e > 0.01f) {
+                tabText.setTextAlign(Paint.Align.LEFT);
+                tabText.setColor(Color.argb(Math.round(255 * e * (0.85f + 0.15f * h)), 255, 255, 255));
+                c.drawText(RAIL_LABELS[i], iconX + ic + dp(10), cy - (fm.ascent + fm.descent) / 2f, tabText);
+                tabText.setTextAlign(Paint.Align.CENTER);
+            }
+        }
+        c.restore();
     }
 
     private int batteryColor() {

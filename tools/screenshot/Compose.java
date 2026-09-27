@@ -30,7 +30,8 @@ public class Compose {
         g.dispose();
 
         // Systemove rozmazani prostredi za sklem (Quest 3/3S blend effects)
-        RoundRectangle2D frame = new RoundRectangle2D.Float(24 * d, 30 * d, W - 48 * d, H - 60 * d,
+        // Panel: vlevo misto na listu s ikonami (88 dp), nahore pul ornamentu (36 dp).
+        RoundRectangle2D frame = new RoundRectangle2D.Float(88 * d, 36 * d, W - 112 * d, H - 66 * d,
                 56 * d, 56 * d);
         BufferedImage blurred = blur(bg, 22);
         BufferedImage out = new BufferedImage(W, H, BufferedImage.TYPE_INT_RGB);

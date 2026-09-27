@@ -33,7 +33,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 34, qualifiers = "w1110dp-h664dp-land-xhdpi")
+@Config(sdk = 34, qualifiers = "w1176dp-h664dp-land-xhdpi")
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 public class ShotTest {
@@ -143,14 +143,13 @@ public class ShotTest {
             }
         }
         System.out.println("scroll done");
-        float frameL = 24, frameT = 30, frameW = 1110 - 48;
-        float gridL = frameL + 24, gridT = frameT + 76;
-        float cardW = (frameW - 48 - 3 * 15) / 4f, cardH = cardW / 1.6f;
-        float scroll = Float.parseFloat(System.getProperty("neo.scrollDp", "0"));
-        float left = gridL + 1 * (cardW + 15), top = gridT + 1 * (cardH + 15) - scroll;
-        hover(v, (left + cardW * 0.5f) * d, (top + cardH * 0.5f) * d);
+        // Poloha karty (sloupec 1, rada 1) ze skutecne geometrie view (px).
+        float cardW = (Float) f(v, "cardW"), cardH = (Float) f(v, "cardH"), gp = (Float) f(v, "gap");
+        float left = (Float) f(v, "gridLeft") + (cardW + gp);
+        float top = (Float) f(v, "gridTop") + (cardH + gp) + (Float) f(v, "scrollCur");
+        hover(v, left + cardW * 0.5f, top + cardH * 0.5f);
         pump(150);
-        hover(v, (left + cardW * 0.80f) * d, (top + cardH * 0.28f) * d);
+        hover(v, left + cardW * 0.80f, top + cardH * 0.28f);
         pump(900);
         dumpState(v);
         System.out.println("glow BONELAB=" + Integer.toHexString(art.glowColor("com.StressLevelZero.BONELAB", 0)));
@@ -163,7 +162,7 @@ public class ShotTest {
                 android.animation.ValueAnimator.class.getDeclaredMethod("setDurationScale", float.class);
         setScale.setAccessible(true);
         setScale.invoke(null, 6f);
-        float tx = (left + cardW * 0.80f) * d, ty = (top + cardH * 0.28f) * d;
+        float tx = left + cardW * 0.80f, ty = top + cardH * 0.28f;
         long t0 = SystemClock.uptimeMillis();
         MotionEvent down = MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, tx, ty, 0);
         v.dispatchTouchEvent(down);
@@ -198,14 +197,14 @@ public class ShotTest {
         car.show();
         pump(2500); // obrazky na vysku se skladaji na pozadi
         for (int i = 0; i < 5; i++) {
-            scroll(car, 555 * d, 300 * d, MotionEvent.AXIS_HSCROLL, 1f);
+            scroll(car, car.getWidth() / 2f, 300 * d, MotionEvent.AXIS_HSCROLL, 1f);
             pump(260);
         }
         pump(1200);
-        hover(car, 555 * d + 80 * d, 285 * d - 60 * d);
+        hover(car, car.getWidth() / 2f + 80 * d, car.getHeight() * 0.43f - 60 * d);
         pump(700);
         capture(a, car, outDir + "/neo-carousel.png");
-        scroll(car, 555 * d, 300 * d, MotionEvent.AXIS_HSCROLL, 1f);
+        scroll(car, car.getWidth() / 2f, 300 * d, MotionEvent.AXIS_HSCROLL, 1f);
         Thread.sleep(120);
         shadowOf(Looper.getMainLooper()).idle();
         capture(a, car, outDir + "/neo-carousel-move.png");
@@ -234,13 +233,19 @@ public class ShotTest {
                     @Override public void requestBrightnessAccess() { }
                 });
         menu.setBattery(92, true, true);
-        android.graphics.RectF st = grid.statusRect();
-        overlay.show(menu, st, st, grid.frameRect(), com.neolauncher.ui.QuickMenuView.preferredWidth(a));
+        // Leva lista po najeti (rozbalena s popisky).
+        android.graphics.RectF gear = grid.settingsRect();
+        hover(grid, gear.centerX() - gear.width() / 2f + 20 * d, gear.centerY());
+        pump(700);
+        capture(a, root, outDir + "/neo-rail.png");
+        hover(grid, grid.getWidth() / 2f, grid.getHeight() / 2f);
+        pump(500);
+        overlay.showSide(menu, grid.frameRect(), com.neolauncher.ui.QuickMenuView.sideWidth(a));
         Thread.sleep(90);
         shadowOf(Looper.getMainLooper()).idle();
         capture(a, root, outDir + "/neo-quickmenu-open.png");
         pump(1200);
-        hover(menu, 300 * d, 330 * d);
+        hover(menu, 100 * d, 300 * d);
         pump(500);
         capture(a, root, outDir + "/neo-quickmenu.png");
 
@@ -252,7 +257,7 @@ public class ShotTest {
         capture(a, root, outDir + "/neo-idle-vision.png");
         android.view.View sheet = com.neolauncher.ui.SettingsSheet.build(a, prefs,
                 new com.neolauncher.data.AppRepository(a, prefs), art, () -> { }, () -> { }, overlay::close);
-        overlay.show(sheet, null, grid.brandRect(), grid.frameRect(), Math.round(1000 * d));
+        overlay.show(sheet, null, grid.settingsRect(), grid.frameRect(), Math.round(1000 * d));
         pump(1500);
         capture(a, root, outDir + "/neo-settings.png");
     }

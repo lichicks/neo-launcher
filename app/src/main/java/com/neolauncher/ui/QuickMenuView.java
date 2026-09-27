@@ -86,6 +86,8 @@ public final class QuickMenuView extends View {
     private int wifiBars;
     private long freeBytes, totalBytes;
     private long shownNs;
+    /** Uzke rozlozeni (bocni panel): dlazdice vodorovne ve 2 sloupcich, dole "Vsechna nastaveni". */
+    private boolean narrow;
 
     private int hovered = -1;
     private int pressed = -1;
@@ -153,6 +155,11 @@ public final class QuickMenuView extends View {
 
     private float dp(float v) {
         return v * d;
+    }
+
+    /** Sirka bocniho panelu vpravo (uzsi rozlozeni, dlazdice ve dvou sloupcich). */
+    public static int sideWidth(Context c) {
+        return Glass.dpi(c, 400);
     }
 
     /** Preferovana velikost panelu (px) - pro OverlayHost. */
@@ -231,6 +238,40 @@ public final class QuickMenuView extends View {
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         final float pad = dp(PAD);
+        narrow = w < dp(460);
+        if (narrow) {
+            layoutNarrow(w, h, pad);
+        } else {
+            layoutWide(w, pad);
+        }
+        highlight = new LinearGradient(0, 0, 0, h * 0.5f, 0x2EFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
+        glass = new LinearGradient(0, 0, 0, h, Glass.GLASS_TOP, Glass.GLASS_BOTTOM, Shader.TileMode.CLAMP);
+    }
+
+    private void layoutNarrow(int w, int h, float pad) {
+        float y = dp(146);
+        final float sh = dp(50);
+        rects[EL_BRIGHT].set(pad, y, w - pad, y + sh);
+        y += sh + dp(10);
+        rects[EL_VOLUME].set(pad, y, w - pad, y + sh);
+        y += sh + dp(18);
+        // Posledni "dlazdice" (Neo) = tlacitko "Vsechna nastaveni" pres celou sirku dole.
+        final float btnH = dp(46);
+        final float btnTop = h - pad - btnH;
+        rects[EL_TILE0 + T_NEO].set(pad, btnTop, w - pad, btnTop + btnH);
+        final int rows = (T_NEO + 1) / 2;
+        final float g = dp(8);
+        final float th = Math.max(dp(38), Math.min(dp(56), (btnTop - dp(14) - y - (rows - 1) * g) / rows));
+        final float tw = (w - 2 * pad - g) / 2f;
+        for (int i = 0; i < T_NEO; i++) {
+            final int col = i % 2, row = i / 2;
+            final float l = pad + col * (tw + g);
+            final float t = y + row * (th + g);
+            rects[EL_TILE0 + i].set(l, t, l + tw, t + th);
+        }
+    }
+
+    private void layoutWide(int w, float pad) {
         float y = dp(108);
         rects[EL_BRIGHT].set(pad, y, w - pad, y + dp(SLIDER_H));
         y += dp(SLIDER_H) + dp(GAP);
@@ -243,8 +284,6 @@ public final class QuickMenuView extends View {
             final float t = y + row * (dp(TILE_H) + dp(GAP));
             rects[EL_TILE0 + i].set(l, t, l + tw, t + dp(TILE_H));
         }
-        highlight = new LinearGradient(0, 0, 0, h * 0.5f, 0x2EFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
-        glass = new LinearGradient(0, 0, 0, h, Glass.GLASS_TOP, Glass.GLASS_BOTTOM, Shader.TileMode.CLAMP);
     }
 
     // =========================================================================
@@ -310,8 +349,13 @@ public final class QuickMenuView extends View {
         final float pw = labelText.measureText(pct);
         final float dot = dp(8);
         final float bw = dp(12) + dot + dp(8) + pw + (bolts > 0 ? dp(6) + bolts * dp(9) : 0) + dp(14);
-        final float top = dp(28), ph = dp(32);
-        tmp.set(w - pad - bw, top, w - pad, top + ph);
+        final String wl = wifiOn ? "Wi-Fi" : "Offline";
+        final float ww = dp(12) + dp(18) + dp(8) + labelText.measureText(wl) + dp(14);
+        // Siroke: pilulky vpravo nahore. Uzke (bocni panel): v rade pod datem.
+        final float top = narrow ? dp(100) : dp(28), ph = dp(32);
+        if (narrow) tmp.set(pad, top, pad + bw, top + ph);
+        else tmp.set(w - pad - bw, top, w - pad, top + ph);
+        final float batLeft = tmp.left, batRight = tmp.right;
         drawPill(c, tmp);
         fill.setShader(null);
         fill.setColor(batteryColor());
@@ -336,11 +380,9 @@ public final class QuickMenuView extends View {
             }
         }
         // Wi-Fi: vysec s ukazatelem signalu.
-        final String wl = wifiOn ? "Wi-Fi" : "Offline";
         labelText.setColor(wifiOn ? 0xF2FFFFFF : 0x99FFFFFF);
-        final float ww = dp(12) + dp(18) + dp(8) + labelText.measureText(wl) + dp(14);
-        final float right = tmp.left - dp(10);
-        tmp.set(right - ww, top, right, top + ph);
+        if (narrow) tmp.set(batRight + dp(10), top, batRight + dp(10) + ww, top + ph);
+        else tmp.set(batLeft - dp(10) - ww, top, batLeft - dp(10), top + ph);
         drawPill(c, tmp);
         drawWifiIcon(c, tmp.left + dp(12) + dp(9), tmp.centerY() + dp(5), dp(9), wifiOn ? wifiBars : 0);
         c.drawText(wl, tmp.left + dp(12) + dp(18) + dp(8), base, labelText);
@@ -429,22 +471,53 @@ public final class QuickMenuView extends View {
         fill.setShader(null);
         fill.setColor(Color.argb(Math.round(0x33 * a), 0, 0, 0));
         c.drawRoundRect(-w2, -h2 + dp(3), w2, h2 + dp(3), rr, rr, fill);
-        fill.setColor(Color.argb(Math.round((0x1F + 0x22 * hc) * a), 255, 255, 255));
-        if (hc > 0.01f) fill.setShadowLayer(dp(14) * hc, 0, 0, Color.argb(Math.round(110 * hc * a), 56, 189, 248));
-        c.drawRoundRect(-w2, -h2, w2, h2, rr, rr, fill);
-        fill.clearShadowLayer();
-        stroke.setStrokeWidth(dp(1));
-        stroke.setColor(Color.argb(Math.round((0x24 + 0x50 * hc) * a), 255, 255, 255));
-        c.drawRoundRect(-w2, -h2, w2, h2, rr, rr, stroke);
+        if (!(narrow && i == T_NEO)) {
+            fill.setColor(Color.argb(Math.round((0x1F + 0x22 * hc) * a), 255, 255, 255));
+            if (hc > 0.01f) fill.setShadowLayer(dp(14) * hc, 0, 0, Color.argb(Math.round(110 * hc * a), 56, 189, 248));
+            c.drawRoundRect(-w2, -h2, w2, h2, rr, rr, fill);
+            fill.clearShadowLayer();
+            stroke.setStrokeWidth(dp(1));
+            stroke.setColor(Color.argb(Math.round((0x24 + 0x50 * hc) * a), 255, 255, 255));
+            c.drawRoundRect(-w2, -h2, w2, h2, rr, rr, stroke);
+        } else if (hc > 0.01f) {
+            fill.setColor(Color.argb(Math.round(0x80 * hc * a), 255, 255, 255));
+            fill.setShadowLayer(dp(16) * hc, 0, 0, Color.argb(Math.round(130 * hc * a), 255, 255, 255));
+            c.drawRoundRect(-w2, -h2, w2, h2, h2, h2, fill);
+            fill.clearShadowLayer();
+        }
         final int col = Color.argb(Math.round(255 * clamp(a, 0f, 1f)), 255, 255, 255);
-        Icons.draw(c, TILE_ICONS[i], 0, -dp(10), dp(26), col, dp(2), 1f, icon);
-        tileText.setColor(Color.argb(Math.round(230 * clamp(a, 0f, 1f)), 255, 255, 255));
-        c.drawText(TILE_LABELS[i], 0, h2 - dp(14), tileText);
+        if (narrow && i == T_NEO) {
+            // Tlacitko "Vsechna nastaveni": bila pilulka s tmavym textem (hlavni akce jako ve visionOS).
+            fill.setColor(Color.argb(Math.round(0xF2 * clamp(a, 0f, 1f)), 255, 255, 255));
+            c.drawRoundRect(-w2, -h2, w2, h2, h2, h2, fill);
+            final int ink = (Glass.INK & 0x00FFFFFF) | (Math.round(255 * clamp(a, 0f, 1f)) << 24);
+            final String t = "Nastavení Nea";
+            labelText.setColor(ink);
+            final float tw = labelText.measureText(t);
+            final float total = dp(20) + dp(10) + tw;
+            Icons.draw(c, Icons.GEAR, -total / 2f + dp(10), 0, dp(20), ink, dp(1.9f), 1f, icon);
+            final Paint.FontMetrics fm = labelText.getFontMetrics();
+            c.drawText(t, -total / 2f + dp(30), -(fm.ascent + fm.descent) / 2f, labelText);
+        } else if (narrow) {
+            // Vodorovna dlazdice: ikona vlevo, nazev vedle.
+            Icons.draw(c, TILE_ICONS[i], -w2 + dp(26), 0, dp(22), col, dp(2), 1f, icon);
+            tileText.setTextAlign(Paint.Align.LEFT);
+            tileText.setColor(Color.argb(Math.round(235 * clamp(a, 0f, 1f)), 255, 255, 255));
+            final Paint.FontMetrics fm = tileText.getFontMetrics();
+            // V uzkem panelu je misto na presnejsi nazev (odliseni od nastaveni Nea).
+            c.drawText(i == T_QUEST_SETTINGS ? "Nastavení Questu" : TILE_LABELS[i],
+                    -w2 + dp(48), -(fm.ascent + fm.descent) / 2f, tileText);
+            tileText.setTextAlign(Paint.Align.CENTER);
+        } else {
+            Icons.draw(c, TILE_ICONS[i], 0, -dp(10), dp(26), col, dp(2), 1f, icon);
+            tileText.setColor(Color.argb(Math.round(230 * clamp(a, 0f, 1f)), 255, 255, 255));
+            c.drawText(TILE_LABELS[i], 0, h2 - dp(14), tileText);
+        }
         c.restore();
     }
 
     private void drawStorage(Canvas c, float w, float h) {
-        if (totalBytes <= 0) return;
+        if (totalBytes <= 0 || narrow) return;
         final float pad = dp(PAD);
         final float y = h - dp(30);
         final String txt = "Úložiště: " + gb(freeBytes) + " volných z " + gb(totalBytes);

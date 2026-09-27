@@ -71,20 +71,30 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 | `ui/Glass.java`, `OverlayHost.java`, `SettingsSheet.java`, `AppMenu.java`, `UpdateSheet.java` | Dialogy ve stylu skla visionOS (normální Android Views). `OverlayHost` je nechá „vyrůst“ na pružině z místa, odkud se otevřely. Nastavení = dashboard s dlaždicemi |
 | `ui/GlassWidgets.java`, `ui/Icons.java`, `ui/Cascade.java` | Přepínač a posuvník ve stylu visionOS, ikony kreslené kódem (jako SF Symbols), postupný nástup dlaždic |
 
+### Rozložení okna (od 2026-09-27, podle předloh z visionOS od uživatele)
+- **Skleněný panel** jen s mřížkou karet (všechny rohy zaoblené).
+- **Ornament nahoře** — plovoucí „bublina“ se záložkami (Hry / Aplikace /
+  Vše), časem, datem a baterií, **napůl zanořená do horní hrany panelu**
+  (střed na `frame.top`). Klepnutí na čas/baterii = rychlé menu.
+- **Levá lišta** (jako tab bar ve visionOS) — logo Neo a ikony Knihovna
+  (klepnutí odroluje nahoru), Karusel, Rychlé menu, Nastavení. Po najetí
+  laserem se na pružině rozbalí a ukáže popisky. Uživatel chtěl viditelné
+  tlačítko nastavení („průměrný uživatel neví, že má klepnout na logo“).
+- **Rychlé menu** vyjede jako boční panel vpravo přes celou výšku panelu
+  (`OverlayHost.showSide`), dole tlačítko „Nastavení Nea“.
+- Okno 1176×664 dp: vlevo 88 dp na lištu, nahoře 36 dp (půlka ornamentu),
+  vpravo 24 / dole 30 dp průhledný okraj pro „vyskočení“ karty (vypínatelné).
+
 ### Vrstvy kreslení (odspodu)
 1. Sklo panelu (výplň s nastavitelným krytím, okraj, světlá horní hrana)
-2. `contentNode` (RenderNode): všechny karty kromě hovernuté, oříznuté pod
-   lištou se zaoblenými spodními rohy. **Jeden** `RenderEffect` hloubky
-   ostrosti na celou vrstvu.
-3. `backdropNode`: kopie karet, které zajely pod lištu, rozmazaná 32 dp =
-   matné sklo lišty
-4. Horní lišta (tint, okraj, stín dolů, logo, záložky, stav)
-5. Hovernutá karta — mimo ořez, nad lištou, může přesahovat panel
+2. `contentNode` (RenderNode): všechny karty kromě hovernuté, oříznuté
+   panelem se zaoblenými rohy. **Jeden** `RenderEffect` hloubky ostrosti na
+   celou vrstvu.
+3. `backdropNode`: kopie karet, které zajely pod ornament, rozmazaná 24 dp =
+   matné sklo ornamentu (jen část uvnitř panelu)
+4. Levá lišta a ornament (sklo, stín, obsah)
+5. Hovernutá karta — mimo ořez, může přesahovat panel
 6. Tažená karta
-
-Okno je o **24 dp (bok) / 30 dp (nahoře a dole)** větší než skleněný panel —
-v tom průhledném okraji má zvětšená karta kam "vyskočit". Vypíná se
-v nastavení ("Karty vyskakují z panelu").
 
 ## Klíčová omezení (naučeno tvrdě)
 
@@ -128,8 +138,9 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
   (pak jen ztmavení okolí)
 - Gumové rolování: lerp 0.16, rubber band 0.38, squish max 4.5 % (konstanty
   z preview), setrvačnost po tažení, thumbstick (ACTION_SCROLL)
-- Horní lišta: logo Neo (klik = nastavení), záložky Hry / Aplikace / Vše,
-  hodiny + datum, baterie (barvy dle %, 1 blesk = nabíjení, 2 = rychlé > 7.5 W)
+- Ornament: záložky Hry / Aplikace / Vše, hodiny + datum, baterie (barvy
+  dle %, 1 blesk = nabíjení, 2 = rychlé > 7.5 W). Logo Neo je v levé liště
+  (klik = nastavení, 5× = karusel).
 - Přesouvání: podržet kartu 450 ms → zvedne se → táhnout (auto-rolování
   u okraje) → pustit. Pořadí se ukládá per záložka.
 - Menu karty: držet kartu **bez pohybu 1 s** (nastavitelné 0,7 / 1 / 1,5 s,
@@ -252,6 +263,10 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
 13. Nastavení (dashboard) a rychlé menu ve světlém skle: je text dobře
     čitelný na Questu? Případně ztmavit `Glass.GLASS_TOP/BOTTOM`. Zkusit
     „Styl skla: visionOS“ pro hlavní panel.
+14. Nové rozložení: je ornament nahoře a lišta vlevo dobře vidět i proti
+    prostředí (kus leží mimo panel)? Rozbalí se lišta po najetí? Není
+    průhledná část okna kolem panelu vidět jako rozmazaný obdélník
+    (systémové rozmazání prostředí)? Velikost okna je 1176×664 dp.
 
 ## Meta tlačítko (addon RedirectServices) — rozbor
 

@@ -114,6 +114,40 @@ public final class OverlayHost extends FrameLayout {
         if (!wasOpen && listener != null) listener.onOverlayShown();
     }
 
+    /**
+     * Bocni panel (jako detail vpravo ve visionOS): pres celou vysku oblasti
+     * u praveho okraje, vyjede zprava na pruzine.
+     */
+    public void showSide(View content, RectF area, int width) {
+        removeGhost();
+        final boolean wasOpen = panel != null;
+        if (panel != null) removeView(panel);
+        panel = content;
+        content.setClickable(true);
+        final int margin = Glass.dpi(getContext(), 12);
+        final int w = Math.min(width, Math.max(1, Math.round(area.width()) - 2 * margin));
+        final int h = Math.max(1, Math.round(area.height()) - 2 * margin);
+        content.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
+        final float left = area.right - margin - w;
+        final float top = area.top + margin;
+        LayoutParams lp = new LayoutParams(w, h, Gravity.TOP | Gravity.START);
+        lp.leftMargin = Math.round(left);
+        lp.topMargin = Math.round(top);
+        addView(content, lp);
+        target.set(left, top, left + w, top + h);
+        origin.set(target);
+        origin.offset(Glass.dp(getContext(), 90), 0);
+
+        setVisibility(VISIBLE);
+        final long now = System.nanoTime();
+        open.snap(0f);
+        open.set(1f, now);
+        apply(now);
+        schedule();
+        if (!wasOpen && listener != null) listener.onOverlayShown();
+    }
+
     public void close() {
         if (panel == null) return;
         final long now = System.nanoTime();

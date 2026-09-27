@@ -308,7 +308,7 @@ public class LauncherActivity extends Activity
     @Override
     public void onOpenSettings() {
         // Panel "vyroste" z loga (mrizka) nebo z tlacitka nastaveni (karusel).
-        final RectF from = carouselShown ? carousel.settingsRect() : launcher.brandRect();
+        final RectF from = carouselShown ? carousel.settingsRect() : launcher.settingsRect();
         overlay.show(SettingsSheet.build(this, prefs, repo, artwork,
                         () -> showApps(true), () -> checkForUpdates(true), overlay::close),
                 null, from, launcher.frameRect(), Glass.dpi(this, 1000));
@@ -330,7 +330,8 @@ public class LauncherActivity extends Activity
             }
         });
         menu.setBattery(batteryPct, batteryCharging, batteryFast);
-        overlay.show(menu, origin, origin, launcher.frameRect(), QuickMenuView.preferredWidth(this));
+        // Rychle menu vyjede jako bocni panel vpravo (visionOS), pres celou vysku panelu.
+        overlay.showSide(menu, launcher.frameRect(), QuickMenuView.sideWidth(this));
     }
 
     private void toggleQuickMenu() {

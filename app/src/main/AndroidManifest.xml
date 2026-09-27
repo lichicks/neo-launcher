@@ -58,9 +58,10 @@
             <meta-data android:name="com.oculus.lazy_gpumem_allocation"
                 android:value="true" />
 
-            <!-- Okno je o kousek vetsi nez skleneny panel: v pruhlednem okraji
-                 muze hovernuta karta "vyskocit" ven z panelu. -->
-            <layout android:defaultWidth="1110dp" android:defaultHeight="664dp"
+            <!-- Okno je vetsi nez skleneny panel: vlevo lista s ikonami, nahore
+                 plovouci horni lista, v pruhlednem okraji muze hovernuta karta
+                 "vyskocit" ven z panelu. -->
+            <layout android:defaultWidth="1176dp" android:defaultHeight="664dp"
                 android:gravity="center" />
 
             <intent-filter>

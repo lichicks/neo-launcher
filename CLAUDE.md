@@ -51,13 +51,16 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 | `launch/AppLauncher.java` | Spouštění (vrshell broadcast na v71+, panely, 2D), info o aplikaci, odinstalace |
 | `update/Updater.java`, `InstallReceiver.java` | Aktualizace z GitHub Releases: najde nejnovější build, stáhne, nainstaluje přes PackageInstaller |
 | `ui/NeoLauncherView.java` | Sklo, horní lišta (logo, záložky, hodiny, baterie), mřížka, hover pop-out, hloubka ostrosti, gumové rolování, přesouvání |
-| `ui/CarouselView.java` | Testovací karusel (5× klepnout na logo): karty na výšku jako ve visionOS, štítky se statistikami |
+| `ui/CarouselView.java` | Testovací karusel (5× klepnout na logo): karty na šířku ve vějíři, hloubka ostrosti do stran, štítky se statistikami |
+| `ui/QuickMenuView.java` | Rychlé menu (náhrada systémového menu Questu): jas, hlasitost, Wi-Fi, baterie, úložiště, dlaždice funkcí Questu |
+| `ui/Spring.java` | Fyzikální pružina (jako SwiftUI spring) — při změně cíle drží rychlost; čistě z času |
+| `ui/ModalDepth.java` | Launcher za otevřeným dialogem plynule ustoupí (rozmazání + zmenšení) |
 | `ui/PeepholeAnimation.java`, `ui/LaunchLens.java` | Animace spuštění „kukátko“ (sdílí mřížka i karusel) + AGSL čočka |
 | `data/UsageInfo.java` | Herní čas a poslední spuštění z UsageStats (jako plugin Playtime v LL) |
-| `ui/Eased.java` | Animovaná hodnota jako CSS transition (retarget z aktuální hodnoty, bez callbacků) |
+| `ui/Eased.java` | Animovaná hodnota jako CSS transition (retarget z aktuální hodnoty, bez callbacků) — už jen pro prolínání a hover lišty |
 | `ui/DepthBlur.java` | Radiální rozmazání: AGSL shader (Android 13+), jinak obyčejný blur |
 | `ui/ShadowSprite.java` | Předpočítané rozmazané stíny karet (box-shadow) |
-| `ui/Glass.java`, `OverlayHost.java`, `SettingsSheet.java`, `AppMenu.java`, `UpdateSheet.java` | Dialogy ve stylu skla (normální Android Views) |
+| `ui/Glass.java`, `OverlayHost.java`, `SettingsSheet.java`, `AppMenu.java`, `UpdateSheet.java` | Dialogy ve stylu skla (normální Android Views). `OverlayHost` je nechá „vyrůst“ na pružině z místa, odkud se otevřely |
 
 ### Vrstvy kreslení (odspodu)
 1. Sklo panelu (výplň s nastavitelným krytím, okraj, světlá horní hrana)
@@ -80,7 +83,9 @@ v nastavení ("Karty vyskakují z panelu").
    (předchozí pokus shodil headset). V2.0: jeden efekt na celou vrstvu
    (`contentNode`), stíny jsou předpočítané bitmapy, žádné `saveLayer` na kartu.
 2. **Nikdy nespoléhat na `withEndAction()` / konec animace pro stav.**
-   V2.0: `Eased` se vždy dopočítá z času, stav se nikde nenastavuje v callbacku.
+   V2.0: `Eased` i `Spring` se vždy dopočítají z času (pružina v uzavřeném
+   tvaru, žádné kroky po snímcích), stav se nikde nenastavuje v callbacku.
+   Zavírání dialogu mění stav hned; animace je jen „duch“ bez dotyků.
 3. **Žádný per-holder stav.** V2.0: není RecyclerView; stav karty (`Card`) je
    klíčovaný balíčkem a přežije i obnovu seznamu.
 4. **Fokus = jeden zdroj pravdy.** `updateFocus()` se volá při každé události
@@ -145,20 +150,40 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
   okolo skla (jen v průhledném okraji, `setShadowLayer` + `clipOutPath`),
   ploché ostré stíny pod kartami, pilulkami, záložkami a stavem, modrá záře
   indikátoru záložky, puls tečky loga při klepnutí.
+- **Fyzika a prostorová návaznost (jako iOS/visionOS)** — hover, náklon,
+  indikátor záložek, přeskládání karet, zvednutí tažené karty a karusel jedou
+  na pružinách (`Spring`: response + tlumení, hover lehce překmitne, rychlé
+  změny cíle navazují bez cuknutí, fling v karuselu předá rychlost laseru).
+  Dialogy vyrůstají z místa, odkud se otevřely (nastavení z loga, menu karty
+  z karty, rychlé menu z hodin) a launcher za nimi ustoupí do hloubky.
 - **Karusel (testovací režim)** — 5× rychle klepnout na logo Neo (jedno
   klepnutí otevře nastavení se zpožděním 380 ms), nebo přepínač v nastavení.
-  Úplně průhledný, jen karty na výšku (poměr 0.68) jako na obrázku z visionOS,
-  který poslal uživatel: prostřední velká, do stran menší, dokola (od 5
-  položek), pořadí "3 / 13" v zářezu karty, záře v barvě hry pod prostřední
-  kartou. Obrázek na výšku: vlastní → stažený obal `portrait` z MetaMetadata
-  (stejný JSON jako banner v LL, oculuscdn) → složený z banneru (rozmazané
-  pozadí + banner uprostřed). Štítky: herní čas (UsageStats — potřebuje
-  "Přístup k využití", štítek "Herní čas – povolit" otevře nastavení),
-  naposledy spuštěno, počet spuštění z Nea (počítá se od této verze), datum
-  instalace. Ovládání: joystick ←/→ (ACTION_SCROLL, drží-li se, opakuje
-  se), klepnutí na boční kartu ji přinese doprostřed, klepnutí na prostřední
-  spustí (kukátko), tažení laserem roluje, podržení otevře menu karty.
-  Šipka vlevo nahoře = zpět do mřížky.
+  Úplně průhledný, jen karty **na šířku** (bannery jako v mřížce, uživatel
+  2026-09-27 chtěl šířku místo výšky) ve „vějíři“: prostřední velká a ostrá,
+  boční menší, přes sebe a natočené 18° k hráči, **čím dál, tím rozmazanější**
+  (jeden `DepthBlur` na vrstvu bočních karet; v náhledu Robolectricu jen
+  rovnoměrný blur). Dokola od 5 položek, pořadí "3 / 13" v zářezu karty,
+  záře v barvě hry pod prostřední kartou, pod ní název, typ a štítky: herní
+  čas (UsageStats — potřebuje "Přístup k využití", štítek "Herní čas –
+  povolit" otevře nastavení), naposledy spuštěno, počet spuštění z Nea
+  (počítá se od v2.0.25), datum instalace. Ovládání: joystick ←/→
+  (ACTION_SCROLL, drží-li se, opakuje se), klepnutí na boční kartu ji přinese
+  doprostřed, klepnutí na prostřední spustí (kukátko), tažení laserem roluje
+  se setrvačností, podržení otevře menu karty. Šipka vlevo nahoře = zpět.
+  Velké karty chtějí větší bannery → `ArtworkLoader.requestTargetSize`
+  bere největší požadavek (karusel žádá jen když je vidět).
+- **Rychlé menu** (vlastní obdoba systémového menu Questu, cíl: časem plně
+  nahradit výchozí launcher) — klepnutí na hodiny/baterii (mřížka i karusel)
+  nebo tlačítko menu na ovladači (`KEYCODE_MENU`, pokud ho Quest do aplikace
+  pošle). Hodiny + datum, baterie, Wi-Fi (signál z `NetworkCapabilities`),
+  posuvník **jasu** (`Settings.System.SCREEN_BRIGHTNESS` 10–255, potřebuje
+  "Úprava systémových nastavení" = `WRITE_SETTINGS`, stejně jako QuestDim;
+  bez povolení posuvník nabídne povolení) a **hlasitosti** (`AudioManager`,
+  bez oprávnění), joystick nad posuvníkem = ±5 %. Dlaždice: Wi-Fi, Bluetooth
+  (Android nastavení, záložně Nastavení Questu), Nastavení Questu, Menu Questu
+  (`systemux://quick_settings` — systémové rychlé nastavení na vše ostatní:
+  průchod, sdílení…), Soubory, Prohlížeč, Fotoaparát, Neo (nastavení).
+  Úložiště dole. Addon Meta tlačítka zůstává beze změny.
 - Nastavení: hloubka ostrosti, krytí skla, sloupce, přesah karet, řazení
   (vlastní/abecedně/naposledy), prodleva menu karty, stahování obrázků
   z internetu (zap/vyp), skryté aplikace, znovu stáhnout obrázky,
@@ -196,12 +221,19 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
 8. Kukátko: zavře se launcher hned po spuštění hry (bez probliknutí mřížky)?
 9. Karusel: 5× klepnout na logo. Směr joysticku (doprava = další karta; když
    obráceně → prohodit znaménko v `CarouselView.onGenericMotionEvent`),
-   rychlost opakování (`STICK_*`). Otevře štítek "Herní čas – povolit"
-   nastavení přístupu k využití? Záložně z PC:
+   rychlost opakování (`STICK_*`). Je vidět postupné rozmazání do stran
+   (AGSL, `NeoDepthBlur` v logcatu)? Natočení bočních karet (vnější hrana
+   k hráči; obráceně → znaménko `sl.ry` v `drawCards`). Otevře štítek
+   "Herní čas – povolit" nastavení přístupu k využití? Záložně z PC:
    `adb -P 5038 shell appops set com.neolauncher.v1 GET_USAGE_STATS allow`.
-   Stáhnou se obaly na výšku (oculuscdn), nebo jen složené z banneru?
 10. Záře: je vidět barevná záře hovernuté karty a modrá záře okolo skla?
     Není moc? (alfa v `drawCardBody` / `drawGlass`)
+11. Rychlé menu: otevře se klepnutím na hodiny? Tlačítkem menu na levém
+    ovladači? Mění posuvník jas Questu (po povolení "Úprava systémových
+    nastavení"; záložně `adb -P 5038 shell appops set com.neolauncher.v1
+    WRITE_SETTINGS allow`)? Hlasitost? Co otevřou dlaždice?
+12. Pružiny: nepůsobí hover/záložky moc "gumově"? (`HOVER_SPRING` atd.
+    nahoře v `NeoLauncherView`, tlumení 1 = bez překmitu)
 
 ## Meta tlačítko (addon RedirectServices) — rozbor
 
@@ -235,6 +267,9 @@ Možnosti:
   kolečka dole (uživatel zvažuje místo záložek)
 - Karusel: podle zpětné vazby z headsetu buď vylepšit (paralaxa, zvuk,
   tapeta), nebo zahodit — je to testovací režim
+- Rychlé menu: když Meta tlačítko (addon přenesený do repa) pozná, že ho
+  otevřel uživatel, otevřít rovnou rychlé menu; ovladače (baterie) nejdou
+  z běžné aplikace přečíst
 - Češtinu přesunout do `strings.xml` (teď natvrdo v kódu — Quest češtinu
   jako systémový jazyk nemá, takže `values-cs` by se stejně nepoužilo)
 
@@ -244,8 +279,8 @@ Možnosti:
 (emulace Androidu na JVM) s nativní grafikou a HW vykreslováním — RenderNode,
 RenderEffect i AGSL shader jedou přes opravdovou Skia/HWUI. Stáhne opravdové
 bannery her, vyfotí klidový stav, stav s kartou pod "laserem" po odrolování,
-6 fází animace spuštění (6× zpomalené) a karusel (klid + pohyb), a složí to
-s ilustračním pozadím. Potřebuje jen JDK, Maven a přístup na Maven
+6 fází animace spuštění (6× zpomalené), karusel (klid + pohyb) a rychlé menu,
+a složí to s ilustračním pozadím. Potřebuje jen JDK, Maven a přístup na Maven
 Central + GitHub (funguje i v cloudové session). Trvá ~3 min, poprvé stáhne
 ~350 MB. **Používat po každé změně kreslení** — takhle se našla chyba v bodě 6.
 Pozadí a systémové rozmazání prostředí jsou jen ilustrace; skutečný vzhled

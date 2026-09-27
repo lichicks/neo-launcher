@@ -13,7 +13,6 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RecordingCanvas;
 import android.graphics.RectF;
-import android.graphics.RenderEffect;
 import android.graphics.RenderNode;
 import android.graphics.Shader;
 import android.graphics.Typeface;
@@ -23,6 +22,7 @@ import android.text.TextPaint;
 import android.text.TextUtils;
 import android.view.HapticFeedbackConstants;
 import android.view.InputDevice;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
@@ -41,16 +41,17 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * Testovaci karuselovy rezim (5x klepnout na logo Neo) - inspirovany visionOS.
- * Zadne sklo, jen karty na vysku: uprostred velka, do stran mensi. Pod
- * prostredni kartou stitky s hernim casem, poslednim spustenim, poctem
- * spusteni a datem instalace.
+ * Testovaci karuselovy rezim (5x klepnout na logo Neo). Zadne sklo, jen
+ * karty na sirku v prostorovem "vejiri": prostredni velka a ostra, do stran
+ * mensi, natocene k divakovi a cim dal, tim vic rozmazane (hloubka ostrosti).
+ * Pod prostredni kartou nazev a stitky se statistikami.
  * <p>
- * Stejna pravidla jako mrizka (CLAUDE.md): jeden View, stav odvozeny z casu
- * ({@link Eased}), hover pocitany z pozice ukazatele, zadny blur na kartach.
+ * Pravidla jako mrizka (CLAUDE.md): jeden View, stav jen z casu (pruziny
+ * {@link Spring}), hover z pozice ukazatele. Rozmazani je JEDEN efekt na
+ * celou vrstvu bocnich karet (DepthBlur), zadny blur na jednotlive karty.
  * Ovladani: joystick doleva/doprava (ACTION_SCROLL), klepnuti na bocni kartu
- * ji prinese doprostred, klepnuti na prostredni spusti, tazeni laserem roluje,
- * podrzeni prostredni karty otevre jeji menu.
+ * ji prinese doprostred, klepnuti na prostredni spusti, tazeni laserem roluje
+ * (po pusteni pokracuje setrvacnosti), podrzeni prostredni otevre menu karty.
  */
 public final class CarouselView extends View implements ArtworkLoader.Listener {
 
@@ -62,6 +63,8 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         void onAppMenu(AppEntry app, RectF cardRect);
 
         void onOpenSettings();
+
+        void onOpenQuickMenu(RectF origin);
 
         void onExitCarousel();
 
@@ -83,11 +86,13 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         long installTime(String pkg);
     }
 
-    private static final float CARD_RADIUS = 22f;
+    private static final float CARD_RADIUS = 20f;
     /** Zmenseni karet podle vzdalenosti od stredu (0 = prostredni). */
-    private static final float[] SCALE = {1f, 0.70f, 0.54f, 0.43f};
-    private static final float SIDE_GAP = 10f;
-    private static final long MOVE_MS = 460;
+    private static final float[] SCALE = {1f, 0.74f, 0.56f, 0.44f};
+    /** Vodorovny odstup stredu karet (v nasobcich sirky prostredni) - karty se prekryvaji. */
+    private static final float[] OFFSET = {0f, 0.64f, 1.06f, 1.38f};
+    /** Natoceni bocnich karet k divakovi (vejir kolem hrace jako ve visionOS). */
+    private static final float SIDE_ROT_DEG = 18f;
     private static final long HOVER_EXIT_GRACE_MS = 90;
     private static final float TILT_DEG = 5f;
     /** Joystick: prvni krok hned, pri drzeni opakovani po teto prodleve / intervalu. */
@@ -100,6 +105,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     private static final int ZONE_BACK = 1;
     private static final int ZONE_SETTINGS = 2;
     private static final int ZONE_USAGE = 3;
+    private static final int ZONE_STATUS = 4;
     private static final int ZONE_TAB0 = 10;
 
     private static final String[] TAB_NAMES = {"Hry", "Aplikace", "Vše"};
@@ -117,10 +123,9 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         float shaderFor = -1;
         Shader placeholder;
         float placeholderFor = -1;
-        String shownTitle;
-        float shownTitleW;
-        float shownFor = -1;
-        final Eased hl = new Eased(0, 220, Eased.EASE_OUT);
+        final Spring hl = new Spring(0, 0.30f, 0.80f, 0.002f);
+        /** Vlastni RenderNode karty (3D natoceni). Kazda karta je ve snimku nejvys jednou. */
+        RenderNode node;
     }
 
     private static final class Chip {
@@ -144,18 +149,18 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     private boolean appsLoaded;
 
     // --- Poloha karuselu (v jednotkach "karet", neomezena kvuli dokola) ---------------
-    private final Eased pos = new Eased(0, MOVE_MS);
-    private final Eased enter = new Eased(1, 560);
+    private final Spring pos = new Spring(0, 0.50f, 0.86f, 0.0005f);
+    private final Spring enter = new Spring(1, 0.55f, 0.80f, 0.001f);
     private final Eased chipFade = new Eased(1, 320, Eased.EASE_OUT);
-    private final Eased press = new Eased(0, 140, Eased.EASE_OUT);
-    private final Eased rotX = new Eased(0, 380);
-    private final Eased rotY = new Eased(0, 380);
+    private final Spring press = new Spring(0, 0.22f, 0.9f, 0.002f);
+    private final Spring rotX = new Spring(0, 0.38f, 0.85f, 0.01f);
+    private final Spring rotY = new Spring(0, 0.38f, 0.85f, 0.01f);
     private final Eased[] zoneHover = new Eased[ZONE_TAB0 + TAB_NAMES.length];
-    private final Eased tabPos = new Eased(0, 320);
+    private final Spring tabPos = new Spring(0, 0.42f, 0.78f, 0.001f);
 
     // --- Geometrie (px) -------------------------------------------------------------
     private float cw, ch, cx, cy;
-    private final float[] offX = new float[SCALE.length];
+    private final float[] offX = new float[OFFSET.length];
     private final Path cardPath = new Path();
     private float notchW, notchH;
     private ShadowSprite shadow, glow;
@@ -185,6 +190,8 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     private final List<Chip> chips = new ArrayList<>();
     private String chipsFor;
     private int statsVersion, chipsVersion = -1;
+    private String shownTitle = "";
+    private String shownTitleFor;
 
     // --- Stav horni listy -----------------------------------------------------------
     private int batteryLevel = -1;
@@ -213,8 +220,10 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     private final Path boltPath = new Path();
     private final Matrix shaderMatrix = new Matrix();
     private final RectF tmp = new RectF();
-    private final RenderNode centerNode = new RenderNode("neo-carousel-center");
-    private boolean modalBlur;
+    /** Vrstva bocnich karet s jedinym efektem hloubky ostrosti. */
+    private final RenderNode sideNode = new RenderNode("neo-carousel-side");
+    private final DepthBlur depthBlur = new DepthBlur();
+    private ModalDepth modalDepth;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable hoverExitRunnable = () -> {
@@ -234,11 +243,14 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         Typeface semi = Typeface.create(Typeface.SANS_SERIF, 600, false);
         Typeface bold = Typeface.create(Typeface.SANS_SERIF, 700, false);
         titleText.setTypeface(bold);
-        titleText.setTextSize(dp(24));
+        titleText.setTextSize(dp(26));
+        titleText.setTextAlign(Paint.Align.CENTER);
         titleText.setColor(Color.WHITE);
+        titleText.setShadowLayer(dp(8), 0, dp(1), 0x99000000);
         subText.setTypeface(semi);
-        subText.setTextSize(dp(12.5f));
-        subText.setColor(0xB3FFFFFF);
+        subText.setTextSize(dp(13));
+        subText.setTextAlign(Paint.Align.CENTER);
+        subText.setShadowLayer(dp(6), 0, dp(1), 0x99000000);
         badgeText.setTypeface(semi);
         badgeText.setTextSize(dp(11.5f));
         badgeText.setTextAlign(Paint.Align.CENTER);
@@ -297,7 +309,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         tabPos.snap(tab);
     }
 
-    /** Karusel se prave ukazal: karty "vyjedou" ze stredu. */
+    /** Karusel se prave ukazal: karty na pruzine "vyjedou" ze stredu do stran. */
     public void show() {
         final long now = System.nanoTime();
         enter.snap(0f);
@@ -324,14 +336,11 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
             Item it = old.remove(e.pkg);
             if (it == null) it = new Item();
             it.app = e;
-            String label = labels.get(i);
-            if (!label.equals(it.label)) {
-                it.label = label;
-                it.shownFor = -1;
-            }
+            it.label = labels.get(i);
             items.add(it);
             itemByPkg.put(e.pkg, it);
         }
+        for (Item gone : old.values()) if (gone.node != null) gone.node.discardDisplayList();
         // Vybrana karta zustane vybrana (i po obnove seznamu). Kdyz zmizela
         // (skryta/odinstalovana), vybere se ta, ktera je ted na jejim miste.
         int sel = 0;
@@ -347,19 +356,16 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         }
         final int n = items.size();
         final int curK = Math.round(pos.target());
-        if (n > 0 && Math.floorMod(curK, n) == sel && !tabChanged) {
-            // Stejna karta - nic nepreskakovat.
-        } else {
-            pos.snap(sel);
-        }
+        if (!(n > 0 && Math.floorMod(curK, n) == sel && !tabChanged)) pos.snap(sel);
         selectedPkg = n > 0 ? items.get(Math.floorMod(Math.round(pos.target()), n)).app.pkg : null;
         if (tabChanged) {
             chipFade.snap(0f);
             chipFade.set(1f, now);
-            enter.snap(0.4f);
+            enter.snap(0.3f);
             enter.set(1f, now);
         }
         chipsFor = null;
+        shownTitleFor = null;
         prefetch();
         invalidate();
     }
@@ -392,10 +398,20 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         invalidate();
     }
 
+    /** Otevreny dialog: karusel plynule ustoupi do hloubky. */
     public void setModalBlur(boolean b) {
-        if (modalBlur == b) return;
-        modalBlur = b;
-        setRenderEffect(b ? RenderEffect.createBlurEffect(dp(10), dp(10), Shader.TileMode.CLAMP) : null);
+        if (modalDepth == null) modalDepth = new ModalDepth(this, d);
+        modalDepth.set(b);
+    }
+
+    /** Tlacitko nastaveni (odtud "vyroste" panel nastaveni). */
+    public RectF settingsRect() {
+        return new RectF(settingsRect);
+    }
+
+    /** Obdelnik hodin/baterie (odtud "vyjede" rychle menu). */
+    public RectF statusRect() {
+        return new RectF(statusRect);
     }
 
     public void clearPointer() {
@@ -432,7 +448,8 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
             velocity.recycle();
             velocity = null;
         }
-        centerNode.discardDisplayList();
+        sideNode.discardDisplayList();
+        for (Item it : items) if (it.node != null) it.node.discardDisplayList();
         peephole.discard();
     }
 
@@ -444,29 +461,41 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         if (w <= 0 || h <= 0) return;
-        ch = Math.min(h * 0.56f, dp(440));
-        cw = ch * ArtworkLoader.PORTRAIT_ASPECT;
+        cw = Math.min(w * 0.40f, h * 0.42f * ArtworkLoader.CARD_ASPECT);
+        ch = cw / ArtworkLoader.CARD_ASPECT;
         cx = w / 2f;
-        cy = h * 0.5f + dp(4);
-        offX[0] = 0f;
-        for (int i = 1; i < SCALE.length; i++) {
-            offX[i] = offX[i - 1] + cw * (SCALE[i - 1] + SCALE[i]) / 2f + dp(SIDE_GAP) * SCALE[i];
-        }
+        cy = h * 0.43f;
+        for (int i = 0; i < OFFSET.length; i++) offX[i] = OFFSET[i] * cw;
         final float r = dp(CARD_RADIUS);
         notchW = dp(62);
         notchH = dp(24);
         buildCardPath(cw, ch, r);
         shadow = ShadowSprite.create(cw, ch, r, dp(14));
-        glow = ShadowSprite.create(cw, ch, r, dp(34));
-        bottomShade = new LinearGradient(0, ch / 2f - ch * 0.48f, 0, ch / 2f,
-                new int[]{0x00000000, 0x59000000, 0xD9000000}, new float[]{0f, 0.45f, 1f},
-                Shader.TileMode.CLAMP);
-        if (artwork != null) artwork.setPortraitSize(Math.round(cw * 1.04f));
+        glow = ShadowSprite.create(cw, ch, r, dp(36));
+        bottomShade = new LinearGradient(0, ch / 2f - ch * 0.40f, 0, ch / 2f,
+                0x00000000, 0x80000000, Shader.TileMode.CLAMP);
+        requestArtSize(getVisibility() == VISIBLE);
         for (Item it : items) {
             it.shaderFor = -1;
             it.placeholderFor = -1;
-            it.shownFor = -1;
         }
+    }
+
+    /**
+     * Obrazky ostre i pro velkou kartu. Sdilene s mrizkou (loader vezme vetsi
+     * pozadavek) - jen kdyz je karusel videt, v rezimu mrizky nic navic.
+     */
+    private void requestArtSize(boolean visible) {
+        if (artwork != null && cw > 0) {
+            artwork.requestTargetSize("carousel", visible ? Math.round(cw * 1.05f) : 0);
+        }
+    }
+
+    @Override
+    protected void onVisibilityChanged(View changedView, int visibility) {
+        super.onVisibilityChanged(changedView, visibility);
+        // Jen prepnuti rezimu (ne skryti okna) - jinak by se obrazky nacitaly znovu po kazdem navratu.
+        if (changedView == this) requestArtSize(visibility == VISIBLE);
     }
 
     /** Obrys karty se "zarezem" vpravo nahore, ve kterem je poradi (jako ve visionOS). */
@@ -522,8 +551,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     }
 
     private float xFor(float o, float spread) {
-        final float a = Math.abs(o);
-        return cx + Math.signum(o) * interp(offX, a) * spread;
+        return cx + Math.signum(o) * interp(offX, Math.abs(o)) * spread;
     }
 
     private float alphaFor(float a) {
@@ -543,8 +571,6 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         if (prefs == null || cw <= 0) return;
         final long now = System.nanoTime();
         final float e = enter.get(now);
-        final boolean layer = e < 0.999f;
-        if (layer) canvas.saveLayerAlpha(0, 0, getWidth(), getHeight(), Math.round(255 * clamp(e * 1.4f, 0f, 1f)));
 
         drawHeader(canvas, now);
         if (items.isEmpty()) {
@@ -555,11 +581,11 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
             hintText.setTextSize(dp(12));
         } else {
             drawCards(canvas, now, e);
+            drawCaption(canvas, now);
             drawChips(canvas, now);
             canvas.drawText("Joystick ← → přepíná   ·   klepnutí spustí   ·   podržení otevře menu",
                     cx, getHeight() - dp(18), hintText);
         }
-        if (layer) canvas.restore();
 
         if (launchK != Integer.MIN_VALUE) {
             if (!peephole.isRunning(now)) launchK = Integer.MIN_VALUE;
@@ -576,120 +602,150 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         return false;
     }
 
+    /** Jedna viditelna karta v aktualnim snimku. */
+    private static final class Slot {
+        int k;
+        float a, x, s, ry, alpha;
+        Item it;
+    }
+
     private void drawCards(Canvas c, long now, float e) {
         final float p = pos.get(now);
-        final float spread = 0.35f + 0.65f * e;
+        final float spread = 0.4f + 0.6f * e;
+        final float eScale = 0.85f + 0.15f * Math.min(e, 1.05f);
+        final float eAlpha = clamp(e * 1.6f, 0f, 1f);
         final int base = Math.round(p);
         final int reach = reach();
         final int n = items.size();
-        // Viditelne karty serazene od nejvzdalenejsi (kresli se prvni) po prostredni.
-        List<int[]> order = new ArrayList<>();
+        final int ck = centerK();
+
+        List<Slot> slots = new ArrayList<>();
         for (int k = base - reach - 1; k <= base + reach + 1; k++) {
             if (!wraps() && (k < 0 || k >= n)) continue;
-            float a = Math.abs(k - p);
-            if (alphaFor(a) <= 0.004f) continue;
-            order.add(new int[]{k, Math.round(a * 1000)});
+            final float a = Math.abs(k - p);
+            final float alpha = alphaFor(a) * eAlpha;
+            if (alpha <= 0.004f) continue;
+            Slot sl = new Slot();
+            sl.k = k;
+            sl.a = a;
+            sl.it = itemAt(k);
+            sl.alpha = alpha;
+            sl.x = xFor(k - p, spread);
+            sl.s = scaleFor(a) * eScale;
+            // Vejir kolem hrace: vnejsi hrana bocni karty jde k divakovi.
+            sl.ry = -Math.signum(k - p) * Math.min(a, 1f) * SIDE_ROT_DEG;
+            slots.add(sl);
         }
-        order.sort((x, y) -> Integer.compare(y[1], x[1]));
+        // Od nejvzdalenejsi (kresli se prvni) po prostredni.
+        slots.sort((x, y) -> Float.compare(y.a, x.a));
 
-        // 1) Zare v barve hry pod kartami u stredu (pod vsemi kartami).
-        for (int[] o : order) {
-            final int k = o[0];
-            final float a = o[1] / 1000f;
-            if (a >= 1f || k == launchK) continue;
-            final Item it = itemAt(k);
-            final float s = scaleFor(a) * (0.9f + 0.1f * e);
-            final float x = xFor(k - p, spread);
-            final int col = artwork != null ? artwork.glowColor(it.app.pkg, 0xFFBFE6FF) : 0xFFBFE6FF;
-            final float ga = (1f - a) * (1f - a);
+        // 1) Zare v barve hry pod kartami u stredu - aditivne (svetlo).
+        spritePaint.setBlendMode(BlendMode.PLUS);
+        for (Slot sl : slots) {
+            if (sl.a >= 1f || sl.k == launchK) continue;
+            final int col = artwork != null ? artwork.glowColor(sl.it.app.pkg, 0xFFBFE6FF) : 0xFFBFE6FF;
+            final float ga = (1f - sl.a) * (1f - sl.a) * sl.alpha;
             c.save();
-            c.translate(x, cy);
-            c.scale(s, s);
-            spritePaint.setColor((col & 0x00FFFFFF) | (Math.round(130 * ga) << 24));
-            spritePaint.setBlendMode(BlendMode.PLUS);
-            glow.draw(c, -cw / 2f, -ch / 2f, cw / 2f, ch / 2f, dp(10), spritePaint);
-            spritePaint.setBlendMode(null);
+            c.translate(sl.x, cy);
+            c.scale(sl.s, sl.s);
+            spritePaint.setColor((col & 0x00FFFFFF) | (Math.round(120 * ga) << 24));
+            glow.draw(c, -cw / 2f, -ch / 2f, cw / 2f, ch / 2f, dp(8), spritePaint);
             c.restore();
         }
+        spritePaint.setBlendMode(null);
 
-        // 2) Karty.
-        final int ck = centerK();
-        for (int[] o : order) {
-            final int k = o[0];
-            if (k == launchK) continue;
-            final float a = o[1] / 1000f;
-            final Item it = itemAt(k);
-            final float alpha = alphaFor(a);
-            final float hl = it.hl.get(now);
-            float s = scaleFor(a) * (0.9f + 0.1f * e);
-            final boolean center = k == ck && a < 0.5f;
-            if (center) s *= 1f + 0.035f * hl - 0.05f * press.get(now);
-            else s *= 1f + 0.04f * hl;
-            final float x = xFor(k - p, spread);
-            final float dim = Math.min(0.42f, 0.16f * a) * (1f - 0.7f * hl);
-            final float rx = center ? rotX.get(now) : 0f;
-            final float ry = center ? rotY.get(now) : 0f;
-            final boolean fade = alpha < 0.996f;
-            if (fade) {
-                c.saveLayerAlpha(x - cw * s, cy - ch * s, x + cw * s, cy + ch * s, Math.round(255 * alpha));
+        // 2) Bocni karty do jedne vrstvy s hloubkou ostrosti, prostredni zvlast (ostra).
+        Slot center = null;
+        final boolean hw = c.isHardwareAccelerated();
+        Canvas side = c;
+        RecordingCanvas rc = null;
+        if (hw) {
+            sideNode.setPosition(0, 0, getWidth(), getHeight());
+            rc = sideNode.beginRecording(getWidth(), getHeight());
+            side = rc;
+        }
+        try {
+            for (Slot sl : slots) {
+                if (sl.k == launchK) continue;
+                if (sl.k == ck && sl.a < 0.5f) {
+                    center = sl;
+                    continue;
+                }
+                final float hl = clamp(sl.it.hl.get(now), 0f, 1f);
+                final float dim = Math.min(0.45f, 0.18f * sl.a) * (1f - 0.6f * hl);
+                drawCard(side, sl, sl.s * (1f + 0.04f * sl.it.hl.get(now)), 0f, sl.ry, dim, hl, now);
             }
-            // Plochy + mekky stin pod kartou.
-            c.save();
-            c.translate(x, cy);
-            c.scale(s, s);
-            spritePaint.setColor(Color.argb(Math.round(120 + 60 * (1f - Math.min(a, 1f))), 0, 0, 0));
-            shadow.draw(c, -cw / 2f, -ch / 2f, cw / 2f, ch / 2f, dp(12), spritePaint);
-            fill.setShader(null);
-            fill.setColor(0x38000000);
-            c.save();
-            c.translate(0, dp(4));
-            c.drawPath(cardPath, fill);
-            c.restore();
-            c.restore();
+        } finally {
+            if (rc != null) sideNode.endRecording();
+        }
+        if (hw) {
+            final float amt = prefs.dofMode() == Prefs.DOF_OFF ? 0f
+                    : prefs.dofMode() == Prefs.DOF_STRONG ? 1.6f : 1f;
+            sideNode.setRenderEffect(amt > 0f ? depthBlur.effect(cx, cy, cw * 0.35f,
+                    offX[2] + cw * 0.35f, dp(0.8f) * amt, dp(9f) * amt) : null);
+            c.drawRenderNode(sideNode);
+        }
 
-            if (c.isHardwareAccelerated() && (Math.abs(rx) > 0.01f || Math.abs(ry) > 0.01f)) {
-                drawTilted(c, it, k, x, s, rx, ry, dim, hl, center);
-            } else {
-                c.save();
-                c.translate(x, cy);
-                c.scale(s, s);
-                drawBody(c, it, k, dim, hl, center);
-                c.restore();
-            }
-            if (fade) c.restore();
+        // 3) Prostredni karta: ostra, naklon za ukazatelem, lehke "stisknuti".
+        if (center != null) {
+            final float hl = clamp(center.it.hl.get(now), 0f, 1f);
+            final float s = center.s * (1f + 0.03f * center.it.hl.get(now) - 0.05f * press.get(now));
+            drawCard(c, center, s, rotX.get(now), center.ry + rotY.get(now), 0f, hl, now);
         }
     }
 
-    private void drawTilted(Canvas c, Item it, int k, float x, float s, float rx, float ry,
-                            float dim, float hl, boolean center) {
-        final float m = dp(40);
+    /** Karta pres jeji vlastni RenderNode (poloha, meritko, 3D natoceni, pruhlednost). */
+    private void drawCard(Canvas c, Slot sl, float s, float rx, float ry, float dim, float hl, long now) {
+        final Item it = sl.it;
+        if (!c.isHardwareAccelerated()) {
+            c.save();
+            c.translate(sl.x, cy);
+            c.scale(s, s);
+            drawBody(c, it, sl.k, dim, hl, sl.a);
+            c.restore();
+            return;
+        }
+        if (it.node == null) it.node = new RenderNode("neo-carousel-card");
+        final float m = shadow.margin + dp(24);
         final int nw = (int) Math.ceil(cw + 2 * m);
         final int nh = (int) Math.ceil(ch + 2 * m);
-        RecordingCanvas rc = centerNode.beginRecording(nw, nh);
+        final RenderNode n = it.node;
+        RecordingCanvas rc = n.beginRecording(nw, nh);
         try {
             rc.translate(nw / 2f, nh / 2f);
-            drawBody(rc, it, k, dim, hl, center);
+            drawBody(rc, it, sl.k, dim, hl, sl.a);
         } finally {
-            centerNode.endRecording();
+            n.endRecording();
         }
-        centerNode.setPosition(0, 0, nw, nh);
-        centerNode.setClipToBounds(false);
-        centerNode.setTranslationX(x - nw / 2f);
-        centerNode.setTranslationY(cy - nh / 2f);
-        centerNode.setPivotX(nw / 2f);
-        centerNode.setPivotY(nh / 2f);
-        centerNode.setScaleX(s);
-        centerNode.setScaleY(s);
-        centerNode.setRotationX(rx);
-        centerNode.setRotationY(ry);
-        centerNode.setCameraDistance(dp(900) / 72f);
-        c.drawRenderNode(centerNode);
+        n.setPosition(0, 0, nw, nh);
+        n.setClipToBounds(false);
+        n.setTranslationX(sl.x - nw / 2f);
+        n.setTranslationY(cy - nh / 2f);
+        n.setPivotX(nw / 2f);
+        n.setPivotY(nh / 2f);
+        n.setScaleX(s);
+        n.setScaleY(s);
+        n.setRotationX(rx);
+        n.setRotationY(ry);
+        n.setCameraDistance(dp(900) / 72f);
+        n.setAlpha(sl.alpha);
+        c.drawRenderNode(n);
     }
 
-    /** Karta v lokalnich souradnicich se stredem v (0,0), velikost cw x ch. */
-    private void drawBody(Canvas c, Item it, int k, float dim, float hl, boolean center) {
+    /** Karta v lokalnich souradnicich se stredem v (0,0), velikost cw x ch (vcetne stinu). */
+    private void drawBody(Canvas c, Item it, int k, float dim, float hl, float a) {
         final float w2 = cw / 2f, h2 = ch / 2f;
-        Bitmap art = artwork != null ? artwork.getPortrait(it.app) : null;
+        // Stin: mekky (predpocitany) + plochy ostry pod kartou.
+        spritePaint.setColor(Color.argb(Math.round(110 + 70 * (1f - Math.min(a, 1f))), 0, 0, 0));
+        shadow.draw(c, -w2, -h2, w2, h2, dp(12), spritePaint);
+        fill.setShader(null);
+        fill.setColor(0x38000000);
+        c.save();
+        c.translate(0, dp(4));
+        c.drawPath(cardPath, fill);
+        c.restore();
+
+        Bitmap art = artwork != null ? artwork.get(it.app) : null;
         if (art != it.art) {
             it.art = art;
             it.shader = art != null ? new BitmapShader(art, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) : null;
@@ -723,24 +779,11 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
             c.drawPath(cardPath, fill);
         }
 
-        // Svetla horni hrana + ramecek (zari pri hoveru).
+        // Ramecek (pri hoveru zari).
         stroke.setShader(null);
         stroke.setStrokeWidth(dp(1));
-        stroke.setColor(Color.argb(Math.round(255 * lerp(center ? 0.26f : 0.16f, 0.85f, hl)), 255, 255, 255));
+        stroke.setColor(Color.argb(Math.round(255 * lerp(a < 0.5f ? 0.30f : 0.16f, 0.85f, hl)), 255, 255, 255));
         c.drawPath(cardPath, stroke);
-
-        // Nazev + typ vlevo dole.
-        final float pad = dp(18);
-        if (it.shownFor != cw) {
-            it.shownTitle = TextUtils.ellipsize(it.label, titleText, cw - 2 * pad,
-                    TextUtils.TruncateAt.END).toString();
-            it.shownTitleW = titleText.measureText(it.shownTitle);
-            it.shownFor = cw;
-        }
-        titleText.setShadowLayer(dp(8), 0, dp(1), 0x80000000);
-        c.drawText(it.shownTitle, -w2 + pad, h2 - dp(40), titleText);
-        titleText.clearShadowLayer();
-        c.drawText(typeLabel(it.app), -w2 + pad, h2 - dp(19), subText);
 
         // Poradi v zarezu vpravo nahore.
         final int n = items.size();
@@ -748,6 +791,25 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         final Paint.FontMetrics fm = badgeText.getFontMetrics();
         c.drawText(badge, w2 - notchW / 2f + dp(3), -h2 + notchH / 2f - (fm.ascent + fm.descent) / 2f - dp(1),
                 badgeText);
+    }
+
+    /** Nazev a typ prostredni karty pod ni. */
+    private void drawCaption(Canvas c, long now) {
+        final Item it = itemAt(Math.round(pos.get(now)));
+        if (it == null) return;
+        if (!it.app.pkg.equals(shownTitleFor)) {
+            shownTitleFor = it.app.pkg;
+            shownTitle = TextUtils.ellipsize(it.label, titleText, getWidth() * 0.6f,
+                    TextUtils.TruncateAt.END).toString();
+        }
+        final float f = chipFade.get(now) * clamp(enter.get(now) * 1.6f, 0f, 1f);
+        if (f <= 0.004f) return;
+        final float y = cy + ch / 2f + dp(46) + (1f - f) * dp(6);
+        titleText.setAlpha(Math.round(255 * f));
+        c.drawText(shownTitle, cx, y, titleText);
+        titleText.setAlpha(255);
+        subText.setColor(Color.argb(Math.round(178 * f), 255, 255, 255));
+        c.drawText(typeLabel(it.app), cx, y + dp(22), subText);
     }
 
     private static String typeLabel(AppEntry e) {
@@ -786,7 +848,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         c.drawCircle(sx - dp(1), midY + dp(5.5f), dp(2.6f), iconPaint);
 
         drawTabs(c, now, midY);
-        drawStatus(c, midY);
+        drawStatus(c, now, midY);
 
         // Pocet polozek pod zalozkami.
         final int n = items.size();
@@ -836,9 +898,9 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
             tabRects[i].set(x, midY - itemH / 2f, x + widths[i], midY + itemH / 2f);
             x += widths[i];
         }
-        final float tp = clamp(tabPos.get(now), 0f, TAB_NAMES.length - 1);
-        final int i0 = (int) Math.floor(tp);
-        final int i1 = Math.min(TAB_NAMES.length - 1, i0 + 1);
+        final float tp = clamp(tabPos.get(now), -0.3f, TAB_NAMES.length - 0.7f);
+        final int i0 = (int) clamp((float) Math.floor(tp), 0f, TAB_NAMES.length - 2);
+        final int i1 = i0 + 1;
         final float f = tp - i0;
         final float il = lerp(tabRects[i0].left, tabRects[i1].left, f);
         final float ir = lerp(tabRects[i0].right, tabRects[i1].right, f);
@@ -857,14 +919,14 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
                 fill.setColor(Color.argb(Math.round(20 * hv), 255, 255, 255));
                 c.drawRoundRect(tabRects[i], itemH / 2f, itemH / 2f, fill);
             }
-            final float a = i == tab ? 1f : lerp(0.62f, 0.95f, hv);
-            tabText.setColor(Color.argb(Math.round(255 * a), 255, 255, 255));
+            final float al = i == tab ? 1f : lerp(0.62f, 0.95f, hv);
+            tabText.setColor(Color.argb(Math.round(255 * al), 255, 255, 255));
             c.drawText(TAB_NAMES[i], tabRects[i].centerX(), baseY, tabText);
         }
     }
 
-    /** Hodiny + baterie vlevo od tlacitka nastaveni. */
-    private void drawStatus(Canvas c, float midY) {
+    /** Hodiny + baterie vlevo od tlacitka nastaveni (klepnuti = rychle menu). */
+    private void drawStatus(Canvas c, long now, float midY) {
         final long minute = System.currentTimeMillis() / 60000L;
         if (minute != clockMinute) {
             clockMinute = minute;
@@ -883,13 +945,14 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         final float right = settingsRect.left - dp(10);
         statusRect.set(right - w, midY - h / 2f, right, midY + h / 2f);
         final float rr = h / 2f;
+        final float hv = zoneHover[ZONE_STATUS].get(now);
         fill.setShader(null);
         fill.setColor(0x33000000);
         c.drawRoundRect(statusRect.left, statusRect.top + dp(2), statusRect.right, statusRect.bottom + dp(2), rr, rr, fill);
-        fill.setColor(0x4D12161F);
+        fill.setColor(Color.argb(Math.round(lerp(0x4D, 0x80, hv)), 18, 22, 32));
         c.drawRoundRect(statusRect, rr, rr, fill);
         stroke.setStrokeWidth(dp(1));
-        stroke.setColor(0x2EFFFFFF);
+        stroke.setColor(Color.argb(Math.round(lerp(0x2E, 0x80, hv)), 255, 255, 255));
         c.drawRoundRect(statusRect, rr, rr, stroke);
         final Paint.FontMetrics fm = chipText.getFontMetrics();
         final float base = midY - (fm.ascent + fm.descent) / 2f;
@@ -969,17 +1032,17 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
             chipsVersion = statsVersion;
             rebuildChips(it);
         }
-        final float f = chipFade.get(now);
+        final float f = chipFade.get(now) * clamp(enter.get(now) * 1.6f, 0f, 1f);
         if (f <= 0.004f) return;
         final float h = dp(32);
         final float gap = dp(10);
         final float icon = dp(14);
         float total = -gap;
         for (Chip ch0 : chips) total += dp(12) + icon + dp(7) + chipText.measureText(ch0.text) + dp(14) + gap;
-        final float y = cy + ch / 2f + dp(34) + (1f - f) * dp(8);
+        final float y = cy + ch / 2f + dp(108) + (1f - f) * dp(8);
         float x = cx - total / 2f;
         final Paint.FontMetrics fm = chipText.getFontMetrics();
-        final int a = Math.round(255 * f);
+        final int al = Math.round(255 * f);
         for (Chip chip : chips) {
             final float tw = chipText.measureText(chip.text);
             final float w = dp(12) + icon + dp(7) + tw + dp(14);
@@ -996,8 +1059,8 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
                     : Color.argb(Math.round(0x2E * f), 255, 255, 255));
             c.drawRoundRect(chip.rect, rr, rr, stroke);
             final int col = chip.action ? 0xFF7DD3FC : 0xFFFFFFFF;
-            drawIcon(c, chip.icon, x + dp(12) + icon / 2f, y, icon, (col & 0x00FFFFFF) | (Math.round(a * 0.9f) << 24));
-            chipText.setColor((col & 0x00FFFFFF) | (Math.round(a * 0.95f) << 24));
+            drawIcon(c, chip.icon, x + dp(12) + icon / 2f, y, icon, (col & 0x00FFFFFF) | (Math.round(al * 0.9f) << 24));
+            chipText.setColor((col & 0x00FFFFFF) | (Math.round(al * 0.95f) << 24));
             c.drawText(chip.text, x + dp(12) + icon + dp(7), y - (fm.ascent + fm.descent) / 2f, chipText);
             x += w + gap;
         }
@@ -1107,6 +1170,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         tmp.set(settingsRect);
         tmp.inset(-dp(6), -dp(6));
         if (tmp.contains(x, y)) return ZONE_SETTINGS;
+        if (statusRect.contains(x, y)) return ZONE_STATUS;
         for (int i = 0; i < tabRects.length; i++) if (tabRects[i].contains(x, y)) return ZONE_TAB0 + i;
         for (Chip chip : chips) if (chip.action && chip.rect.contains(x, y)) return ZONE_USAGE;
         return ZONE_NONE;
@@ -1192,6 +1256,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     /**
      * Joystick (thumbstick) na Questu posila ACTION_SCROLL. Doprava/dolu = dalsi karta.
      * Prvni krok hned, pri drzeni se opakuje (nejdriv po 380 ms, pak po 170 ms).
+     * Pruzina si pri rychlem opakovani drzi rychlost - karusel plynule "jede".
      */
     @Override
     public boolean onGenericMotionEvent(MotionEvent e) {
@@ -1216,28 +1281,45 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         return super.onGenericMotionEvent(e);
     }
 
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (interactive && launchK == Integer.MIN_VALUE && !items.isEmpty()) {
+            if (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+                step(1);
+                return true;
+            }
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+                step(-1);
+                return true;
+            }
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
     private void step(int dir) {
+        final long now = System.nanoTime();
         final float t = Math.round(pos.target()) + dir;
         if (!wraps() && (t < 0 || t > items.size() - 1)) {
-            // Na kraji jen lehky "narazovy" pohyb.
-            final long now = System.nanoTime();
-            pos.snap(pos.get(now) + dir * 0.12f);
-            pos.set(Math.round(pos.target() - dir * 0.12f), now);
+            // Na kraji fyzikalni "naraz": pruzina dostane rychlost a vrati se zpet.
+            pos.setWithVelocity(pos.target(), dir * 2.2f, now);
             invalidate();
             return;
         }
-        select(t);
+        select(t, Float.NaN);
     }
 
-    private void select(float t) {
+    /** @param velocity pocatecni rychlost pruziny (karet/s), NaN = zachovat aktualni */
+    private void select(float t, float velocity) {
         final long now = System.nanoTime();
         final int n = items.size();
         if (n == 0) return;
         if (!wraps()) t = clamp(t, 0, n - 1);
         final boolean changed = Math.round(t) != Math.round(pos.target());
-        pos.set(t, now);
-        if (changed || !items.get(Math.floorMod(Math.round(t), n)).app.pkg.equals(selectedPkg)) {
-            selectedPkg = items.get(Math.floorMod(Math.round(t), n)).app.pkg;
+        if (Float.isNaN(velocity)) pos.set(t, now);
+        else pos.setWithVelocity(t, velocity, now);
+        final String pkg = items.get(Math.floorMod(Math.round(t), n)).app.pkg;
+        if (changed || !pkg.equals(selectedPkg)) {
+            selectedPkg = pkg;
             chipFade.snap(0f);
             chipFade.set(1f, now);
             prefetch();
@@ -1247,12 +1329,12 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     }
 
     private void prefetch() {
-        // Skryty karusel (rezim mrizky) obrazky na vysku nenacita.
+        // Skryty karusel (rezim mrizky) nic nenacita.
         if (artwork == null || items.isEmpty() || getVisibility() != VISIBLE) return;
         final int k = Math.round(pos.target());
         for (int i = k - 4; i <= k + 4; i++) {
             Item it = itemAt(i);
-            if (it != null) artwork.getPortrait(it.app);
+            if (it != null) artwork.get(it.app);
         }
     }
 
@@ -1315,12 +1397,13 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
                         velocity.computeCurrentVelocity(1000);
                         vx = velocity.getXVelocity();
                     }
+                    // Setrvacnost: rychlost laseru se preda pruzine, cil = kam by dojela.
+                    final float v = -vx / Math.max(1f, offX[1]);
                     final float cur = pos.get(now);
-                    final float proj = cur - vx / Math.max(1f, offX[1]) * 0.22f;
-                    float t = Math.round(proj);
-                    t = clamp(t, Math.round(cur) - 3, Math.round(cur) + 3);
+                    float t = Math.round(cur + v * 0.25f);
+                    t = clamp(t, Math.round(cur) - 4, Math.round(cur) + 4);
                     dragging = false;
-                    select(t);
+                    select(t, v);
                 } else {
                     click(x, y, now);
                 }
@@ -1344,7 +1427,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         press.set(0f, now);
         if (dragging) {
             dragging = false;
-            select(Math.round(pos.get(now)));
+            select(Math.round(pos.get(now)), Float.NaN);
         }
         touching = false;
         pressedK = Integer.MIN_VALUE;
@@ -1356,6 +1439,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
             if (host == null) return;
             if (zone == ZONE_BACK) host.onExitCarousel();
             else if (zone == ZONE_SETTINGS) host.onOpenSettings();
+            else if (zone == ZONE_STATUS) host.onOpenQuickMenu(new RectF(statusRect));
             else if (zone == ZONE_USAGE) host.onRequestUsageAccess();
             else if (zone >= ZONE_TAB0 && zone < ZONE_TAB0 + TAB_NAMES.length) {
                 final int t = zone - ZONE_TAB0;
@@ -1366,7 +1450,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         final int k = cardAt(x, y, now);
         if (k == Integer.MIN_VALUE || k != pressedK) return;
         if (k == centerK()) launch(k, now);
-        else select(k);
+        else select(k, Float.NaN);
     }
 
     private void onLongPress() {
@@ -1408,7 +1492,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
             shader = new LinearGradient(-cw / 2f, -ch / 2f, cw / 2f, ch / 2f, pair[0], pair[1],
                     Shader.TileMode.CLAMP);
         }
-        final float z0 = 1f + 0.035f * it.hl.get(now);
+        final float z0 = 1f + 0.03f * clamp(it.hl.get(now), 0f, 1f);
         launchK = k;
         clearHover();
         peephole.start(now, animScale, cx, cy, cw, ch, z0, dp(CARD_RADIUS), shader, it.label, closes);

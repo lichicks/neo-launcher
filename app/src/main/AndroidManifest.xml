@@ -16,6 +16,10 @@
          Uzivatel ho musi povolit v Nastaveni -> Pristup k vyuziti. -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
+    <!-- Posuvnik jasu v rychlem menu (Settings.System.SCREEN_BRIGHTNESS), uzivatel
+         povoli v "Uprava systemovych nastaveni" - stejne jako QuestDim. -->
+    <uses-permission android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
 
     <uses-feature android:name="android.hardware.vr.headtracking" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />

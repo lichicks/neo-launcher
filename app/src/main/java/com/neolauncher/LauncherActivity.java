@@ -12,6 +12,7 @@ import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
@@ -31,6 +32,7 @@ import com.neolauncher.ui.CarouselView;
 import com.neolauncher.ui.Glass;
 import com.neolauncher.ui.NeoLauncherView;
 import com.neolauncher.ui.OverlayHost;
+import com.neolauncher.ui.QuickMenuView;
 import com.neolauncher.ui.SettingsSheet;
 import com.neolauncher.ui.UpdateSheet;
 
@@ -55,6 +57,8 @@ public class LauncherActivity extends Activity
     private CarouselView carousel;
     private boolean carouselShown;
     private UsageInfo usage;
+    private int batteryPct = -1;
+    private boolean batteryCharging, batteryFast;
     private OverlayHost overlay;
     private String pendingImagePkg;
     private boolean receiversRegistered;
@@ -191,6 +195,7 @@ public class LauncherActivity extends Activity
             if (animate) carousel.show();
         } else {
             carousel.clearPointer();
+            if (animate) launcher.playEnter();
         }
     }
 
@@ -259,6 +264,11 @@ public class LauncherActivity extends Activity
         }
 
         @Override
+        public void onOpenQuickMenu(RectF origin) {
+            LauncherActivity.this.onOpenQuickMenu(origin);
+        }
+
+        @Override
         public void onExitCarousel() {
             prefs.setCarouselMode(false);
         }
@@ -297,9 +307,118 @@ public class LauncherActivity extends Activity
 
     @Override
     public void onOpenSettings() {
+        // Panel "vyroste" z loga (mrizka) nebo z tlacitka nastaveni (karusel).
+        final RectF from = carouselShown ? carousel.settingsRect() : launcher.brandRect();
         overlay.show(SettingsSheet.build(this, prefs, repo, artwork,
                         () -> showApps(true), () -> checkForUpdates(true), overlay::close),
-                null, launcher.frameRect(), Glass.dpi(this, 620));
+                null, from, launcher.frameRect(), Glass.dpi(this, 620));
+    }
+
+    // --- Rychle menu (jas, hlasitost, funkce Questu) ----------------------------------
+
+    @Override
+    public void onOpenQuickMenu(RectF origin) {
+        QuickMenuView menu = new QuickMenuView(this, new QuickMenuView.Actions() {
+            @Override
+            public void openTarget(int target) {
+                openQuickTarget(target);
+            }
+
+            @Override
+            public void requestBrightnessAccess() {
+                requestWriteSettings();
+            }
+        });
+        menu.setBattery(batteryPct, batteryCharging, batteryFast);
+        overlay.show(menu, origin, origin, launcher.frameRect(), QuickMenuView.preferredWidth(this));
+    }
+
+    private void toggleQuickMenu() {
+        if (overlay.isOpen() && overlay.panel() instanceof QuickMenuView) {
+            overlay.close();
+        } else {
+            onOpenQuickMenu(carouselShown ? carousel.statusRect() : launcher.statusRect());
+        }
+    }
+
+    /** Tlacitko menu na ovladaci (pokud ho Quest do aplikace posila) = rychle menu. */
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_MENU) {
+            toggleQuickMenu();
+            return true;
+        }
+        return super.onKeyUp(keyCode, event);
+    }
+
+    private void openQuickTarget(int target) {
+        boolean ok;
+        switch (target) {
+            case QuickMenuView.T_WIFI:
+                ok = startSettings(android.provider.Settings.ACTION_WIFI_SETTINGS)
+                        || openPanel("systemux://settings");
+                break;
+            case QuickMenuView.T_BLUETOOTH:
+                ok = startSettings(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)
+                        || openPanel("systemux://settings");
+                break;
+            case QuickMenuView.T_QUEST_SETTINGS:
+                ok = openPanel("systemux://settings");
+                break;
+            case QuickMenuView.T_QUEST_QUICK:
+                ok = openPanel("systemux://quick_settings");
+                break;
+            case QuickMenuView.T_FILES:
+                ok = openPackage("com.oculus.systemutilities", "Soubory")
+                        || openPanel("systemux://file-manager");
+                break;
+            case QuickMenuView.T_BROWSER:
+                ok = openPackage("com.oculus.browser", "Prohlížeč");
+                break;
+            case QuickMenuView.T_CAMERA:
+                ok = openPackage("com.oculus.metacam", "Fotoaparát");
+                break;
+            default:
+                onOpenSettings();
+                return;
+        }
+        if (ok) overlay.close();
+        else Toast.makeText(this, "Na tomto zařízení není k dispozici", Toast.LENGTH_SHORT).show();
+    }
+
+    private boolean startSettings(String action) {
+        try {
+            Intent i = new Intent(action);
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (i.resolveActivity(getPackageManager()) == null) return false;
+            startActivity(i);
+            return true;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    private boolean openPanel(String uri) {
+        return AppLauncher.launch(this, new AppEntry(uri, uri, AppEntry.TYPE_PANEL, false));
+    }
+
+    private boolean openPackage(String pkg, String label) {
+        if (getPackageManager().getLaunchIntentForPackage(pkg) == null) return false;
+        return AppLauncher.launch(this, new AppEntry(pkg, label, AppEntry.TYPE_2D, false));
+    }
+
+    /** Povoleni "Uprava systemovych nastaveni" pro posuvnik jasu (jako QuestDim). */
+    private void requestWriteSettings() {
+        try {
+            Intent i = new Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                    Uri.parse("package:" + getPackageName()));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startActivity(i);
+            toast("Povol Neo Launcheru úpravu systémových nastavení");
+        } catch (Exception e) {
+            toast("Nastavení není dostupné. Z PC: adb shell appops set "
+                    + getPackageName() + " WRITE_SETTINGS allow");
+        }
     }
 
     @Override
@@ -587,8 +706,14 @@ public class LauncherActivity extends Activity
         boolean charging = plugged != 0 && (status == BatteryManager.BATTERY_STATUS_CHARGING
                 || status == BatteryManager.BATTERY_STATUS_FULL);
         final boolean fast = charging && isFastCharging(i);
+        batteryPct = pct;
+        batteryCharging = charging;
+        batteryFast = fast;
         launcher.setBattery(pct, charging, fast);
         carousel.setBattery(pct, charging, fast);
+        if (overlay.panel() instanceof QuickMenuView) {
+            ((QuickMenuView) overlay.panel()).setBattery(pct, charging, fast);
+        }
     }
 
     /**

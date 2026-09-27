@@ -72,6 +72,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
         /** Logo Neo klepnuto 5x rychle za sebou - prepnout testovaci karusel. */
         void onToggleCarousel();
+
+        /** Klepnuti na hodiny/baterii - rychle menu (vyjede z tohoto obdelniku). */
+        void onOpenQuickMenu(RectF origin);
     }
 
     // --- Rozmery z preview (dp) ----------------------------------------------
@@ -96,9 +99,11 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
      * obracene, staci zmenit na -1.
      */
     private static final float TILT_SIGN = 1f;
-    private static final long HOVER_MS = 380;
+    /** Fyzika (response s, tlumeni) - jako Apple spring: hover lehce "pruzne" dojede. */
+    private static final float[] HOVER_SPRING = {0.42f, 0.75f};
+    private static final float[] TILT_SPRING = {0.38f, 0.85f};
+    private static final float[] REORDER_SPRING = {0.40f, 0.82f};
     private static final long BLUR_MS = 350;
-    private static final long REORDER_MS = 260;
     /** Po tak dlouhem podrzeni se karta zvedne a jde tahat. */
     private static final long LONG_PRESS_MS = 450;
     private static final long HOVER_EXIT_GRACE_MS = 90;
@@ -121,6 +126,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private static final int ZONE_NONE = 0;
     private static final int ZONE_BRAND = 1;
     private static final int ZONE_TAB0 = 2; // +index zalozky
+    /** Cela pilulka s hodinami a baterii (klepnuti = rychle menu). */
     private static final int ZONE_BATTERY = 10;
 
     private static final String[] TAB_NAMES = {"Hry", "Aplikace", "Vše"};
@@ -133,12 +139,13 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         float shownLabelWidth;
         float shownLabelFor = -1;
         int index;
-        final Eased hover = new Eased(0, HOVER_MS);
-        final Eased rotX = new Eased(0, HOVER_MS);
-        final Eased rotY = new Eased(0, HOVER_MS);
-        final Eased press = new Eased(0, 140, Eased.EASE_OUT);
-        final Eased x = new Eased(0, REORDER_MS);
-        final Eased y = new Eased(0, REORDER_MS);
+        // Pruziny (Spring): pri zmene cile se zachova rychlost, hover lehce prekmitne.
+        final Spring hover = new Spring(0, HOVER_SPRING);
+        final Spring rotX = new Spring(0, TILT_SPRING, 0.01f);
+        final Spring rotY = new Spring(0, TILT_SPRING, 0.01f);
+        final Spring press = new Spring(0, 0.22f, 0.9f, 0.002f);
+        final Spring x = new Spring(0, REORDER_SPRING, 0.3f);
+        final Spring y = new Spring(0, REORDER_SPRING, 0.3f);
         final Eased flash = new Eased(0, 420, Eased.EASE_OUT);
         Bitmap art;
         BitmapShader artShader;
@@ -198,13 +205,13 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private Card dragCard;
     private float dragDX, dragDY, liftX, liftY;
     private boolean dragMoved, dragOrderChanged;
-    private final Eased dragLift = new Eased(0, 220);
-    private final Eased dragTilt = new Eased(0, 300);
+    private final Spring dragLift = new Spring(0, 0.34f, 0.68f, 0.002f);
+    private final Spring dragTilt = new Spring(0, 0.30f, 0.75f, 0.02f);
     private float lastDragX;
     private long lastDragStepNs;
 
     // --- Horni lista ---------------------------------------------------------------
-    private final Eased tabPos = new Eased(0, 320);
+    private final Spring tabPos = new Spring(0, 0.42f, 0.78f, 0.001f);
     private final Eased brandHover = new Eased(0, 180, Eased.EASE_OUT);
     private final Eased brandTap = new Eased(0, 420, Eased.EASE_OUT);
     private int brandTaps;
@@ -249,7 +256,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final RenderNode backdropNode = new RenderNode("neo-topbar-backdrop");
     private final DepthBlur depthBlur = new DepthBlur();
     private RenderEffect backdropEffect;
-    private boolean modalBlur;
+    private ModalDepth modalDepth;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable hoverExitRunnable = () -> {
@@ -471,10 +478,28 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         invalidate();
     }
 
+    /** Otevreny dialog: launcher plynule ustoupi do hloubky (rozmazani + zmenseni). */
     public void setModalBlur(boolean b) {
-        if (modalBlur == b) return;
-        modalBlur = b;
-        setRenderEffect(b ? RenderEffect.createBlurEffect(dp(10), dp(10), Shader.TileMode.CLAMP) : null);
+        if (modalDepth == null) modalDepth = new ModalDepth(this, d);
+        modalDepth.set(b);
+    }
+
+    /** Logo (odtud "vyroste" nastaveni). */
+    public RectF brandRect() {
+        return new RectF(brandRect);
+    }
+
+    /** Hodiny + baterie (odtud "vyjede" rychle menu). */
+    public RectF statusRect() {
+        return new RectF(statusRect);
+    }
+
+    /** Navrat z karuselu: obsah se plynule objevi. */
+    public void playEnter() {
+        final long now = System.nanoTime();
+        contentFade.snap(0f);
+        contentFade.set(1f, now);
+        invalidate();
     }
 
     /** Skleneny panel v souradnicich View (pro umisteni dialogu). */
@@ -565,7 +590,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             bottomShade = new LinearGradient(0, cardH / 2f - dp(44), 0, cardH / 2f,
                     0x00000000, 0x8C000000, Shader.TileMode.CLAMP);
         }
-        if (artwork != null) artwork.setTargetSize(Math.round(cardW * hoverScaleEff));
+        if (artwork != null) artwork.requestTargetSize("grid", Math.round(cardW * hoverScaleEff));
 
         final float fr = dp(FRAME_RADIUS);
         frameHighlight = new LinearGradient(0, frame.top, 0, frame.top + dp(22),
@@ -739,7 +764,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         if (y < frame.top || y > topBarBottom || x < frame.left || x > frame.right) return ZONE_NONE;
         if (brandRect.contains(x, y)) return ZONE_BRAND;
         for (int i = 0; i < tabRects.length; i++) if (tabRects[i].contains(x, y)) return ZONE_TAB0 + i;
-        if (batteryRect.contains(x, y)) return ZONE_BATTERY;
+        if (statusRect.contains(x, y)) return ZONE_BATTERY;
         return ZONE_NONE;
     }
 
@@ -931,6 +956,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             } else if (zone >= ZONE_TAB0 && zone < ZONE_TAB0 + TAB_NAMES.length) {
                 int t = zone - ZONE_TAB0;
                 if (t != tab && host != null) host.onTabSelected(t);
+            } else if (zone == ZONE_BATTERY) {
+                if (host != null) host.onOpenQuickMenu(new RectF(statusRect));
             }
             return;
         }
@@ -1341,7 +1368,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             final float st = scrolledToScreenY(t - cardH * 0.3f);
             final float sb = scrolledToScreenY(t + cardH * 1.3f);
             if (sb < top || st > bottom) continue;
-            if (k.hover.get(now) > 0.001f || k.x.active(now) || k.y.active(now)) {
+            if (Math.abs(k.hover.get(now)) > 0.001f || k.hover.active(now)
+                    || k.x.active(now) || k.y.active(now)) {
                 if (late == null) late = new ArrayList<>();
                 late.add(k);
                 continue;
@@ -1381,7 +1409,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         final float cy = py - dragDY;
         final float scale = 1f + 0.12f * lift;
         drawCardAt(c, dragCard, now, cx, cy, scale, 0f,
-                dragTilt.get(now), Math.max(lift, 0.6f), 0f, true);
+                dragTilt.get(now), clamp(lift, 0.6f, 1f), 0f, true);
         if (!dragMoved) {
             // Tenky ukazatel pod kartou: az se naplni, otevre se menu karty.
             final float total = Math.max(1f, menuHoldMs() - LONG_PRESS_MS);
@@ -1400,7 +1428,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private void drawCard(Canvas c, Card k, long now, float dim, boolean allow3d) {
         final float cx = cardLeft(k, now) + cardW / 2f;
         final float cy = cardTop(k, now) + cardH / 2f;
-        final float h = k.hover.get(now);
+        // Pruzina muze lehce prekmitnout - na meritko ano, na pruhlednosti ne.
+        final float h = clamp(k.hover.get(now), 0f, 1f);
         drawCardAt(c, k, now, cx, cy, visualScale(k, now), k.rotX.get(now), k.rotY.get(now),
                 h, dim, allow3d);
     }
@@ -1684,9 +1713,10 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             x += widths[i];
         }
         // Posuvny indikator vybrane zalozky.
-        final float pos = clamp(tabPos.get(now), 0f, TAB_NAMES.length - 1);
-        final int i0 = (int) Math.floor(pos);
-        final int i1 = Math.min(TAB_NAMES.length - 1, i0 + 1);
+        // Indikator jede na pruzine: muze lehce prejet za zalozku a vratit se.
+        final float pos = clamp(tabPos.get(now), -0.3f, TAB_NAMES.length - 0.7f);
+        final int i0 = (int) clamp((float) Math.floor(pos), 0f, TAB_NAMES.length - 2);
+        final int i1 = i0 + 1;
         final float f = pos - i0;
         final float il = lerp(tabRects[i0].left, tabRects[i1].left, f);
         final float ir = lerp(tabRects[i0].right, tabRects[i1].right, f);
@@ -1738,13 +1768,19 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         final float right = frame.right - dp(28);
         statusRect.set(right - widgetW, midY - widgetH / 2f, right, midY + widgetH / 2f);
 
+        // Pri hoveru se cela pilulka rozsviti (klepnuti otevre rychle menu).
+        final float sh = batteryHover.get(now);
         fill.setShader(null);
         flatShadow(c, statusRect, dp(14));
         fill.setColor(0x40000000);
         c.drawRoundRect(statusRect, dp(14), dp(14), fill);
+        if (sh > 0.004f) {
+            fill.setColor(Color.argb(Math.round(26 * sh), 255, 255, 255));
+            c.drawRoundRect(statusRect, dp(14), dp(14), fill);
+        }
         stroke.setShader(null);
         stroke.setStrokeWidth(dp(1));
-        stroke.setColor(0x2EFFFFFF);
+        stroke.setColor(Color.argb(Math.round(lerp(0x2E, 0x70, sh)), 255, 255, 255));
         c.drawRoundRect(statusRect, dp(14), dp(14), stroke);
 
         final Paint.FontMetrics fm = clockText.getFontMetrics();

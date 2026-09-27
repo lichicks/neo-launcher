@@ -202,7 +202,7 @@ public class ShotTest {
             pump(260);
         }
         pump(1200);
-        hover(car, 555 * d + 60 * d, 336 * d - 90 * d);
+        hover(car, 555 * d + 80 * d, 285 * d - 60 * d);
         pump(700);
         capture(a, car, outDir + "/neo-carousel.png");
         scroll(car, 555 * d, 300 * d, MotionEvent.AXIS_HSCROLL, 1f);
@@ -210,6 +210,39 @@ public class ShotTest {
         shadowOf(Looper.getMainLooper()).idle();
         capture(a, car, outDir + "/neo-carousel-move.png");
         pump(1200);
+
+        // --- Rychle menu (vyjede z hodin/baterie, launcher ustoupi do hloubky) ---
+        android.widget.FrameLayout root = new android.widget.FrameLayout(a);
+        NeoLauncherView grid = new NeoLauncherView(a);
+        grid.bind(prefs, art);
+        root.addView(grid);
+        com.neolauncher.ui.OverlayHost overlay = new com.neolauncher.ui.OverlayHost(a);
+        overlay.setListener(new com.neolauncher.ui.OverlayHost.Listener() {
+            @Override public void onOverlayShown() { grid.setInteractive(false); grid.setModalBlur(true); }
+            @Override public void onOverlayClosed() { grid.setModalBlur(false); grid.setInteractive(true); }
+        });
+        root.addView(overlay);
+        a.setContentView(root);
+        pump(300);
+        grid.setApps(apps, labels, false);
+        grid.setBattery(92, true, true);
+        pump(1500);
+        capture(a, root, outDir + "/warmup.png"); // Robolectric kresli jen pri snimku - az pak zna polohu hodin
+        com.neolauncher.ui.QuickMenuView menu = new com.neolauncher.ui.QuickMenuView(a,
+                new com.neolauncher.ui.QuickMenuView.Actions() {
+                    @Override public void openTarget(int t) { }
+                    @Override public void requestBrightnessAccess() { }
+                });
+        menu.setBattery(92, true, true);
+        android.graphics.RectF st = grid.statusRect();
+        overlay.show(menu, st, st, grid.frameRect(), com.neolauncher.ui.QuickMenuView.preferredWidth(a));
+        Thread.sleep(90);
+        shadowOf(Looper.getMainLooper()).idle();
+        capture(a, root, outDir + "/neo-quickmenu-open.png");
+        pump(1200);
+        hover(menu, 300 * d, 330 * d);
+        pump(500);
+        capture(a, root, outDir + "/neo-quickmenu.png");
     }
 
     private static void scroll(android.view.View v, float x, float y, int axis, float value) {
@@ -233,6 +266,13 @@ public class ShotTest {
         return fl.get(o);
     }
 
+    /** Hodnota animace (Eased i Spring maji get(long)). */
+    static Object val(Object anim, long now) throws Exception {
+        java.lang.reflect.Method get = anim.getClass().getDeclaredMethod("get", long.class);
+        get.setAccessible(true);
+        return get.invoke(anim, now);
+    }
+
     static void dumpState(NeoLauncherView v) throws Exception {
         Object foc = f(v, "focused");
         System.out.println("scrollCur=" + f(v, "scrollCur") + " squish=" + f(v, "squish")
@@ -241,14 +281,10 @@ public class ShotTest {
         if (foc != null) {
             Object app = f(foc, "app");
             long now = System.nanoTime();
-            Object hov = f(foc, "hover");
-            java.lang.reflect.Method get = hov.getClass().getDeclaredMethod("get", long.class);
-            get.setAccessible(true);
-            Object y = f(foc, "y");
-            System.out.println("focused=" + f(app, "pkg") + " hover=" + get.invoke(hov, now)
-                    + " rotX=" + get.invoke(f(foc, "rotX"), now) + " rotY=" + get.invoke(f(foc, "rotY"), now)
-                    + " y=" + get.invoke(y, now) + " x=" + get.invoke(f(foc, "x"), now)
-                    + " press=" + get.invoke(f(foc, "press"), now) + " flash=" + get.invoke(f(foc, "flash"), now));
+            System.out.println("focused=" + f(app, "pkg") + " hover=" + val(f(foc, "hover"), now)
+                    + " rotX=" + val(f(foc, "rotX"), now) + " rotY=" + val(f(foc, "rotY"), now)
+                    + " y=" + val(f(foc, "y"), now) + " x=" + val(f(foc, "x"), now)
+                    + " press=" + val(f(foc, "press"), now) + " flash=" + val(f(foc, "flash"), now));
         } else System.out.println("focused=null");
     }
 }

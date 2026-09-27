@@ -1,15 +1,22 @@
 package com.neolauncher.ui;
 
 import android.content.Context;
+import android.graphics.Color;
 import android.graphics.RectF;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 
 /**
- * Vrstva nad launcherem pro dialogy (nastaveni, menu aplikace, prejmenovani).
- * Klepnuti mimo panel dialog zavre. Stav je jen "otevreno/zavreno" -
- * zavirani je okamzite, nespoleha na konec animace.
+ * Vrstva nad launcherem pro dialogy (nastaveni, menu aplikace, rychle menu).
+ * Klepnuti mimo panel dialog zavre.
+ * <p>
+ * Prostorova navaznost (spatial continuity jako v iOS/visionOS): dialog
+ * "vyroste" na pruzine z mista, odkud byl otevren (logo, karta, hodiny),
+ * a pri zavreni se do nej zase stahne. Stav je jen "otevreno/zavreno" a meni
+ * se OKAMZITE - zaviraci animace je jen obrazek ("duch"), ktery uz nebere
+ * dotyky, a po dobehnuti pruziny se odstrani.
  */
 public final class OverlayHost extends FrameLayout {
 
@@ -20,12 +27,20 @@ public final class OverlayHost extends FrameLayout {
     }
 
     private View panel;
+    private View ghost;
     private Listener listener;
+    private final Spring open = new Spring(0, 0.42f, 0.84f, 0.001f);
+    private final Spring closing = new Spring(0, 0.30f, 1f, 0.002f);
+    private final RectF origin = new RectF();
+    private final RectF target = new RectF();
+    private final RectF ghostOrigin = new RectF();
+    private final RectF ghostTarget = new RectF();
+    private final Runnable frame = this::onFrame;
+    private boolean framePosted;
 
     public OverlayHost(Context c) {
         super(c);
         setVisibility(GONE);
-        setBackgroundColor(0x33000000);
         setClickable(true);
         setOnClickListener(v -> close());
     }
@@ -38,15 +53,25 @@ public final class OverlayHost extends FrameLayout {
         return panel != null;
     }
 
+    public View panel() {
+        return panel;
+    }
+
+    public void show(View content, RectF anchor, RectF area, int maxW) {
+        show(content, anchor, null, area, maxW);
+    }
+
     /**
      * @param content obsah dialogu (musi byt clickable, aby klik dovnitr nezaviral)
-     * @param anchor  obdelnik karty, u ktere se ma dialog objevit, nebo null = na stred
+     * @param anchor  obdelnik, u ktereho se ma dialog objevit, nebo null = na stred
+     * @param from    odkud dialog "vyroste" (null = z anchor, jinak ze stredu)
      * @param area    oblast skleneneho panelu, ze ktere dialog nesmi vylezt
      * @param maxW    maximalni sirka dialogu v px
      */
-    public void show(View content, RectF anchor, RectF area, int maxW) {
+    public void show(View content, RectF anchor, RectF from, RectF area, int maxW) {
+        removeGhost();
         final boolean wasOpen = panel != null;
-        removeAllViews();
+        if (panel != null) removeView(panel);
         panel = content;
         content.setClickable(true);
 
@@ -74,22 +99,105 @@ public final class OverlayHost extends FrameLayout {
         lp.leftMargin = Math.round(left);
         lp.topMargin = Math.round(top);
         addView(content, lp);
+        target.set(left, top, left + w, top + h);
+        if (from != null) origin.set(from);
+        else if (anchor != null) origin.set(anchor);
+        else origin.set(target.centerX() - w * 0.1f, target.centerY() - h * 0.1f,
+                target.centerX() + w * 0.1f, target.centerY() + h * 0.1f);
 
         setVisibility(VISIBLE);
-        content.setAlpha(0f);
-        content.setScaleX(0.96f);
-        content.setScaleY(0.96f);
-        content.animate().alpha(1f).scaleX(1f).scaleY(1f).setDuration(170)
-                .setInterpolator(Eased.NEO).start();
+        final long now = System.nanoTime();
+        open.snap(0f);
+        open.set(1f, now);
+        apply(now);
+        schedule();
         if (!wasOpen && listener != null) listener.onOverlayShown();
     }
 
     public void close() {
         if (panel == null) return;
-        panel.animate().cancel();
-        removeAllViews();
+        final long now = System.nanoTime();
+        removeGhost();
+        ghost = panel;
         panel = null;
-        setVisibility(GONE);
+        ghostOrigin.set(origin);
+        ghostTarget.set(target);
+        closing.snap(Math.max(0f, Math.min(1f, open.get(now))));
+        closing.set(0f, now);
+        apply(now);
+        schedule();
         if (listener != null) listener.onOverlayClosed();
+    }
+
+    // --- Animace (jen vizual, stav uz je nastaveny) ---------------------------------
+
+    private void schedule() {
+        if (framePosted) return;
+        framePosted = true;
+        postOnAnimation(frame);
+    }
+
+    private void onFrame() {
+        framePosted = false;
+        final long now = System.nanoTime();
+        apply(now);
+        if (ghost != null && !closing.active(now)) removeGhost();
+        if (open.active(now) || closing.active(now)) schedule();
+    }
+
+    private void apply(long now) {
+        float scrim = 0f;
+        if (ghost != null) {
+            final float q = closing.get(now);
+            transform(ghost, q, ghostOrigin, ghostTarget);
+            scrim = q;
+        }
+        if (panel != null) {
+            final float p = open.get(now);
+            transform(panel, p, origin, target);
+            scrim = Math.max(scrim, p);
+        }
+        scrim = Math.max(0f, Math.min(1f, scrim));
+        setBackgroundColor(Color.argb(Math.round(0x33 * scrim), 0, 0, 0));
+    }
+
+    /** p = 0: velikost a poloha puvodu (from), p = 1: cilove misto. Pruzina muze lehce prekmitnout. */
+    private static void transform(View v, float p, RectF from, RectF to) {
+        final float s0 = Math.max(0.12f, Math.min(0.95f,
+                Math.max(from.width() / Math.max(1f, to.width()), from.height() / Math.max(1f, to.height()))));
+        final float s = s0 + (1f - s0) * p;
+        v.setPivotX(to.width() / 2f);
+        v.setPivotY(to.height() / 2f);
+        v.setScaleX(s);
+        v.setScaleY(s);
+        v.setTranslationX((from.centerX() - to.centerX()) * (1f - p));
+        v.setTranslationY((from.centerY() - to.centerY()) * (1f - p));
+        v.setAlpha(Math.max(0f, Math.min(1f, p * 1.8f)));
+    }
+
+    private void removeGhost() {
+        if (ghost == null) return;
+        removeView(ghost);
+        ghost = null;
+        if (panel == null) {
+            setVisibility(GONE);
+            setBackgroundColor(0);
+        }
+    }
+
+    // Zavirajici se "duch" nebere zadne udalosti - propadnou do launcheru pod nim.
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        return panel != null && super.dispatchTouchEvent(ev);
+    }
+
+    @Override
+    public boolean dispatchGenericMotionEvent(MotionEvent ev) {
+        return panel != null && super.dispatchGenericMotionEvent(ev);
+    }
+
+    @Override
+    protected boolean dispatchHoverEvent(MotionEvent ev) {
+        return panel != null && super.dispatchHoverEvent(ev);
     }
 }

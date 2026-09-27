@@ -64,10 +64,6 @@ public final class ArtworkLoader {
 
     /** Pomer stran karty (sirka / vyska) - dle preview. */
     public static final float CARD_ASPECT = 1.6f;
-    /** Karta na vysku v karuselu (jako obal hry v Meta Store). */
-    public static final float PORTRAIT_ASPECT = 0.68f;
-    /** Klic obrazku na vysku v pameti a v seznamu neuspesnych stazeni. */
-    private static final String PORTRAIT = "portrait:";
 
     private static final String[] BANNER_URLS_FIRST = {
             "https://raw.githubusercontent.com/threethan/QuestLauncherImages/main/banner/%s.jpg",
@@ -91,7 +87,6 @@ public final class ArtworkLoader {
     private final Context ctx;
     private final File cacheDir;
     private final File customDir;
-    private final File portraitDir;
     private final SharedPreferences misses;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService disk = Executors.newFixedThreadPool(2, r -> {
@@ -107,9 +102,6 @@ public final class ArtworkLoader {
     private final LruCache<String, Bitmap> memory;
     /** Balicky, ktere maji v pameti jen docasny nahradni obrazek. */
     private final Set<String> fallbacks = ConcurrentHashMap.newKeySet();
-    /** Obrazky na vysku slozene z banneru (skutecny obal se jeste stahuje/neni). */
-    private final Set<String> portraitFallbacks = ConcurrentHashMap.newKeySet();
-    private final Set<String> portraitLoading = ConcurrentHashMap.newKeySet();
     /** "Ambientni" barva obrazku (pro zari hovernute karty v barve hry). */
     private final Map<String, Integer> glowColors = new ConcurrentHashMap<>();
     private final Set<String> loading = ConcurrentHashMap.newKeySet();
@@ -119,8 +111,8 @@ public final class ArtworkLoader {
     private volatile boolean onlineEnabled = true;
     private volatile int targetW = 400;
     private volatile int targetH = 250;
-    private volatile int portraitW = 360;
-    private volatile int portraitH = Math.round(360 / PORTRAIT_ASPECT);
+    /** Pozadovane velikosti obrazku od jednotlivych pohledu (mrizka, karusel) - plati nejvetsi. */
+    private final Map<String, Integer> sizeRequests = new java.util.HashMap<>();
     /** Zvysuje se pri zmene velikosti - zahodi vysledky rozpracovanych nacteni. */
     private volatile int generation = 0;
 
@@ -128,9 +120,6 @@ public final class ArtworkLoader {
         ctx = c.getApplicationContext();
         cacheDir = new File(ctx.getFilesDir(), "art-cache");
         customDir = new File(ctx.getFilesDir(), "art-custom");
-        portraitDir = new File(ctx.getFilesDir(), "art-portrait");
-        //noinspection ResultOfMethodCallIgnored
-        portraitDir.mkdirs();
         //noinspection ResultOfMethodCallIgnored
         cacheDir.mkdirs();
         //noinspection ResultOfMethodCallIgnored
@@ -157,7 +146,14 @@ public final class ArtworkLoader {
      * Velikost karty v pixelech (uz vcetne rezervy na zvetseni pri hoveru).
      * Zaokrouhluje se, aby zmena velikosti okna nenacitala obrazky porad dokola.
      */
-    public void setTargetSize(int w) {
+    public void requestTargetSize(String client, int w) {
+        sizeRequests.put(client, w);
+        int max = 0;
+        for (int v : sizeRequests.values()) max = Math.max(max, v);
+        setTargetSize(max);
+    }
+
+    private void setTargetSize(int w) {
         int qw = Math.max(128, Math.min(960, ((w + 63) / 64) * 64));
         int qh = Math.round(qw / CARD_ASPECT);
         if (qw == targetW && qh == targetH) return;
@@ -167,21 +163,6 @@ public final class ArtworkLoader {
         memory.evictAll();
         fallbacks.clear();
         loading.clear();
-        portraitFallbacks.clear();
-        portraitLoading.clear();
-        notifyAllChanged();
-    }
-
-    /** Velikost karty na vysku v karuselu (px, vcetne rezervy na zvetseni). */
-    public void setPortraitSize(int w) {
-        int qw = Math.max(128, Math.min(900, ((w + 63) / 64) * 64));
-        int qh = Math.round(qw / PORTRAIT_ASPECT);
-        if (qw == portraitW && qh == portraitH) return;
-        portraitW = qw;
-        portraitH = qh;
-        for (String k : memory.snapshot().keySet()) if (k.startsWith(PORTRAIT)) memory.remove(k);
-        portraitFallbacks.clear();
-        portraitLoading.clear();
         notifyAllChanged();
     }
 
@@ -194,8 +175,6 @@ public final class ArtworkLoader {
             networkRetryAt.clear();
             for (String pkg : fallbacks) memory.remove(pkg);
             fallbacks.clear();
-            for (String pkg : portraitFallbacks) memory.remove(PORTRAIT + pkg);
-            portraitFallbacks.clear();
             notifyAllChanged();
         }
     }
@@ -211,17 +190,6 @@ public final class ArtworkLoader {
         return b;
     }
 
-    /**
-     * Obrazek na vysku pro karusel. Neblokujici jako {@link #get}. Poradi:
-     * vlastni obrazek -> stazeny obal -> slozeny z banneru (a na pozadi
-     * stazeni obalu "portrait" z MetaMetadata, stejny zdroj jako Lightning Launcher).
-     */
-    public Bitmap getPortrait(AppEntry e) {
-        Bitmap b = memory.get(PORTRAIT + e.pkg);
-        if (b == null) schedulePortrait(e);
-        return b;
-    }
-
     /** Nacte obrazky vsech aplikaci predem, at je rolovani hned plynule. */
     public void prefetch(List<AppEntry> list) {
         for (AppEntry e : list) {
@@ -233,33 +201,24 @@ public final class ArtworkLoader {
     public void reload(AppEntry e) {
         //noinspection ResultOfMethodCallIgnored
         cacheFile(e.pkg).delete();
-        //noinspection ResultOfMethodCallIgnored
-        portraitFile(e.pkg).delete();
-        misses.edit().remove(e.pkg).remove(PORTRAIT + e.pkg).apply();
+        misses.edit().remove(e.pkg).apply();
         networkRetryAt.remove(e.pkg);
-        networkRetryAt.remove(PORTRAIT + e.pkg);
         memory.remove(e.pkg);
-        memory.remove(PORTRAIT + e.pkg);
         fallbacks.remove(e.pkg);
-        portraitFallbacks.remove(e.pkg);
         notifyChanged(e.pkg);
     }
 
     /** Smaze vsechny stazene obrazky (vlastni obrazky zustanou). */
     public void clearDownloaded() {
-        for (File dir : new File[]{cacheDir, portraitDir}) {
-            File[] files = dir.listFiles();
-            if (files != null) for (File f : files) //noinspection ResultOfMethodCallIgnored
-                f.delete();
-        }
+        File[] files = cacheDir.listFiles();
+        if (files != null) for (File f : files) //noinspection ResultOfMethodCallIgnored
+            f.delete();
         misses.edit().clear().apply();
         networkRetryAt.clear();
         generation++;
         memory.evictAll();
         fallbacks.clear();
         loading.clear();
-        portraitFallbacks.clear();
-        portraitLoading.clear();
         notifyAllChanged();
     }
 
@@ -284,7 +243,6 @@ public final class ArtworkLoader {
             main.post(() -> {
                 if (success) {
                     memory.remove(e.pkg);
-                    memory.remove(PORTRAIT + e.pkg);
                     fallbacks.remove(e.pkg);
                     notifyChanged(e.pkg);
                 }
@@ -297,7 +255,6 @@ public final class ArtworkLoader {
         //noinspection ResultOfMethodCallIgnored
         customFile(e.pkg).delete();
         memory.remove(e.pkg);
-        memory.remove(PORTRAIT + e.pkg);
         fallbacks.remove(e.pkg);
         notifyChanged(e.pkg);
     }
@@ -411,152 +368,8 @@ public final class ArtworkLoader {
             glowColors.put(pkg, glow);
             if (isFallback) fallbacks.add(pkg);
             else fallbacks.remove(pkg);
-            // Obrazek na vysku slozeny z docasneho banneru slozit znovu ze skutecneho.
-            if (!isFallback && portraitFallbacks.remove(pkg)) memory.remove(PORTRAIT + pkg);
             notifyChanged(pkg);
         });
-    }
-
-    // --- Obrazky na vysku (karusel) ---------------------------------------------
-
-    private void schedulePortrait(AppEntry e) {
-        if (!portraitLoading.add(e.pkg)) return;
-        final int gen = generation;
-        disk.execute(() -> {
-            try {
-                loadPortrait(e, gen);
-            } catch (Throwable t) {
-                Log.w(TAG, "Nacteni obrazku na vysku selhalo: " + e.pkg, t);
-                portraitLoading.remove(e.pkg);
-            }
-        });
-    }
-
-    private void loadPortrait(AppEntry e, int gen) {
-        final int w = portraitW, h = portraitH;
-        File custom = customFile(e.pkg);
-        if (custom.exists()) {
-            Bitmap b = decodeFile(custom, w, h);
-            if (b != null) {
-                publishPortrait(e.pkg, coverCrop(b, w, h), false, gen);
-                return;
-            }
-        }
-        File cached = portraitFile(e.pkg);
-        if (cached.exists()) {
-            Bitmap b = decodeFile(cached, w, h);
-            if (b != null) {
-                publishPortrait(e.pkg, coverCrop(b, w, h), false, gen);
-                return;
-            }
-        }
-        // Docasne: obal slozeny z banneru na sirku. Skutecny obal se stahne na pozadi.
-        final int lw = Math.max(targetW, Math.round(w * 1.1f));
-        final int lh = Math.round(lw / CARD_ASPECT);
-        Bitmap land = null;
-        File lc = cacheFile(e.pkg);
-        if (lc.exists()) land = decodeFile(lc, lw, lh);
-        if (land == null && e.hasBanner) land = pmBanner(e.pkg);
-        if (land == null) land = composeFallback(e, lw, lh);
-        final boolean tryDownload = shouldDownload(e) && shouldDownloadPortrait(e);
-        publishPortrait(e.pkg, composePortrait(land, w, h), true, gen);
-        if (tryDownload) {
-            portraitLoading.add(e.pkg);
-            net.execute(() -> {
-                try {
-                    downloadPortrait(e, gen);
-                } finally {
-                    portraitLoading.remove(e.pkg);
-                }
-            });
-        }
-    }
-
-    private boolean shouldDownloadPortrait(AppEntry e) {
-        long now = System.currentTimeMillis();
-        Long retry = networkRetryAt.get(PORTRAIT + e.pkg);
-        if (retry != null && now < retry) return false;
-        return now - misses.getLong(PORTRAIT + e.pkg, 0) > MISS_RETRY_MS;
-    }
-
-    private void downloadPortrait(AppEntry e, int gen) {
-        final String id = e.pkg.replace(".mrf.", ".");
-        Bitmap found = null;
-        boolean networkError = false;
-        try {
-            byte[] json = httpGet(String.format(META_METADATA_URL, id), 256 * 1024);
-            if (json != null) {
-                JSONObject o = new JSONObject(new String(json, StandardCharsets.UTF_8));
-                String portrait = o.optString("portrait", "");
-                if (!portrait.isEmpty()) found = downloadBitmap(portrait);
-            }
-        } catch (IOException ex) {
-            networkError = true;
-        } catch (Exception ex) {
-            Log.w(TAG, "Chyba pri stahovani obalu " + e.pkg, ex);
-        }
-        if (found == null) {
-            if (networkError) {
-                networkRetryAt.put(PORTRAIT + e.pkg, System.currentTimeMillis() + NETWORK_RETRY_MS);
-            } else {
-                misses.edit().putLong(PORTRAIT + e.pkg, System.currentTimeMillis()).apply();
-            }
-            return;
-        }
-        try {
-            saveScaled(found, portraitFile(e.pkg), 900);
-        } catch (IOException ex) {
-            Log.w(TAG, "Obal nejde ulozit", ex);
-        }
-        if (gen != generation) return;
-        publishPortrait(e.pkg, coverCrop(found, portraitW, portraitH), false, gen);
-    }
-
-    private void publishPortrait(String pkg, Bitmap b, boolean isFallback, int gen) {
-        final int glow = b != null && !glowColors.containsKey(pkg) ? ambientColor(b) : 0;
-        main.post(() -> {
-            portraitLoading.remove(pkg);
-            if (gen != generation || b == null) return;
-            final String key = PORTRAIT + pkg;
-            if (isFallback && memory.get(key) != null && !portraitFallbacks.contains(pkg)) return;
-            memory.put(key, b);
-            if (glow != 0 && !glowColors.containsKey(pkg)) glowColors.put(pkg, glow);
-            if (isFallback) portraitFallbacks.add(pkg);
-            else portraitFallbacks.remove(pkg);
-            notifyChanged(pkg);
-        });
-    }
-
-    /**
-     * Obal na vysku z banneru na sirku: pozadi = rozmazany a ztmaveny banner
-     * pres celou kartu, uprostred cely banner s mekce prolnutymi okraji.
-     */
-    static Bitmap composePortrait(Bitmap land, int w, int h) {
-        Bitmap out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
-        Canvas c = new Canvas(out);
-        Paint p = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
-        // Rozmazani = zmensit na par pixelu a ve dvou krocich zpet (hladky prechod barev).
-        Bitmap cover = coverCrop(land, Math.max(8, w / 8), Math.max(8, h / 8));
-        Bitmap tiny = Bitmap.createScaledBitmap(cover, 6, Math.max(6, Math.round(6 / PORTRAIT_ASPECT)), true);
-        Bitmap mid = Bitmap.createScaledBitmap(tiny, Math.max(8, w / 6), Math.max(8, h / 6), true);
-        c.drawBitmap(mid, null, new RectF(0, 0, w, h), p);
-        p.setColor(0x66000000);
-        c.drawRect(0, 0, w, h, p);
-
-        // Banner pres celou sirku, trochu nad stredem (dole je misto na nazev).
-        final float bh = w * land.getHeight() / (float) land.getWidth();
-        final float top = h * 0.40f - bh / 2f;
-        final float fade = bh * 0.16f;
-        c.saveLayer(0, top, w, top + bh, null);
-        c.drawBitmap(land, null, new RectF(0, top, w, top + bh), p);
-        Paint mask = new Paint();
-        mask.setXfermode(new android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN));
-        mask.setShader(new LinearGradient(0, top, 0, top + bh,
-                new int[]{0x00000000, 0xFF000000, 0xFF000000, 0x00000000},
-                new float[]{0f, fade / bh, 1f - fade / bh, 1f}, Shader.TileMode.CLAMP));
-        c.drawRect(0, top, w, top + bh, mask);
-        c.restore();
-        return out;
     }
 
     private void notifyChanged(String pkg) {
@@ -672,10 +485,6 @@ public final class ArtworkLoader {
 
     private File cacheFile(String pkg) {
         return new File(cacheDir, safeName(pkg) + ".webp");
-    }
-
-    private File portraitFile(String pkg) {
-        return new File(portraitDir, safeName(pkg) + ".webp");
     }
 
     private File customFile(String pkg) {

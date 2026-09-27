@@ -23,6 +23,8 @@ public final class AppMenu {
     public interface Actions {
         void launch();
 
+        void favorite();
+
         void rename();
 
         void pickImage();
@@ -39,7 +41,7 @@ public final class AppMenu {
     }
 
     public static View build(Context c, AppEntry app, String label, boolean hasCustomImage,
-                             Actions a) {
+                             boolean favorite, Actions a) {
         LinearLayout root = new LinearLayout(c);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(Glass.panel(c));
@@ -59,6 +61,8 @@ public final class AppMenu {
         root.addView(Glass.divider(c));
 
         root.addView(Glass.menuItem(c, "Spustit", false, v -> a.launch()));
+        root.addView(Glass.menuItem(c, favorite ? "★  Odebrat z oblíbených" : "☆  Přidat do oblíbených",
+                false, v -> a.favorite()));
         root.addView(Glass.menuItem(c, "Přejmenovat…", false, v -> a.rename()));
         root.addView(Glass.menuItem(c, "Vlastní obrázek…", false, v -> a.pickImage()));
         if (hasCustomImage) {

@@ -141,6 +141,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     private Prefs prefs;
     private ArtworkLoader artwork;
     private Stats stats;
+    private com.neolauncher.data.AppRepository.Signals signals;
 
     private final List<Item> items = new ArrayList<>();
     private final Map<String, Item> itemByPkg = new HashMap<>();
@@ -301,6 +302,11 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         host = h;
     }
 
+    /** Odkud se bere "nova aplikace" (v popisku pod kartou). */
+    public void setSignals(com.neolauncher.data.AppRepository.Signals s) {
+        signals = s;
+    }
+
     public void bind(Prefs p, ArtworkLoader a, Stats s) {
         prefs = p;
         artwork = a;
@@ -324,6 +330,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     public void setApps(List<AppEntry> list, List<String> labels, int newTab) {
         final long now = System.nanoTime();
         final boolean tabChanged = newTab != tab;
+        if (tabChanged) saveState();
         tab = newTab;
         tabPos.set(newTab, now);
         appsLoaded = true;
@@ -344,6 +351,17 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         // Vybrana karta zustane vybrana (i po obnove seznamu). Kdyz zmizela
         // (skryta/odinstalovana), vybere se ta, ktera je ted na jejim miste.
         int sel = 0;
+        // Po otevreni / prepnuti zalozky vybrat kartu, na ktere se naposledy skoncilo.
+        final String remembered = (selectedPkg == null || tabChanged) && prefs != null
+                ? prefs.carouselSelection(tab) : null;
+        if (remembered != null) {
+            for (int i = 0; i < items.size(); i++) {
+                if (items.get(i).app.pkg.equals(remembered)) {
+                    sel = i;
+                    break;
+                }
+            }
+        }
         if (!tabChanged && selectedPkg != null) {
             sel = -1;
             for (int i = 0; i < items.size(); i++) {
@@ -407,6 +425,11 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     /** Tlacitko nastaveni (odtud "vyroste" panel nastaveni). */
     public RectF settingsRect() {
         return new RectF(settingsRect);
+    }
+
+    /** Ulozi vybranou kartu (pri odchodu z launcheru). */
+    public void saveState() {
+        if (prefs != null && selectedPkg != null) prefs.setCarouselSelection(tab, selectedPkg);
     }
 
     /** Obdelnik hodin/baterie (odtud "vyjede" rychle menu). */
@@ -809,7 +832,10 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         c.drawText(shownTitle, cx, y, titleText);
         titleText.setAlpha(255);
         subText.setColor(Color.argb(Math.round(178 * f), 255, 255, 255));
-        c.drawText(typeLabel(it.app), cx, y + dp(22), subText);
+        String sub = typeLabel(it.app);
+        if (signals != null && signals.isNew(it.app)) sub += "  ·  Nové";
+        if (prefs.isFavorite(it.app.pkg)) sub += "  ·  ★ Oblíbená";
+        c.drawText(sub, cx, y + dp(22), subText);
     }
 
     private static String typeLabel(AppEntry e) {
@@ -1112,7 +1138,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         return h + " h " + m + " min";
     }
 
-    static String formatLast(long t) {
+    public static String formatLast(long t) {
         if (t <= 0) return "Zatím nespuštěno";
         final Calendar now = Calendar.getInstance();
         final Calendar then = Calendar.getInstance();

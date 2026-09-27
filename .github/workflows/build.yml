@@ -70,11 +70,18 @@ jobs:
           fi
           PRE=""
           if [ "${GITHUB_REF_NAME}" != "main" ]; then PRE="--prerelease"; fi
+          # Poznamky = nejnovejsi sekce z app/src/main/assets/novinky.txt (lidsky psane
+          # "co je noveho", stejny text ukaze launcher po aktualizaci). Bez souboru zprava commitu.
+          NOVINKY=app/src/main/assets/novinky.txt
           {
             echo "versionCode: ${CODE}"
             echo "vetev: ${GITHUB_REF_NAME}"
             echo
-            git log -1 --pretty=%B | grep -v -e '^Co-Authored-By:' -e '^Claude-Session:' | head -c 4000
+            if [ -s "$NOVINKY" ]; then
+              awk 'NR==1 && /^#/ {sub(/^#+ */, ""); print; next} /^#/ {exit} {print}' "$NOVINKY" | head -c 4000
+            else
+              git log -1 --pretty=%B | grep -v -e '^Co-Authored-By:' -e '^Claude-Session:' | head -c 4000
+            fi
           } > notes.md
           gh release create "v${VER}" "out/NeoLauncher-${VER}.apk" \
             --title "Neo ${VER}" --notes-file notes.md --target "${GITHUB_SHA}" ${PRE}

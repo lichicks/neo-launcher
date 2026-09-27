@@ -122,6 +122,24 @@ public final class AppRepository {
     private volatile List<AppEntry> apps = Collections.emptyList();
     private volatile boolean scannedOnce;
 
+    /**
+     * Signaly pro chytre razeni (herni cas z UsageStats, "nove" aplikace) -
+     * dodava aktivita, repozitar sam UsageStats nepouziva.
+     */
+    public interface Signals {
+        long playtimeMs(String pkg);
+
+        long lastUsed(String pkg);
+
+        boolean isNew(AppEntry e);
+    }
+
+    private volatile Signals signals;
+
+    public void setSignals(Signals s) {
+        signals = s;
+    }
+
     public AppRepository(Context c, Prefs prefs) {
         this.ctx = c.getApplicationContext();
         this.prefs = prefs;
@@ -156,7 +174,7 @@ public final class AppRepository {
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject o = arr.getJSONObject(i);
                 list.add(new AppEntry(o.getString("p"), o.getString("l"),
-                        o.getInt("t"), o.optBoolean("b", false)));
+                        o.getInt("t"), o.optBoolean("b", false), o.optLong("i", 0L)));
             }
             apps = Collections.unmodifiableList(list);
         } catch (Exception e) {
@@ -251,7 +269,12 @@ public final class AppRepository {
                 }
             }
             if (label.isEmpty()) label = pkg;
-            out.add(new AppEntry(pkg, label, type, ai.banner != 0));
+            long installed = 0L;
+            try {
+                installed = pm.getPackageInfo(pkg, 0).firstInstallTime;
+            } catch (Exception ignored) {
+            }
+            out.add(new AppEntry(pkg, label, type, ai.banner != 0, installed));
         }
 
         if (quest) {
@@ -294,6 +317,7 @@ public final class AppRepository {
                 o.put("l", e.systemLabel);
                 o.put("t", e.type);
                 o.put("b", e.hasBanner);
+                o.put("i", e.installTime);
                 arr.put(o);
             }
             File tmp = new File(ctx.getFilesDir(), CACHE_FILE + ".tmp");
@@ -334,15 +358,41 @@ public final class AppRepository {
         final Comparator<AppEntry> byLabel =
                 (a, b) -> collator.compare(labels.get(a.pkg), labels.get(b.pkg));
 
+        final Signals sig = signals;
         switch (prefs.sortMode()) {
             case Prefs.SORT_ALPHA:
                 list.sort(byLabel);
                 break;
             case Prefs.SORT_RECENT: {
                 final Map<String, Long> last = new HashMap<>();
-                for (AppEntry e : list) last.put(e.pkg, prefs.lastLaunch(e.pkg));
+                for (AppEntry e : list) {
+                    last.put(e.pkg, Math.max(prefs.lastLaunch(e.pkg), sig != null ? sig.lastUsed(e.pkg) : 0L));
+                }
                 list.sort((a, b) -> {
                     int c = Long.compare(last.get(b.pkg), last.get(a.pkg));
+                    return c != 0 ? c : byLabel.compare(a, b);
+                });
+                break;
+            }
+            case Prefs.SORT_PLAYTIME:
+            case Prefs.SORT_SMART: {
+                // Nejhranejsi: podle herniho casu. Chytre: nove (jeste nespustene) aplikace
+                // prvni, pak podle herniho casu, pak naposledy spustene, pak abecedne.
+                final boolean smart = prefs.sortMode() == Prefs.SORT_SMART;
+                final Map<String, Long> play = new HashMap<>();
+                final Map<String, Long> last = new HashMap<>();
+                final Map<String, Long> fresh = new HashMap<>();
+                for (AppEntry e : list) {
+                    play.put(e.pkg, sig != null ? sig.playtimeMs(e.pkg) : 0L);
+                    last.put(e.pkg, Math.max(prefs.lastLaunch(e.pkg), sig != null ? sig.lastUsed(e.pkg) : 0L));
+                    fresh.put(e.pkg, smart && sig != null && sig.isNew(e) ? Math.max(1L, e.installTime) : 0L);
+                }
+                list.sort((a, b) -> {
+                    int c = Long.compare(fresh.get(b.pkg), fresh.get(a.pkg));
+                    if (c != 0) return c;
+                    c = Long.compare(play.get(b.pkg), play.get(a.pkg));
+                    if (c != 0) return c;
+                    c = Long.compare(last.get(b.pkg), last.get(a.pkg));
                     return c != 0 ? c : byLabel.compare(a, b);
                 });
                 break;
@@ -361,6 +411,15 @@ public final class AppRepository {
                 });
                 break;
             }
+        }
+        // Oblibene (hvezdicka) jsou vzdy nahore - razeni uvnitr zustane (stabilni razeni).
+        final Set<String> fav = prefs.favorites();
+        if (!fav.isEmpty()) {
+            List<AppEntry> pinned = new ArrayList<>();
+            List<AppEntry> rest = new ArrayList<>();
+            for (AppEntry e : list) (fav.contains(e.pkg) ? pinned : rest).add(e);
+            pinned.addAll(rest);
+            return pinned;
         }
         return list;
     }

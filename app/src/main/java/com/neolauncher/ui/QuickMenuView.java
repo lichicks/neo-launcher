@@ -49,6 +49,9 @@ public final class QuickMenuView extends View {
     public interface Actions {
         void openTarget(int target);
 
+        /** Klepnuti na kartu naposledy hrane hry. */
+        void launch(com.neolauncher.data.AppEntry app);
+
         void requestBrightnessAccess();
     }
 
@@ -68,7 +71,9 @@ public final class QuickMenuView extends View {
     private static final int EL_BRIGHT = 0;
     private static final int EL_VOLUME = 1;
     private static final int EL_TILE0 = 2;
-    private static final int EL_COUNT = EL_TILE0 + TILE_LABELS.length;
+    /** Karta "Naposledy hrano" (jen v uzkem panelu). */
+    private static final int EL_LAST = EL_TILE0 + TILE_LABELS.length;
+    private static final int EL_COUNT = EL_LAST + 1;
 
     private final float d;
     private final Actions actions;
@@ -88,6 +93,12 @@ public final class QuickMenuView extends View {
     private long shownNs;
     /** Uzke rozlozeni (bocni panel): dlazdice vodorovne ve 2 sloupcich, dole "Vsechna nastaveni". */
     private boolean narrow;
+    private com.neolauncher.data.AppEntry lastApp;
+    private String lastTitle, lastSub, lastButton;
+    private android.graphics.BitmapShader lastShader;
+    private android.graphics.Bitmap lastArt;
+    private final android.graphics.Matrix lastMatrix = new android.graphics.Matrix();
+    private final Paint artPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
 
     private int hovered = -1;
     private int pressed = -1;
@@ -167,6 +178,23 @@ public final class QuickMenuView extends View {
         return Glass.dpi(c, W_DP);
     }
 
+    /**
+     * Naposledy hrana hra / aplikace - karta s tlacitkem "Hrat" (jen v bocnim panelu).
+     * Klepnuti hru spusti znovu (bezi-li jeste na pozadi, Quest se do ni vrati).
+     */
+    public void setLastPlayed(com.neolauncher.data.AppEntry app, String title, String sub,
+                              android.graphics.Bitmap art) {
+        lastApp = app;
+        lastTitle = title;
+        lastSub = sub;
+        lastButton = app != null && app.isVr() ? "Hrát" : "Otevřít";
+        lastArt = art;
+        lastShader = art != null ? new android.graphics.BitmapShader(art,
+                Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) : null;
+        if (getWidth() > 0) onSizeChanged(getWidth(), getHeight(), getWidth(), getHeight());
+        invalidate();
+    }
+
     public void setBattery(int level, boolean isCharging, boolean isFast) {
         batteryLevel = level;
         charging = isCharging;
@@ -244,17 +272,24 @@ public final class QuickMenuView extends View {
         } else {
             layoutWide(w, pad);
         }
-        highlight = new LinearGradient(0, 0, 0, h * 0.5f, 0x2EFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
+        highlight = new LinearGradient(0, 0, 0, h * 0.5f, Glass.GLASS_SHINE, 0x00FFFFFF, Shader.TileMode.CLAMP);
         glass = new LinearGradient(0, 0, 0, h, Glass.GLASS_TOP, Glass.GLASS_BOTTOM, Shader.TileMode.CLAMP);
     }
 
     private void layoutNarrow(int w, int h, float pad) {
-        float y = dp(146);
-        final float sh = dp(50);
+        // Hlavicka: hodiny vlevo, baterie a Wi-Fi pod sebou vpravo (setri vysku).
+        float y = dp(104);
+        if (lastApp != null) {
+            rects[EL_LAST].set(pad, y, w - pad, y + dp(72));
+            y += dp(72) + dp(12);
+        } else {
+            rects[EL_LAST].setEmpty();
+        }
+        final float sh = dp(46);
         rects[EL_BRIGHT].set(pad, y, w - pad, y + sh);
-        y += sh + dp(10);
+        y += sh + dp(8);
         rects[EL_VOLUME].set(pad, y, w - pad, y + sh);
-        y += sh + dp(18);
+        y += sh + dp(16);
         // Posledni "dlazdice" (Neo) = tlacitko "Vsechna nastaveni" pres celou sirku dole.
         final float btnH = dp(46);
         final float btnTop = h - pad - btnH;
@@ -320,6 +355,7 @@ public final class QuickMenuView extends View {
                 brightOk ? "Jas" : "Jas – klepni pro povolení", brightOk);
         drawSlider(c, EL_VOLUME, now, volumeShown.get(now), "Hlasitost", true);
         for (int i = 0; i < TILE_LABELS.length; i++) drawTile(c, i, now);
+        if (narrow && lastApp != null) drawLastPlayed(c, now);
         drawStorage(c, w, h);
 
         boolean anim = brightShown.active(now) || volumeShown.active(now)
@@ -352,9 +388,8 @@ public final class QuickMenuView extends View {
         final String wl = wifiOn ? "Wi-Fi" : "Offline";
         final float ww = dp(12) + dp(18) + dp(8) + labelText.measureText(wl) + dp(14);
         // Siroke: pilulky vpravo nahore. Uzke (bocni panel): v rade pod datem.
-        final float top = narrow ? dp(100) : dp(28), ph = dp(32);
-        if (narrow) tmp.set(pad, top, pad + bw, top + ph);
-        else tmp.set(w - pad - bw, top, w - pad, top + ph);
+        final float top = dp(28), ph = dp(32);
+        tmp.set(w - pad - bw, top, w - pad, top + ph);
         final float batLeft = tmp.left, batRight = tmp.right;
         drawPill(c, tmp);
         fill.setShader(null);
@@ -381,11 +416,13 @@ public final class QuickMenuView extends View {
         }
         // Wi-Fi: vysec s ukazatelem signalu.
         labelText.setColor(wifiOn ? 0xF2FFFFFF : 0x99FFFFFF);
-        if (narrow) tmp.set(batRight + dp(10), top, batRight + dp(10) + ww, top + ph);
+        // Uzky panel: Wi-Fi pod baterii (zarovnane vpravo), siroky: vlevo od baterie.
+        if (narrow) tmp.set(w - pad - ww, top + ph + dp(8), w - pad, top + ph + dp(8) + ph);
         else tmp.set(batLeft - dp(10) - ww, top, batLeft - dp(10), top + ph);
         drawPill(c, tmp);
         drawWifiIcon(c, tmp.left + dp(12) + dp(9), tmp.centerY() + dp(5), dp(9), wifiOn ? wifiBars : 0);
-        c.drawText(wl, tmp.left + dp(12) + dp(18) + dp(8), base, labelText);
+        // Vlastni zakladni linka - v uzkem panelu je Wi-Fi v druhem radku.
+        c.drawText(wl, tmp.left + dp(12) + dp(18) + dp(8), tmp.centerY() - (fm.ascent + fm.descent) / 2f, labelText);
     }
 
     private void drawPill(Canvas c, RectF r) {
@@ -516,6 +553,62 @@ public final class QuickMenuView extends View {
         c.restore();
     }
 
+    /** Karta "Naposledy hrano": banner, nazev, kdy a tlacitko Hrat. */
+    private void drawLastPlayed(Canvas c, long now) {
+        final RectF r = rects[EL_LAST];
+        final float a = appear(EL_LAST, now);
+        if (a <= 0.004f || r.isEmpty()) return;
+        final float hv = clamp(hover[EL_LAST].get(now), 0f, 1f);
+        final float ac = clamp(a, 0f, 1f);
+        c.save();
+        c.translate(0, (1f - a) * dp(12));
+        final float rr = dp(20);
+        fill.setShader(null);
+        fill.setColor(Color.argb(Math.round(0x33 * ac), 0, 0, 0));
+        c.drawRoundRect(r.left, r.top + dp(3), r.right, r.bottom + dp(3), rr, rr, fill);
+        fill.setColor(Color.argb(Math.round((0x1F + 0x1A * hv) * ac), 255, 255, 255));
+        c.drawRoundRect(r, rr, rr, fill);
+        stroke.setStrokeWidth(dp(1));
+        stroke.setColor(Color.argb(Math.round((0x2E + 0x40 * hv) * ac), 255, 255, 255));
+        c.drawRoundRect(r, rr, rr, stroke);
+        // Banner hry (na sirku) vlevo.
+        final float th = r.height() - dp(16), tw = th * 1.6f;
+        final float tl = r.left + dp(8), tt = r.top + dp(8);
+        if (lastShader != null && lastArt != null) {
+            lastMatrix.setScale(tw / lastArt.getWidth(), th / lastArt.getHeight());
+            lastMatrix.postTranslate(tl, tt);
+            lastShader.setLocalMatrix(lastMatrix);
+            artPaint.setShader(lastShader);
+            artPaint.setAlpha(Math.round(255 * ac));
+            c.drawRoundRect(tl, tt, tl + tw, tt + th, dp(12), dp(12), artPaint);
+            artPaint.setShader(null);
+        } else {
+            fill.setColor(Color.argb(Math.round(0x33 * ac), 255, 255, 255));
+            c.drawRoundRect(tl, tt, tl + tw, tt + th, dp(12), dp(12), fill);
+        }
+        // Tlacitko vpravo: bila pilulka s tmavym textem.
+        labelText.setColor(Glass.INK);
+        final float bw = labelText.measureText(lastButton) + dp(30), bh = dp(34);
+        final float bl = r.right - dp(12) - bw, bt = r.centerY() - bh / 2f;
+        fill.setColor(Color.argb(Math.round(0xF2 * ac), 255, 255, 255));
+        if (hv > 0.01f) fill.setShadowLayer(dp(12) * hv, 0, 0, Color.argb(Math.round(120 * hv), 255, 255, 255));
+        c.drawRoundRect(bl, bt, bl + bw, bt + bh, bh / 2f, bh / 2f, fill);
+        fill.clearShadowLayer();
+        final Paint.FontMetrics fm = labelText.getFontMetrics();
+        labelText.setColor((Glass.INK & 0x00FFFFFF) | (Math.round(255 * ac) << 24));
+        c.drawText(lastButton, bl + dp(15), bt + bh / 2f - (fm.ascent + fm.descent) / 2f, labelText);
+        // Texty mezi bannerem a tlacitkem.
+        final float tx = tl + tw + dp(12);
+        final float maxW = bl - dp(10) - tx;
+        smallText.setColor(Color.argb(Math.round(0xB3 * ac), 255, 255, 255));
+        c.drawText(android.text.TextUtils.ellipsize(lastSub, smallText, maxW,
+                android.text.TextUtils.TruncateAt.END).toString(), tx, r.centerY() - dp(6), smallText);
+        labelText.setColor(Color.argb(Math.round(255 * ac), 255, 255, 255));
+        c.drawText(android.text.TextUtils.ellipsize(lastTitle, labelText, maxW,
+                android.text.TextUtils.TruncateAt.END).toString(), tx, r.centerY() + dp(14), labelText);
+        c.restore();
+    }
+
     private void drawStorage(Canvas c, float w, float h) {
         if (totalBytes <= 0 || narrow) return;
         final float pad = dp(PAD);
@@ -576,6 +669,7 @@ public final class QuickMenuView extends View {
 
     private int elementAt(float x, float y) {
         for (int i = 0; i < EL_COUNT; i++) {
+            if (rects[i].isEmpty()) continue;
             tmp.set(rects[i]);
             tmp.inset(-dp(3), -dp(3));
             if (tmp.contains(x, y)) return i;
@@ -651,7 +745,9 @@ public final class QuickMenuView extends View {
                     sliderTo(pressed, x);
                 } else if (el == pressed && el >= 0) {
                     if (el == EL_BRIGHT && !brightOk) actions.requestBrightnessAccess();
-                    else if (el >= EL_TILE0) actions.openTarget(el - EL_TILE0);
+                    else if (el == EL_LAST) {
+                        if (lastApp != null) actions.launch(lastApp);
+                    } else if (el >= EL_TILE0) actions.openTarget(el - EL_TILE0);
                 }
                 draggingSlider = false;
                 pressed = -1;

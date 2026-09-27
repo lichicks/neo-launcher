@@ -1,0 +1,23 @@
+# Hvězdičky, chytré řazení a hledání
+• Oblíbené: v menu karty (podržet kartu) přidáš hvězdičku a hra se drží nahoře
+• Nové řazení v Nastavení → Aplikace: „Nejhranější“ podle herního času a „Chytré“ – nové hry první, pak ty, co hraješ nejvíc
+• Štítek NOVÉ u her, které jsi nainstaloval a ještě nespustil
+• Launcher si pamatuje, kde jsi v mřížce skončil – po návratu ze hry už nemusíš rolovat znovu
+• Hledání: lupa v levé liště, píše se klávesnicí Questu
+• V rychlém menu je naposledy hraná hra – jedním klepnutím zpátky do hry
+• Slabá baterie (pod 20 %) v horní liště svítí červeně
+• V horní liště je ikonka rychlého menu (klepni na čas nebo baterii) a dialogy mají stejné sklo jako zbytek launcheru
+• Po každé aktualizaci se ukáže tohle okno s novinkami
+
+# Rozložení jako ve visionOS
+• Horní lišta je plovoucí bublina napůl zanořená do panelu
+• Vlevo lišta s ikonami (Knihovna, Karusel, Rychlé menu, Nastavení) – po najetí se vysune s popisky
+• Rychlé menu vyjíždí zprava jako boční panel
+
+# Nastavení ve stylu visionOS
+• Nastavení je přehledný dashboard s dlaždicemi a přepínači
+• Volba stylu skla: tmavé, nebo světlé jako ve visionOS
+
+# Rychlé menu a fyzikální animace
+• Jas, hlasitost, Wi-Fi a zkratky na funkce Questu
+• Animace na pružinách jako na iPhonu, dialogy vyrůstají z místa, odkud je otevřeš

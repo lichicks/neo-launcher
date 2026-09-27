@@ -115,6 +115,14 @@ public class ShotTest {
             apps.add(new AppEntry(g[0], g[1], AppEntry.TYPE_VR, false));
             labels.add(g[1]);
         }
+        // Oblibena hra (hvezdicka) a nova hra (stitek NOVE) - jen pro nahled.
+        prefs.setFavorite("com.beatgames.beatsaber", true);
+        final com.neolauncher.data.AppRepository.Signals sig = new com.neolauncher.data.AppRepository.Signals() {
+            @Override public long playtimeMs(String pkg) { return 0; }
+            @Override public long lastUsed(String pkg) { return 0; }
+            @Override public boolean isNew(AppEntry e) { return e.pkg.equals("com.kluge.SynthRiders"); }
+        };
+        v.setSignals(sig);
         v.setApps(apps, labels, false);
         v.setBattery(92, true, true);
         pump(2500); // obrazky se nacitaji na pozadi
@@ -223,16 +231,19 @@ public class ShotTest {
         root.addView(overlay);
         a.setContentView(root);
         pump(300);
+        grid.setSignals(sig);
         grid.setApps(apps, labels, false);
-        grid.setBattery(92, true, true);
+        grid.setBattery(14, false, false); // slaba baterie - cervena zare
         pump(1500);
         capture(a, root, outDir + "/warmup.png"); // Robolectric kresli jen pri snimku - az pak zna polohu hodin
         com.neolauncher.ui.QuickMenuView menu = new com.neolauncher.ui.QuickMenuView(a,
                 new com.neolauncher.ui.QuickMenuView.Actions() {
                     @Override public void openTarget(int t) { }
                     @Override public void requestBrightnessAccess() { }
+                    @Override public void launch(AppEntry app) { }
                 });
-        menu.setBattery(92, true, true);
+        menu.setBattery(14, false, false);
+        menu.setLastPlayed(apps.get(5), "BONELAB", "Naposledy hráno · včera", art.get(apps.get(5)));
         // Leva lista po najeti (rozbalena s popisky).
         android.graphics.RectF gear = grid.settingsRect();
         hover(grid, gear.centerX() - gear.width() / 2f + 20 * d, gear.centerY());
@@ -256,10 +267,48 @@ public class ShotTest {
         pump(300);
         capture(a, root, outDir + "/neo-idle-vision.png");
         android.view.View sheet = com.neolauncher.ui.SettingsSheet.build(a, prefs,
-                new com.neolauncher.data.AppRepository(a, prefs), art, () -> { }, () -> { }, overlay::close);
+                new com.neolauncher.data.AppRepository(a, prefs), art, () -> { }, () -> { }, () -> { },
+                overlay::close);
         overlay.show(sheet, null, grid.settingsRect(), grid.frameRect(), Math.round(1000 * d));
         pump(1500);
         capture(a, root, outDir + "/neo-settings.png");
+
+        // --- Hledani ---
+        overlay.close();
+        pump(500);
+        android.view.View search = com.neolauncher.ui.SearchSheet.build(a, new com.neolauncher.ui.SearchSheet.Source() {
+            @Override public List<AppEntry> apps() { return apps; }
+            @Override public String label(AppEntry e) { return e.systemLabel; }
+            @Override public long lastUsed(String pkg) { return pkg.contains("BONELAB") ? 2 : pkg.contains("beat") ? 1 : 0; }
+            @Override public android.graphics.Bitmap art(AppEntry e) { return art.get(e); }
+        }, e -> { }, overlay::close);
+        overlay.show(search, null, grid.settingsRect(), grid.frameRect(), Math.round(640 * d));
+        pump(400);
+        android.widget.EditText field = findEdit(search);
+        if (field != null) field.setText("sab");
+        pump(900);
+        capture(a, root, outDir + "/neo-search.png");
+
+        // --- Co je noveho ---
+        overlay.close();
+        pump(500);
+        android.view.View news = com.neolauncher.ui.WhatsNewSheet.build(a, "2.0.33",
+                new java.io.FileInputStream(System.getProperty("neo.novinky")), overlay::close);
+        overlay.show(news, null, null, grid.frameRect(), Math.round(620 * d));
+        pump(1200);
+        capture(a, root, outDir + "/neo-whatsnew.png");
+    }
+
+    private static android.widget.EditText findEdit(android.view.View v) {
+        if (v instanceof android.widget.EditText) return (android.widget.EditText) v;
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                android.widget.EditText e = findEdit(g.getChildAt(i));
+                if (e != null) return e;
+            }
+        }
+        return null;
     }
 
     private static void scroll(android.view.View v, float x, float y, int axis, float value) {

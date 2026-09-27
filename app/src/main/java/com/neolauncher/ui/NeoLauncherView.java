@@ -32,6 +32,7 @@ import android.view.ViewConfiguration;
 import com.neolauncher.art.ArtworkLoader;
 import com.neolauncher.art.Placeholders;
 import com.neolauncher.data.AppEntry;
+import com.neolauncher.data.AppRepository;
 import com.neolauncher.data.Prefs;
 
 import java.util.ArrayList;
@@ -75,6 +76,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
         /** Klepnuti na hodiny/baterii - rychle menu (vyjede z tohoto obdelniku). */
         void onOpenQuickMenu(RectF origin);
+
+        /** Hledani (ikona lupy v leve liste). */
+        void onOpenSearch(RectF origin);
     }
 
     // --- Rozmery z preview (dp) ----------------------------------------------
@@ -144,12 +148,13 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private static final int ZONE_RAIL_BG = 30;
     private static final int ZONE_ORN_BG = 31;
 
-    private static final String[] RAIL_LABELS = {"Knihovna", "Karusel", "Rychlé menu", "Nastavení"};
-    private static final int[] RAIL_ICONS = {Icons.COLUMNS, Icons.CAROUSEL, Icons.SLIDERS, Icons.GEAR};
+    private static final String[] RAIL_LABELS = {"Knihovna", "Hledat", "Karusel", "Rychlé menu", "Nastavení"};
+    private static final int[] RAIL_ICONS = {Icons.COLUMNS, Icons.SEARCH, Icons.CAROUSEL, Icons.SLIDERS, Icons.GEAR};
     private static final int RAIL_LIBRARY = 0;
-    private static final int RAIL_CAROUSEL = 1;
-    private static final int RAIL_QUICK = 2;
-    private static final int RAIL_SETTINGS = 3;
+    private static final int RAIL_SEARCH = 1;
+    private static final int RAIL_CAROUSEL = 2;
+    private static final int RAIL_QUICK = 3;
+    private static final int RAIL_SETTINGS = 4;
 
     private static final String[] TAB_NAMES = {"Hry", "Aplikace", "Vše"};
 
@@ -176,6 +181,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         float placeholderW = -1;
         /** Vlastni RenderNode jen pro kartu, ktera je prave naklonena (3D rotace). */
         RenderNode node;
+        /** Oblibena (hvezdicka) a nova (jeste nespustena, cerstve nainstalovana). */
+        boolean favorite, fresh;
     }
 
     private final float d; // density
@@ -222,6 +229,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private float scrollCur, scrollTarget, flingV, squish = 1f, squishPivot;
     private long lastStepNs;
     private boolean scrollActive;
+    /** Po otevreni / prepnuti zalozky obnovit posledni pozici rolovani (ulozena v Prefs). */
+    private boolean restoreScroll = true;
 
     private boolean dragging;
     private Card dragCard;
@@ -245,9 +254,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final RectF brandRect = new RectF();
     private final RectF ornRect = new RectF();
     private final RectF railRect = new RectF();
-    private final RectF[] railRects = {new RectF(), new RectF(), new RectF(), new RectF()};
+    private final RectF[] railRects = {new RectF(), new RectF(), new RectF(), new RectF(), new RectF()};
     private final Eased[] railHover = {new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT),
-            new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT)};
+            new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT)};
     private final Spring railExpand = new Spring(0, 0.36f, 0.82f, 0.002f);
     private final Path chromePath = new Path();
     private float ornDividerX;
@@ -257,6 +266,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final RectF batteryRect = new RectF();
     private int batteryLevel = -1;
     private boolean charging, fastCharging;
+    /** Slaba baterie (<= 20 %, nenabiji se): kdy zacala - prvnich par sekund pilulka pulzuje. */
+    private long lowBatterySinceNs;
+    private static final long LOW_BATTERY_PULSE_NS = 8_000_000_000L;
     private long clockMinute = -1;
     private String clockTime = "", clockDate = "";
 
@@ -273,6 +285,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final TextPaint clockText = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private final TextPaint batteryText = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private final TextPaint emptyText = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+    private final TextPaint badgeText = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+    private final Path starPath = new Path();
+    private AppRepository.Signals signals;
     private final Path framePath = new Path();
     private final Path boltPath = new Path();
     private final RectF tmp = new RectF();
@@ -363,6 +378,20 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
         peephole = new PeepholeAnimation(d);
 
+        badgeText.setTypeface(bold);
+        badgeText.setTextSize(dp(10));
+        badgeText.setLetterSpacing(0.08f);
+        badgeText.setTextAlign(Paint.Align.CENTER);
+        // Petiscipa hvezda (polomer 1, stred 0,0) pro oznaceni oblibenych.
+        for (int i = 0; i < 10; i++) {
+            final double an = -Math.PI / 2 + i * Math.PI / 5;
+            final float r = (i % 2 == 0) ? 1f : 0.45f;
+            final float sx = (float) Math.cos(an) * r, sy = (float) Math.sin(an) * r;
+            if (i == 0) starPath.moveTo(sx, sy);
+            else starPath.lineTo(sx, sy);
+        }
+        starPath.close();
+
         stroke.setStyle(Paint.Style.STROKE);
 
         // Blesk z preview: SVG path "M11 2L4 13h5l-1.5 9L18 11h-5.5L14 2Z" (viewBox 24x24)
@@ -388,11 +417,22 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         host = h;
     }
 
+    /** Odkud se bere "nova aplikace" (stitek NOVE). */
+    public void setSignals(AppRepository.Signals s) {
+        signals = s;
+    }
+
     public void bind(Prefs p, ArtworkLoader a) {
         prefs = p;
         artwork = a;
         tab = p.tab();
         tabPos.snap(tab);
+        restoreScroll = true;
+    }
+
+    /** Ulozi pozici rolovani aktualni zalozky (pri odchodu z launcheru / prepnuti zalozky). */
+    public void saveState() {
+        if (prefs != null && appsLoaded && !cards.isEmpty()) prefs.setScrollDp(tab, scrollTarget / d);
     }
 
     @Override
@@ -445,6 +485,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 k.shownLabelFor = -1;
             }
             k.index = i;
+            k.favorite = prefs != null && prefs.isFavorite(e.pkg);
+            k.fresh = signals != null && signals.isNew(e);
             cards.add(k);
             cardByPkg.put(e.pkg, k);
             float sx = slotX(i), sy = slotY(i);
@@ -464,6 +506,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             dragCard = null;
         }
         updateScrollBounds();
+        tryRestoreScroll();
         if (artwork != null) {
             List<AppEntry> pre = new ArrayList<>(list);
             artwork.prefetch(pre);
@@ -475,11 +518,13 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     /** Prepnuti zalozky: obsah se kratce prolne a odroluje nahoru. */
     public void showTab(int newTab, List<AppEntry> list, List<String> labels) {
         final long now = System.nanoTime();
+        saveState();
         tab = newTab;
         tabPos.set(newTab, now);
         resetHoverState();
         flingV = 0;
         scrollCur = scrollTarget = 0;
+        restoreScroll = true;
         setApps(list, labels, false);
         contentFade.snap(0f);
         contentFade.set(1f, now);
@@ -488,10 +533,16 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
     public void setBattery(int level, boolean isCharging, boolean isFast) {
         if (level == batteryLevel && isCharging == charging && isFast == fastCharging) return;
+        final boolean wasLow = isLowBattery();
         batteryLevel = level;
         charging = isCharging;
         fastCharging = isFast;
+        if (isLowBattery() && !wasLow) lowBatterySinceNs = System.nanoTime();
         invalidate();
+    }
+
+    private boolean isLowBattery() {
+        return batteryLevel >= 0 && batteryLevel <= 20 && !charging;
     }
 
     /** Volat pri tiknuti minuty (hodiny) - prekresli horni listu. */
@@ -664,8 +715,20 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             }
         }
         updateScrollBounds();
+        tryRestoreScroll();
         updateFocus(now);
         invalidate();
+    }
+
+    /**
+     * Obnovi posledni pozici rolovani zalozky - az je znamy seznam i rozmery okna
+     * (vola se z setApps i relayout, probehne jen jednou).
+     */
+    private void tryRestoreScroll() {
+        if (!restoreScroll || cards.isEmpty() || frame.height() <= 0 || prefs == null) return;
+        restoreScroll = false;
+        flingV = 0;
+        scrollCur = scrollTarget = clamp(prefs.scrollDp(tab) * d, minScroll, 0f);
     }
 
     private float slotX(int i) {
@@ -1008,6 +1071,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 flingV = 0;
                 scrollTarget = 0f;
                 kickScroll();
+            } else if (zone == ZONE_RAIL0 + RAIL_SEARCH) {
+                if (host != null) host.onOpenSearch(new RectF(railRects[RAIL_SEARCH]));
             } else if (zone == ZONE_RAIL0 + RAIL_CAROUSEL) {
                 if (host != null) host.onToggleCarousel();
             } else if (zone == ZONE_RAIL0 + RAIL_QUICK) {
@@ -1304,6 +1369,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         if (blurAmount.active(now) || tabPos.active(now) || contentFade.active(now)
                 || brandHover.active(now) || brandTap.active(now) || batteryHover.active(now)
                 || dragLift.active(now) || railExpand.active(now)
+                || (isLowBattery() && now - lowBatterySinceNs < LOW_BATTERY_PULSE_NS)
                 || dragTilt.active(now)) return true;
         for (Eased e : tabHover) if (e.active(now)) return true;
         for (Eased e : railHover) if (e.active(now)) return true;
@@ -1648,7 +1714,42 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         c.drawRoundRect(-w2 + bw / 2f, -h2 + bw / 2f, w2 - bw / 2f, h2 - bw / 2f,
                 r - bw / 2f, r - bw / 2f, stroke);
 
+        drawBadges(c, k, w2, h2);
         drawTitlePill(c, k, h, w2, h2);
+    }
+
+    /** Stitek NOVE vlevo nahore a hvezdicka oblibenych vpravo nahore. */
+    private void drawBadges(Canvas c, Card k, float w2, float h2) {
+        if (k.fresh) {
+            final String t = "NOVÉ";
+            final float bw = badgeText.measureText(t) + dp(16), bh = dp(20);
+            final float l = -w2 + dp(10), tp = -h2 + dp(10);
+            fill.setShader(null);
+            fill.setColor(Glass.ACCENT);
+            fill.setShadowLayer(dp(8), 0, 0, 0x9938BDF8);
+            c.drawRoundRect(l, tp, l + bw, tp + bh, bh / 2f, bh / 2f, fill);
+            fill.clearShadowLayer();
+            badgeText.setColor(Glass.INK);
+            final Paint.FontMetrics fm = badgeText.getFontMetrics();
+            c.drawText(t, l + bw / 2f, tp + bh / 2f - (fm.ascent + fm.descent) / 2f, badgeText);
+        }
+        if (k.favorite) {
+            final float r = dp(13);
+            final float cx = w2 - dp(10) - r, cy = -h2 + dp(10) + r;
+            fill.setShader(null);
+            fill.setColor(0xB3000000);
+            c.drawCircle(cx, cy, r, fill);
+            stroke.setShader(null);
+            stroke.setStrokeWidth(dp(1));
+            stroke.setColor(0x4DFFFFFF);
+            c.drawCircle(cx, cy, r - dp(0.5f), stroke);
+            c.save();
+            c.translate(cx, cy + dp(0.5f));
+            c.scale(dp(7.5f), dp(7.5f));
+            fill.setColor(0xFFFFD166);
+            c.drawPath(starPath, fill);
+            c.restore();
+        }
     }
 
     /** Plovouci "pilulka" s nazvem: rgba(10,14,22,.9), radius 999, 11.5px, ellipsis. */
@@ -1714,8 +1815,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             widths[i] = tabText.measureText(TAB_NAMES[i]) + 2 * padX;
             tabsW += widths[i];
         }
+        // Na konci ikonka posuvniku = napoveda, ze klepnuti otevre rychle menu.
         final float statusW = dp(14) + clockText.measureText(clockTime) + dp(10)
-                + clockText.measureText(clockDate) + dp(12) + batteryWidth() + dp(8);
+                + clockText.measureText(clockDate) + dp(12) + batteryWidth() + dp(12) + dp(18) + dp(10);
         final float w = inner + tabsW + dp(20) + statusW + inner;
         ornRect.set(frame.centerX() - w / 2f, midY - dp(ORN_H) / 2f, frame.centerX() + w / 2f, midY + dp(ORN_H) / 2f);
         float x = ornRect.left + inner;
@@ -1832,6 +1934,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         clockText.setColor(0xF2FFFFFF);
         x += clockText.measureText(clockDate) + dp(12);
         drawBattery(c, x, midY);
+        Icons.draw(c, Icons.SLIDERS, batteryRect.right + dp(12) + dp(9), midY, dp(17),
+                Color.argb(Math.round(lerp(0xB3, 0xFF, sh)), 255, 255, 255), dp(1.7f), 1f, fill);
     }
 
     /** Pilulka baterie: procenta v barve nabiti, bile blesky pri nabijeni. */
@@ -1843,6 +1947,16 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         batteryRect.set(x, midY - batH / 2f, x + batteryWidth(), midY + batH / 2f);
         final int color = batteryColor();
         fill.setShader(null);
+        if (isLowBattery()) {
+            // Slaba baterie: cervena zare (prvnich 8 s pulzuje, pak zustane klidna).
+            final long since = System.nanoTime() - lowBatterySinceNs;
+            float glow = 0.7f;
+            if (since < LOW_BATTERY_PULSE_NS) glow = 0.45f + 0.55f * (0.5f + 0.5f * (float) Math.sin(since / 1e9 * Math.PI * 2 / 1.2));
+            fill.setColor(0x59EF4444);
+            fill.setShadowLayer(dp(12) * glow, 0, 0, Color.argb(Math.round(230 * glow), 239, 68, 68));
+            c.drawRoundRect(batteryRect, batH / 2f, batH / 2f, fill);
+            fill.clearShadowLayer();
+        }
         fill.setColor(0x59000000);
         c.drawRoundRect(batteryRect, batH / 2f, batH / 2f, fill);
         stroke.setStrokeWidth(dp(1));

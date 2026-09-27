@@ -41,6 +41,7 @@ public final class Icons {
     public static final int CLOSE = 28;
     public static final int BLUR = 29;
     public static final int PALETTE = 30;
+    public static final int SEARCH = 31;
 
     private static final Path path = new Path();
 
@@ -292,6 +293,10 @@ public final class Icons {
                 c.drawCircle(x, y, s * 0.58f, p);
                 p.setAlpha(Math.round(p.getAlpha() * 0.6f));
                 c.drawCircle(x, y, s * 0.86f, p);
+                break;
+            case SEARCH:
+                c.drawCircle(x - s * 0.15f, y - s * 0.15f, s * 0.58f, p);
+                c.drawLine(x + s * 0.28f, y + s * 0.28f, x + s * 0.85f, y + s * 0.85f, p);
                 break;
             default: // PALETTE
                 c.drawCircle(x, y, s * 0.85f, p);

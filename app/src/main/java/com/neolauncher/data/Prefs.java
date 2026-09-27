@@ -24,6 +24,8 @@ public final class Prefs {
     public static final int SORT_MANUAL = 0;
     public static final int SORT_ALPHA = 1;
     public static final int SORT_RECENT = 2;
+    public static final int SORT_PLAYTIME = 3;
+    public static final int SORT_SMART = 4;
 
     /** Styl skla panelu: tmave z preview_neo.html, nebo svetlejsi jako ve visionOS. */
     public static final int GLASS_DARK = 0;
@@ -51,6 +53,8 @@ public final class Prefs {
     private static final String K_UPDATE_LAST_CHECK = "update_last_check";
     private static final String K_UPDATE_DISMISSED = "update_dismissed";
     private static final String K_HIDDEN = "hidden";
+    private static final String K_FAVORITES = "favorites";
+    private static final String K_LAST_SEEN_VERSION = "last_seen_version";
     private static final String K_ORDER = "order_";
     private static final String K_LABEL = "label_";
 
@@ -92,7 +96,7 @@ public final class Prefs {
     }
 
     public int sortMode() {
-        return clamp(sp.getInt(K_SORT, SORT_MANUAL), 0, 2);
+        return clamp(sp.getInt(K_SORT, SORT_MANUAL), 0, 4);
     }
 
     public void setSortMode(int m) {
@@ -261,6 +265,38 @@ public final class Prefs {
         changed();
     }
 
+    private Set<String> favoritesCache;
+
+    /** Oblibene aplikace (hvezdicka v menu karty) - drzi se nahore. Nemenitelna kopie z pameti. */
+    public Set<String> favorites() {
+        if (favoritesCache == null) {
+            favoritesCache = Collections.unmodifiableSet(
+                    new HashSet<>(sp.getStringSet(K_FAVORITES, Collections.emptySet())));
+        }
+        return favoritesCache;
+    }
+
+    public boolean isFavorite(String pkg) {
+        return favorites().contains(pkg);
+    }
+
+    public void setFavorite(String pkg, boolean on) {
+        Set<String> s = new HashSet<>(favorites());
+        if (on) s.add(pkg);
+        else s.remove(pkg);
+        sp.edit().putStringSet(K_FAVORITES, s).apply();
+        favoritesCache = Collections.unmodifiableSet(s);
+    }
+
+    /** versionCode, ke kteremu uz uzivatel videl "Co je noveho" (0 = cista instalace). */
+    public long lastSeenVersion() {
+        return sp.getLong(K_LAST_SEEN_VERSION, 0L);
+    }
+
+    public void setLastSeenVersion(long code) {
+        sp.edit().putLong(K_LAST_SEEN_VERSION, code).apply();
+    }
+
     /** Vlastni nazev od uzivatele, nebo null. */
     public String customLabel(String pkg) {
         return sp.getString(K_LABEL + pkg, null);
@@ -288,6 +324,24 @@ public final class Prefs {
 
     public void setManualOrder(int tab, List<String> order) {
         sp.edit().putString(K_ORDER + tab, String.join("\n", order)).apply();
+    }
+
+    /** Posledni pozice rolovani mrizky v zalozce (dp, <= 0). */
+    public float scrollDp(int tab) {
+        return sp.getFloat("scroll_" + tab, 0f);
+    }
+
+    public void setScrollDp(int tab, float dp) {
+        sp.edit().putFloat("scroll_" + tab, dp).apply();
+    }
+
+    /** Vybrana karta karuselu v zalozce. */
+    public String carouselSelection(int tab) {
+        return sp.getString("carousel_sel_" + tab, null);
+    }
+
+    public void setCarouselSelection(int tab, String pkg) {
+        sp.edit().putString("carousel_sel_" + tab, pkg).apply();
     }
 
     public long lastLaunch(String pkg) {

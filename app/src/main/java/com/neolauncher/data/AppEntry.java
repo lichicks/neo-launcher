@@ -15,12 +15,19 @@ public final class AppEntry {
     public final int type;
     /** Ma aplikace vlastni TV banner (android:banner)? */
     public final boolean hasBanner;
+    /** Kdy byla aplikace poprve nainstalovana (ms), 0 = nezname. Pro stitek "Nove". */
+    public final long installTime;
 
     public AppEntry(String pkg, String systemLabel, int type, boolean hasBanner) {
+        this(pkg, systemLabel, type, hasBanner, 0L);
+    }
+
+    public AppEntry(String pkg, String systemLabel, int type, boolean hasBanner, long installTime) {
         this.pkg = pkg;
         this.systemLabel = systemLabel;
         this.type = type;
         this.hasBanner = hasBanner;
+        this.installTime = installTime;
     }
 
     public boolean isVr() {
@@ -37,7 +44,7 @@ public final class AppEntry {
         if (!(o instanceof AppEntry)) return false;
         AppEntry e = (AppEntry) o;
         return pkg.equals(e.pkg) && systemLabel.equals(e.systemLabel)
-                && type == e.type && hasBanner == e.hasBanner;
+                && type == e.type && hasBanner == e.hasBanner && installTime == e.installTime;
     }
 
     @Override

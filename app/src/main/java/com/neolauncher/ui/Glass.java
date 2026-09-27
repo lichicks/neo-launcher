@@ -38,14 +38,44 @@ public final class Glass {
         return Math.round(dp(c, v));
     }
 
-    /** Barvy matneho skla dialogu (nahore svetlejsi) - sdili je i rychle menu. */
-    public static final int GLASS_TOP = 0xD6646872;
-    public static final int GLASS_BOTTOM = 0xCF484C55;
-    public static final int GLASS_STROKE = 0x59FFFFFF;
+    /*
+     * Barvy skla dialogu (nahore svetlejsi) - sdili je i rychle menu. Ridi se
+     * volbou "Styl skla", at dialog vypada jako zbytek launcheru: tmave sklo
+     * (vychozi, jako panel z preview) nebo svetle sede jako ve visionOS.
+     */
+    public static int GLASS_TOP;
+    public static int GLASS_BOTTOM;
+    public static int GLASS_STROKE;
+    public static int GLASS_SHINE;
     /** Dlazdice uvnitr skla. */
-    public static final int TILE = 0x1FFFFFFF;
-    public static final int TILE_HOVER = 0x33FFFFFF;
-    public static final int TILE_STROKE = 0x33FFFFFF;
+    public static int TILE;
+    public static int TILE_HOVER;
+    public static int TILE_STROKE;
+
+    static {
+        setStyle(false);
+    }
+
+    /** @param vision true = svetle sklo visionOS, false = tmave sklo jako panel launcheru */
+    public static void setStyle(boolean vision) {
+        if (vision) {
+            GLASS_TOP = 0xD6646872;
+            GLASS_BOTTOM = 0xCF484C55;
+            GLASS_STROKE = 0x59FFFFFF;
+            GLASS_SHINE = 0x2EFFFFFF;
+            TILE = 0x1FFFFFFF;
+            TILE_HOVER = 0x33FFFFFF;
+            TILE_STROKE = 0x33FFFFFF;
+        } else {
+            GLASS_TOP = 0xF01C222D;
+            GLASS_BOTTOM = 0xF2121720;
+            GLASS_STROKE = 0x3DFFFFFF;
+            GLASS_SHINE = 0x1FFFFFFF;
+            TILE = 0x12FFFFFF;
+            TILE_HOVER = 0x26FFFFFF;
+            TILE_STROKE = 0x21FFFFFF;
+        }
+    }
     /** Tmavy text na bilem (vybrana pilulka, hlavni tlacitko). */
     public static final int INK = 0xFF1C212B;
 
@@ -60,7 +90,7 @@ public final class Glass {
         base.setCornerRadius(dp(c, radiusDp));
         base.setStroke(dpi(c, 1.5f), GLASS_STROKE);
         GradientDrawable shine = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{0x2EFFFFFF, 0x00FFFFFF, 0x00FFFFFF});
+                new int[]{GLASS_SHINE, 0x00FFFFFF, 0x00FFFFFF});
         shine.setCornerRadius(dp(c, radiusDp));
         return new android.graphics.drawable.LayerDrawable(new Drawable[]{base, shine});
     }

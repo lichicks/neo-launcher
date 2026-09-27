@@ -78,12 +78,13 @@ find "$REPO/app/src/main/java" -name '*.java' > src.txt
 echo "$HERE/ShotTest.java" >> src.txt
 javac -nowarn -encoding UTF-8 --release 17 -cp "deps/android-all.jar:lib/*" -d classes @src.txt
 java -Xmx4g -Dneo.banners="$W/banners" -Dneo.out="$W/out" -Dneo.scroll=0.9 -Dneo.scrollDp=57.6 \
+  -Dneo.novinky="$REPO/app/src/main/assets/novinky.txt" \
   -Drobolectric.offline=true -Drobolectric.dependency.dir="$W/deps" -Drobolectric.logging=stdout \
   -cp "classes:lib/*:deps/android-all.jar" org.junit.runner.JUnitCore neoshot.ShotTest
 
 # 6) Slozit s ilustracnim pozadim
 javac -nowarn -d classes "$HERE/Compose.java"
-for n in idle hover launch-1 launch-2 launch-3 launch-4 launch-5 launch-6 carousel carousel-move rail quickmenu-open quickmenu idle-vision settings; do
+for n in idle hover launch-1 launch-2 launch-3 launch-4 launch-5 launch-6 carousel carousel-move rail quickmenu-open quickmenu idle-vision settings search whatsnew; do
   java -Djava.awt.headless=true -cp classes Compose out/neo-$n.png out/neo-quest-$n.png
 done
 echo "Hotovo: $W/out"

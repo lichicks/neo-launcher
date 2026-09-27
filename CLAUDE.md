@@ -77,7 +77,7 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
   Vše), časem, datem a baterií, **napůl zanořená do horní hrany panelu**
   (střed na `frame.top`). Klepnutí na čas/baterii = rychlé menu.
 - **Levá lišta** (jako tab bar ve visionOS) — logo Neo a ikony Knihovna
-  (klepnutí odroluje nahoru), Karusel, Rychlé menu, Nastavení. Po najetí
+  (klepnutí odroluje nahoru), Hledat, Karusel, Rychlé menu, Nastavení. Po najetí
   laserem se na pružině rozbalí a ukáže popisky. Uživatel chtěl viditelné
   tlačítko nastavení („průměrný uživatel neví, že má klepnout na logo“).
 - **Rychlé menu** vyjede jako boční panel vpravo přes celou výšku panelu
@@ -214,6 +214,27 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
   obrázky znovu, herní čas (povolení), skryté aplikace, rozmazání prostředí,
   Meta tlačítko, Nastavení Questu, ovládání jasu (povolení), aktualizace
   a testovací verze, o aplikaci
+- **Pohodlí (QoL, 2026-09-27 podle přání uživatele):**
+  - „Co je nového“ po aktualizaci (jednou; `WhatsNewSheet`, text z
+    `assets/novinky.txt`; jde otevřít i v Nastavení → Aktualizace).
+  - Pamatuje si pozici rolování mřížky pro každou záložku (i po návratu ze
+    hry, kdy se launcher zavřel) a vybranou kartu karuselu (`Prefs`).
+  - Oblíbené: hvězdička v menu karty, oblíbené jsou vždy nahoře (i ve
+    vlastním pořadí), na kartě zlatá hvězda vpravo nahoře.
+  - Řazení: Vlastní / Abecedně / Naposledy / **Nejhranější** (herní čas
+    z UsageStats) / **Chytré** (nové první, pak herní čas, pak naposledy).
+  - Štítek **NOVÉ** (instalace < 14 dní, ještě nespuštěná – ani z knihovny
+    Questu podle UsageStats; `AppEntry.installTime`).
+  - V rychlém menu karta „Naposledy hráno“ s tlačítkem Hrát.
+  - Slabá baterie (≤ 20 %, nenabíjí) svítí v ornamentu červeně (8 s pulzuje).
+  - Hledání (lupa v levé liště, klávesnice Questu, bez ohledu na diakritiku,
+    Enter spustí první výsledek) – `SearchSheet`.
+  - V ornamentu ikonka posuvníků = nápověda, že čas/baterie otevírá rychlé menu.
+  - Sklo dialogů se řídí „Stylem skla“ (tmavé jako launcher / světlé visionOS),
+    pozadí za dialogem jen lehce rozmazané (uživateli vadilo „zakalení“).
+  - Uživatel NEchce: testovací funkce (bezpečný režim, diagnostika, FPS),
+    „vrátit zpět“ po skrytí, vlastní kategorie, weby jako karty, denní
+    přehled herního času. Zvuky/haptika a počasí možná později.
 - Aktualizace přímo v launcheru: CI po každém pushi vytvoří GitHub Release
   `v2.0.<číslo běhu>` (mimo `main` jako prerelease = testovací). Launcher při
   otevření (max 1× za 6 h) nebo tlačítkem v nastavení zkontroluje
@@ -224,7 +245,8 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
   rozhodl repo zveřejnit (přepíná sám v GitHub Settings). Záložní varianta:
   APK do zvláštního veřejného repa `lichicks/neo-launcher-releases`
   (launcher ho zkouší jako druhý zdroj; CI by potřebovalo token v secrets).
-  Změny jen v `.md`/`docs/` build ani release nespouští.
+  Změny jen v `.md`/`docs/` build ani release nespouští. Poznámky k releasu =
+  první sekce `app/src/main/assets/novinky.txt`.
 - Průhledné okno + `com.oculus.vrshell.supports_blend_effects` (Quest 3/3S
   rozmaže prostředí za panelem)
 - Pevný podpisový klíč `keystore/neo-debug.keystore` → nové buildy jdou
@@ -354,6 +376,12 @@ nejdřív `adb -P 5038 uninstall com.neolauncher.v1`. (Na konci minulé session
 byl odinstalovaný.)
 
 ## Poznámky pro práci na projektu
+
+- **Novinky: při každé změně, kterou uživatel uvidí, přidej nahoru sekci do
+  `app/src/main/assets/novinky.txt`** (`# Nadpis`, pod tím body `• …`, lidsky
+  česky s diakritikou – jak píšeš uživateli, ne technicky). Launcher ji ukáže
+  po aktualizaci v okně „Co je nového“ a CI ji dá do poznámek k releasu
+  (okno aktualizace). Starší sekce nech pod ní.
 
 - **Uživatel mluví česky** — komentáře v kódu i komunikace česky.
   V kódu komentáře bez diakritiky, texty v UI a `.md` s diakritikou.

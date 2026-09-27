@@ -45,7 +45,8 @@ public final class SettingsSheet {
     private static final String[] CATEGORIES = {"Vzhled", "Aplikace", "Quest", "Aktualizace", "O Neo"};
 
     public static View build(Context c, Prefs prefs, AppRepository repo, ArtworkLoader art,
-                             Runnable onAppsChanged, Runnable onCheckUpdates, Runnable onClose) {
+                             Runnable onAppsChanged, Runnable onCheckUpdates, Runnable onWhatsNew,
+                             Runnable onClose) {
         LinearLayout root = new LinearLayout(c);
         root.setOrientation(LinearLayout.HORIZONTAL);
         root.setBackground(Glass.panel(c, 32));
@@ -91,7 +92,7 @@ public final class SettingsSheet {
         slp.topMargin = Glass.dpi(c, 16);
         left.addView(scroll, slp);
 
-        final Ctx x = new Ctx(c, prefs, repo, art, onAppsChanged, onCheckUpdates);
+        final Ctx x = new Ctx(c, prefs, repo, art, onAppsChanged, onCheckUpdates, onWhatsNew);
         final TextView[] pillViews = new TextView[CATEGORIES.length];
         for (int i = 0; i < CATEGORIES.length; i++) {
             final int idx = i;
@@ -124,16 +125,17 @@ public final class SettingsSheet {
         final Prefs prefs;
         final AppRepository repo;
         final ArtworkLoader art;
-        final Runnable onAppsChanged, onCheckUpdates;
+        final Runnable onAppsChanged, onCheckUpdates, onWhatsNew;
 
         Ctx(Context c, Prefs prefs, AppRepository repo, ArtworkLoader art, Runnable onAppsChanged,
-            Runnable onCheckUpdates) {
+            Runnable onCheckUpdates, Runnable onWhatsNew) {
             this.c = c;
             this.prefs = prefs;
             this.repo = repo;
             this.art = art;
             this.onAppsChanged = onAppsChanged;
             this.onCheckUpdates = onCheckUpdates;
+            this.onWhatsNew = onWhatsNew;
         }
     }
 
@@ -214,15 +216,21 @@ public final class SettingsSheet {
         final int[] holdOptions = {700, 1000, 1500};
         int holdSel = 1;
         for (int i = 0; i < holdOptions.length; i++) if (holdOptions[i] == prefs.menuHoldMs()) holdSel = i;
+        // Razeni pres celou sirku (5 moznosti). Oblibene jsou vzdy nahore.
         grid(c, page,
-                wide(c, Icons.SORT, "Řazení", "Vlastní pořadí se mění podržením a přetažením karty",
-                        Glass.segmented(c, new String[]{"Vlastní", "Abecedně", "Naposledy"}, prefs.sortMode(), m -> {
-                            prefs.setSortMode(m);
-                            x.onAppsChanged.run();
-                        })),
+                wide(c, Icons.SORT, "Řazení", "Chytré = nové aplikace první, pak podle herního času. "
+                                + "Oblíbené (★ v menu karty) jsou vždy nahoře.",
+                        Glass.segmented(c, new String[]{"Vlastní", "Abecedně", "Naposledy", "Nejhranější", "Chytré"},
+                                prefs.sortMode(), m -> {
+                                    prefs.setSortMode(m);
+                                    x.onAppsChanged.run();
+                                })));
+        grid(c, page,
                 wide(c, Icons.HOLD, "Podržení pro menu", "Jak dlouho držet kartu bez pohybu",
                         Glass.segmented(c, new String[]{"0,7 s", "1 s", "1,5 s"}, holdSel,
-                                i -> prefs.setMenuHoldMs(holdOptions[i]))));
+                                i -> prefs.setMenuHoldMs(holdOptions[i]))),
+                infoTile(c, Icons.CHART, "Nejhranější a Chytré", "Herní čas bere z Questu – "
+                        + "potřebuje „Přístup k využití“ (dlaždice Herní čas níže)."));
 
         final boolean usageOk = new UsageInfo(c).hasPermission();
         grid(c, page,
@@ -305,7 +313,8 @@ public final class SettingsSheet {
                         "Zkontrolovat", v -> x.onCheckUpdates.run()),
                 toggleTile(c, Icons.FLASK, "Testovací verze", "Nabízet i buildy z vývojových větví",
                         prefs.updateTestBuilds(), prefs::setUpdateTestBuilds),
-                null);
+                actionTile(c, Icons.SPARKLE, "Co je nového", "Novinky v téhle verzi Nea",
+                        "Zobrazit", v -> x.onWhatsNew.run()));
         grid(c, page,
                 infoTile(c, Icons.INFO, "Jak to funguje", "Každá změna na GitHubu vytvoří novou verzi. "
                         + "Launcher ji najde, ukáže, co je nového, a po potvrzení nainstaluje – nastavení zůstane."));

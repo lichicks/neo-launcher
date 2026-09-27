@@ -33,6 +33,8 @@ import com.neolauncher.ui.Glass;
 import com.neolauncher.ui.NeoLauncherView;
 import com.neolauncher.ui.OverlayHost;
 import com.neolauncher.ui.QuickMenuView;
+import com.neolauncher.ui.SearchSheet;
+import com.neolauncher.ui.WhatsNewSheet;
 import com.neolauncher.ui.SettingsSheet;
 import com.neolauncher.ui.UpdateSheet;
 
@@ -79,6 +81,7 @@ public class LauncherActivity extends Activity
 
         NeoApp app = (NeoApp) getApplication();
         prefs = app.prefs();
+        Glass.setStyle(prefs.glassStyle() == Prefs.GLASS_VISION);
         repo = app.apps();
         artwork = app.artwork();
 
@@ -89,10 +92,17 @@ public class LauncherActivity extends Activity
         root.addView(launcher, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         usage = new UsageInfo(this);
+        repo.setSignals(signals);
+        launcher.setSignals(signals);
         carousel = new CarouselView(this);
         carousel.bind(prefs, artwork, carouselStats);
         carousel.setHost(carouselHost);
-        usage.setListener(carousel::statsChanged);
+        carousel.setSignals(signals);
+        usage.setListener(() -> {
+            carousel.statsChanged();
+            // Razeni podle herniho casu se po nacteni UsageStats preradi.
+            if (sortNeedsUsage()) showApps(true);
+        });
         root.addView(carousel, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         overlay = new OverlayHost(this);
@@ -135,10 +145,10 @@ public class LauncherActivity extends Activity
             repo.refreshAsync();
         }
         if (prefs.sortMode() == Prefs.SORT_RECENT) showApps(true);
-        if (carouselShown) {
-            usage.refresh(false);
-            carousel.statsChanged();
-        }
+        if (carouselShown || sortNeedsUsage()) usage.refresh(false);
+        if (carouselShown) carousel.statsChanged();
+        // Az je okno rozlozene (dialog potrebuje rozmery panelu).
+        launcher.post(this::maybeShowWhatsNew);
         checkForUpdates(false);
     }
 
@@ -146,6 +156,8 @@ public class LauncherActivity extends Activity
     protected void onPause() {
         super.onPause();
         sForeground = false;
+        launcher.saveState();
+        carousel.saveState();
         launcher.clearPointer();
         carousel.clearPointer();
     }
@@ -181,6 +193,7 @@ public class LauncherActivity extends Activity
 
     @Override
     public void onPrefsChanged() {
+        Glass.setStyle(prefs.glassStyle() == Prefs.GLASS_VISION);
         if (prefs.carouselMode() != carouselShown) applyMode(true);
     }
 
@@ -204,6 +217,66 @@ public class LauncherActivity extends Activity
         final boolean on = !prefs.carouselMode();
         prefs.setCarouselMode(on);
         if (on) toast("Karusel (testovací) – zpět šipkou vlevo nahoře");
+    }
+
+    /** Naposledy spustena aplikace (z Nea nebo podle Questu), mimo skryte a systemove panely. */
+    private AppEntry lastPlayed() {
+        final java.util.Set<String> hidden = prefs.hidden();
+        AppEntry best = null;
+        long bestT = 0;
+        for (AppEntry e : repo.apps()) {
+            if (e.isSystemPanel() || hidden.contains(e.pkg)) continue;
+            final long t = signals.lastUsed(e.pkg);
+            if (t > bestT) {
+                bestT = t;
+                best = e;
+            }
+        }
+        return best;
+    }
+
+    private static String lowerFirst(String s) {
+        return s.isEmpty() ? s : Character.toLowerCase(s.charAt(0)) + s.substring(1);
+    }
+
+    private boolean sortNeedsUsage() {
+        final int m = prefs.sortMode();
+        return m == Prefs.SORT_PLAYTIME || m == Prefs.SORT_SMART || m == Prefs.SORT_RECENT;
+    }
+
+    /** Aplikace nainstalovana v poslednich 14 dnech a jeste nespustena = stitek "NOVE". */
+    private static final long NEW_WINDOW_MS = 14L * 24 * 60 * 60 * 1000;
+
+    private final AppRepository.Signals signals = new AppRepository.Signals() {
+        @Override
+        public long playtimeMs(String pkg) {
+            return usage.playtimeMs(pkg);
+        }
+
+        @Override
+        public long lastUsed(String pkg) {
+            return Math.max(prefs.lastLaunch(pkg), usage.lastUsed(pkg));
+        }
+
+        @Override
+        public boolean isNew(AppEntry e) {
+            if (e.installTime <= 0 || e.isSystemPanel()) return false;
+            if (System.currentTimeMillis() - e.installTime > NEW_WINDOW_MS) return false;
+            if (prefs.lastLaunch(e.pkg) > 0 || prefs.launchCount(e.pkg) > 0) return false;
+            // Spustena odjinud (knihovna Questu) po instalaci = uz neni nova.
+            return usage.lastUsed(e.pkg) <= e.installTime + 60_000L;
+        }
+    };
+
+    /** Spusteni z menu / hledani / rychleho menu (bez animace kukatka). */
+    private void launchFromMenu(AppEntry app) {
+        overlay.close();
+        onLaunch(app);
+        if (lastLaunchOk && prefs.closeAfterLaunch()) {
+            launcher.postDelayed(() -> {
+                if (!isFinishing()) finish();
+            }, 450);
+        }
     }
 
     private void requestUsageAccess() {
@@ -310,7 +383,7 @@ public class LauncherActivity extends Activity
         // Panel "vyroste" z loga (mrizka) nebo z tlacitka nastaveni (karusel).
         final RectF from = carouselShown ? carousel.settingsRect() : launcher.settingsRect();
         overlay.show(SettingsSheet.build(this, prefs, repo, artwork,
-                        () -> showApps(true), () -> checkForUpdates(true), overlay::close),
+                        () -> showApps(true), () -> checkForUpdates(true), this::showWhatsNew, overlay::close),
                 null, from, launcher.frameRect(), Glass.dpi(this, 1000));
     }
 
@@ -328,10 +401,86 @@ public class LauncherActivity extends Activity
             public void requestBrightnessAccess() {
                 requestWriteSettings();
             }
+
+            @Override
+            public void launch(AppEntry app) {
+                launchFromMenu(app);
+            }
         });
         menu.setBattery(batteryPct, batteryCharging, batteryFast);
+        final AppEntry last = lastPlayed();
+        if (last != null) {
+            final long t = signals.lastUsed(last.pkg);
+            menu.setLastPlayed(last, prefs.labelFor(last),
+                    (last.isVr() ? "Naposledy hráno · " : "Naposledy otevřeno · ")
+                            + lowerFirst(CarouselView.formatLast(t).replace("Naposledy ", "")),
+                    artwork.get(last));
+        }
         // Rychle menu vyjede jako bocni panel vpravo (visionOS), pres celou vysku panelu.
         overlay.showSide(menu, launcher.frameRect(), QuickMenuView.sideWidth(this));
+    }
+
+    // --- Co je noveho --------------------------------------------------------------
+
+    /** Po aktualizaci jednou ukaze novinky (ne pri ciste instalaci). */
+    private void maybeShowWhatsNew() {
+        if (isFinishing()) return;
+        final long code = versionCode();
+        final long seen = prefs.lastSeenVersion();
+        if (code <= 0 || seen == code) return;
+        // Starsi verze si "videnou" verzi neukladaly - kdo uz launcher mel (kontroloval
+        // aktualizace), dostane novinky taky; cista instalace ne.
+        final boolean updated = seen != 0 || prefs.lastUpdateCheck() > 0;
+        prefs.setLastSeenVersion(code);
+        if (updated && !overlay.isOpen()) showWhatsNew();
+    }
+
+    private void showWhatsNew() {
+        String name = "2.0";
+        try {
+            name = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception ignored) {
+        }
+        View v = WhatsNewSheet.build(this, name, overlay::close);
+        if (v != null) overlay.show(v, null, null, launcher.frameRect(), Glass.dpi(this, 620));
+    }
+
+    private long versionCode() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).getLongVersionCode();
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    // --- Hledani -----------------------------------------------------------------
+
+    @Override
+    public void onOpenSearch(RectF origin) {
+        overlay.show(SearchSheet.build(this, new SearchSheet.Source() {
+            @Override
+            public List<AppEntry> apps() {
+                final java.util.Set<String> hidden = prefs.hidden();
+                List<AppEntry> out = new ArrayList<>();
+                for (AppEntry e : repo.apps()) if (!hidden.contains(e.pkg)) out.add(e);
+                return out;
+            }
+
+            @Override
+            public String label(AppEntry e) {
+                return prefs.labelFor(e);
+            }
+
+            @Override
+            public long lastUsed(String pkg) {
+                return signals.lastUsed(pkg);
+            }
+
+            @Override
+            public android.graphics.Bitmap art(AppEntry e) {
+                return artwork.get(e);
+            }
+        }, this::launchFromMenu, overlay::close), null, origin, launcher.frameRect(), Glass.dpi(this, 640));
     }
 
     private void toggleQuickMenu() {
@@ -425,12 +574,21 @@ public class LauncherActivity extends Activity
     @Override
     public void onAppMenu(AppEntry app, RectF cardRect) {
         final String label = prefs.labelFor(app);
-        overlay.show(AppMenu.build(this, app, label, artwork.hasCustomImage(app.pkg),
+        final boolean fav = prefs.isFavorite(app.pkg);
+        overlay.show(AppMenu.build(this, app, label, artwork.hasCustomImage(app.pkg), fav,
                 new AppMenu.Actions() {
                     @Override
                     public void launch() {
+                        launchFromMenu(app);
+                    }
+
+                    @Override
+                    public void favorite() {
                         overlay.close();
-                        onLaunch(app);
+                        prefs.setFavorite(app.pkg, !fav);
+                        showApps(true);
+                        Toast.makeText(LauncherActivity.this, fav ? "Odebráno z oblíbených"
+                                : "Přidáno do oblíbených – drží se nahoře", Toast.LENGTH_SHORT).show();
                     }
 
                     @Override
@@ -612,6 +770,9 @@ public class LauncherActivity extends Activity
 
     @Override
     public void onOverlayClosed() {
+        // Klavesnice (hledani, prejmenovani) po zavreni dialogu pryc.
+        InputMethodManager imm = (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+        if (imm != null) imm.hideSoftInputFromWindow(getWindow().getDecorView().getWindowToken(), 0);
         launcher.setModalBlur(false);
         launcher.setInteractive(true);
         carousel.setModalBlur(false);

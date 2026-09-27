@@ -192,7 +192,7 @@ public final class OverlayHost extends FrameLayout {
             scrim = Math.max(scrim, p);
         }
         scrim = Math.max(0f, Math.min(1f, scrim));
-        setBackgroundColor(Color.argb(Math.round(0x33 * scrim), 0, 0, 0));
+        setBackgroundColor(Color.argb(Math.round(0x1F * scrim), 0, 0, 0));
     }
 
     /** p = 0: velikost a poloha puvodu (from), p = 1: cilove misto. Pruzina muze lehce prekmitnout. */

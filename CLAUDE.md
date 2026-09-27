@@ -2,6 +2,8 @@
 
 > Tenhle soubor si Claude Code načte automaticky při otevření projektu.
 > Obsahuje všechno, co je potřeba vědět, aby se navázalo tam, kde se skončilo.
+> Stručné shrnutí pro nový chat (i bez přístupu k repu) je v `docs/POKRACOVANI.md` –
+> při větší změně stavu ho aktualizuj taky.
 
 ## Co to je
 

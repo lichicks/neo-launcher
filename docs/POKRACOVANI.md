@@ -1,0 +1,182 @@
+# Neo Launcher – předávací dokument (jak navázat)
+
+> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **27. 9. 2026, verze v2.0.41**),
+> a jak na to navázat v novém chatu – i s málo kredity. Podrobný technický
+> kontext je v [`CLAUDE.md`](../CLAUDE.md) v kořeni repozitáře.
+
+---
+
+## 1. Jak pokračovat (návod pro Jana)
+
+### A) Nejlepší a nejlevnější: Claude Code s tímhle repem
+1. Otevři novou session Claude Code (web / aplikace) s repozitářem **`lichicks/neo-launcher`**.
+2. Claude si **sám načte `CLAUDE.md`** – nemusíš nic vysvětlovat ani nic vkládat.
+3. Napiš jen, co chceš změnit (+ screenshot z Questu, jestli jde o vzhled).
+4. Na konci ho požádej: „commitni a pushni“. GitHub pak sám postaví novou verzi
+   a launcher ti ji v Questu nabídne k aktualizaci.
+
+Tipy, jak šetřit kredity:
+- **Jedna změna na zprávu**, krátce a konkrétně („v rychlém menu zmenši hodiny o 10 %“).
+- Obrázek s kroužkem řekne víc než odstavec textu.
+- Nechtěj po Claudovi „projdi celý projekt“ – `CLAUDE.md` už to shrnuje.
+- Náhled bez headsetu (`tools/screenshot/run.sh`) trvá ~3 minuty – vyplatí se
+  jen u změn vzhledu. U drobností stačí rychlá kontrola `tools/compile-check.sh`.
+
+### B) Obyčejný chat (claude.ai) bez přístupu k repu
+1. Vlož do chatu **tenhle soubor** a napiš, co chceš změnit.
+2. Claude řekne, které soubory potřebuje – najdeš je na GitHubu
+   (`github.com/lichicks/neo-launcher`, větev `claude/funny-ramanujan-xp8ba6`)
+   a jejich obsah vložíš / nahraješ do chatu.
+3. Upravený soubor vložíš zpátky na GitHub: otevři soubor → tužka (Edit) →
+   vlož nový obsah → **Commit changes** do stejné větve.
+4. GitHub Actions postaví APK (~5 min) a vydá novou verzi; launcher ji nabídne.
+   Když build selže (červený křížek v záložce Actions), pošli Claudovi text chyby.
+
+### Úvodní zpráva ke zkopírování do nového chatu
+```
+Pokračujeme na mém launcheru Neo pro Meta Quest 3S (Android, Java, jeden vlastní View).
+Repo: github.com/lichicks/neo-launcher, větev claude/funny-ramanujan-xp8ba6.
+Přikládám předávací dokument (docs/POKRACOVANI.md) – drž se pravidel v něm
+(česky, malé dávky změn, mezery/barvy z tokenů, novinky do novinky.txt, žádné cizí značky v UI).
+Chci změnit: …
+```
+
+---
+
+## 2. Co je Neo
+
+Vlastní launcher pro **Meta Quest 3S**, napsaný od nuly (v2.0) v Javě, složka `app/`.
+Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
+
+- **Skleněný panel s mřížkou her** (karty 1.6:1, 3–6 sloupců), při najetí laserem karta
+  „vyskočí“ (zvětšení, náklon, záře v barvě hry), okolí se rozmaže (hloubka ostrosti).
+- **Horní bublina (ornament)** napůl zanořená do panelu: záložky Hry / Aplikace / Vše,
+  čas (bez data), baterie. Klepnutí na čas/baterii = rychlé menu.
+- **Levá lišta**: logo Neo, Knihovna, Hledat, Karusel, Rychlé menu, Nastavení
+  (po najetí se rozbalí s popisky).
+- **Rychlé menu** (boční panel vpravo): hodiny + datum, Wi-Fi, baterie, „Naposledy hráno“
+  s tlačítkem Hrát, posuvníky jasu a hlasitosti, dlaždice (Wi-Fi, Bluetooth, Nastavení
+  Questu, Menu Questu, Soubory, Prohlížeč, Fotoaparát), tlačítko „Nastavení Nea“.
+- **Nastavení** jako dashboard s dlaždicemi (Vzhled, Aplikace, Quest, Aktualizace, O Neo).
+- **Karusel** (testovací režim, 5× klepnout na logo): karty ve vějíři se statistikami.
+- **Animace spuštění „kukátko“**, po spuštění hry se launcher zavře.
+- Hledání, oblíbené (hvězdička), štítek NOVÉ, řazení (i podle herního času),
+  paměť pozice rolování, „Co je nového“ po aktualizaci, varování slabé baterie.
+- **Aktualizace přímo v launcheru** z GitHub Releases (repo je veřejné).
+
+---
+
+## 3. Stav
+
+- Poslední verze: **v2.0.41** (testovací build z větve `claude/funny-ramanujan-xp8ba6`,
+  PR #1 do `main` je otevřený). APK: GitHub → Releases → `NeoLauncher-2.0.41.apk`.
+- **Nic z v2.0 zatím neběželo na headsetu.** Všechno je přeložené v CI a vyfocené
+  v emulaci (Robolectric), ale skutečné chování (laser, výkon, průhlednost, shadery)
+  se ukáže až na Questu. Checklist „Co otestovat na headsetu jako první“ je v `CLAUDE.md`.
+- První instalace: sideload (adb / SideQuest / stáhnout APK v prohlížeči Questu),
+  další verze už přes aktualizace v launcheru. Na PC běží starý adb na portu 5037 →
+  vždy `adb -P 5038 install -r NeoLauncher-2.0.xx.apk`.
+
+---
+
+## 4. Pravidla a přání (drž se jich)
+
+**Komunikace a proces**
+- Uživatel mluví **česky**. Komentáře v kódu česky **bez diakritiky**, texty v UI a `.md` s diakritikou.
+- **Malé dávky změn** – testovat jde jen na headsetu, chyba musí jít přiřadit.
+- **Každá změna, kterou uživatel uvidí → nová sekce nahoře v `app/src/main/assets/novinky.txt`**
+  (`# Nadpis`, pod tím `• body`, lidsky česky). Ukáže se v „Co je nového“ a v poznámkách k verzi.
+- **Žádné cizí značky v UI ani novinkách** (visionOS, iOS, iPhone, Apple…).
+
+**Vzhled (schválený styl)**
+- Matné **sklo** podle předloh uživatele (smart-home dashboardy, visionOS okna):
+  průhledné, rozmazané pozadí prosvítá, okraj s přechodem (nahoře jasný, po stranách slábne).
+  Jeden recept pro všechno: `ui/GlassSurface.java` (+ `GlassDrawable` pro dialogy).
+- **Paleta** (`ui/Palette.java`, vybral uživatel z dsgn.house): Void Black `#06070A`,
+  Electric Cobalt `#3D5AFE`, Synth Magenta `#FF2FA3`, Toxic Amber `#FF8A1E`,
+  Titanium Fog `#AEB6C2`, Holographic Pearl `#F5F7FF`. Žádné jiné barvy „od oka“.
+- **Ikony** = sada Lucide (jednoduché, zaoblené čáry) – `tools/icons/gen_icons.py`.
+- **Mezery a zaoblení z tokenů** v `ui/Glass.java`: okraj `PAD` 20, sekce `SECTION` 20,
+  mezi dlaždicemi `GAP` 12, malé prvky `GAP_S` 8, dlaždice radius 20, panel 40
+  (soustředné rohy), hlavní tlačítko 48, velký nadpis nahoře 30.
+- **Hover = zesvětlení skla, žádná barevná záře** (modrá záře uživateli vadila).
+- Pozadí za dialogem: jen rozmazat + oživit barvy, **ne** šedé „zakalení“.
+- Rozhodující předloha chování: `docs/preview_neo.html` („přesně takhle to chci“).
+
+**Uživatel NEchce:** testovací funkce (bezpečný režim, diagnostika, FPS), „vrátit zpět“
+po skrytí, vlastní kategorie, weby jako karty, denní přehled herního času.
+Zvuky/haptika a počasí možná později.
+
+---
+
+## 5. Co je v plánu
+
+**Další krok (až bude uživatel u headsetu, ~29. 9.):**
+1. Otestovat checklist z `CLAUDE.md` a opravit, co nebude sedět.
+2. Přesunout addon Meta tlačítka (**RedirectServices**, služba přístupnosti) do tohoto repa
+   a naučit ho neotevírat launcher přes běžící VR hru.
+3. **Lišta běžící aplikace** dole na panelu (pilulka jako horní bublina): skutečný název
+   aplikace, **Pokračovat** a **Ukončit**. Ukončení i detekci musí dělat addon
+   (Android 14 obyčejné aplikaci nedovolí zavřít jinou) – čte systémové menu Questu
+   a zmáčkne jeho „Ukončit“. Uživatel nechtěl jednodušší verzi s odhadem.
+
+**Nápady, které uživatel zatím nevybral** (nabídnuto 27. 9.):
+barevné světlo hovernuté hry na skle panelu; ovládání joystickem jako na konzoli;
+tlačítko „…“ na kartě místo držení; ovládání hudby v rychlém menu; volitelná připomínka
+pauzy; vlastní pozadí; nástup karet kaskádou; varování při plném úložišti.
+Starší nápady: rozložení jako Lightning Launcher (hry velké, aplikace kolečka),
+paralaxa mřížky, rychlé menu přímo z Meta tlačítka.
+
+---
+
+## 6. Jak se staví, vydává a ověřuje
+
+- **Build dělá GitHub Actions** při každém pushi (`.github/workflows/build.yml`).
+  Změny jen v `.md` / `docs/` build nespouští. Každý build = GitHub Release
+  `v2.0.<číslo běhu>` (mimo `main` jako testovací/prerelease), `versionCode = 2000 + číslo běhu`.
+- Launcher kontroluje nové verze při otevření (max 1× za 6 h) nebo tlačítkem v nastavení;
+  testovací buildy nabízí (výchozí zapnuto).
+- Podpis pevným klíčem `keystore/neo-debug.keystore` → aktualizace bez ztráty nastavení.
+- **Bez headsetu:** `tools/compile-check.sh` (rychlá kontrola, že se Java přeloží) a
+  `tools/screenshot/run.sh` (skutečný kód v emulaci, vyfotí mřížku, hover, kukátko,
+  karusel, rychlé menu, nastavení, hledání, menu karty – ~3 min, výstup do `out/`).
+- V cloudové session Claude Code je `dl.google.com` zablokovaný → plný Gradle build
+  lokálně nejde, jen přes CI.
+
+---
+
+## 7. Technické pasti (naučeno tvrdě)
+
+1. **Žádný blur na jednotlivých kartách** – headset to neutáhne (jednou spadl).
+   Jeden efekt na celou vrstvu, stíny předpočítané.
+2. **Stav nikdy z konce animace** (`withEndAction`) – všechno se dopočítává z času
+   (`Spring`, `Eased`), zavření dialogu mění stav hned.
+3. **Fokus/hover = jeden zdroj pravdy**, počítaný z polohy laseru (Quest neposílá
+   spolehlivě HOVER_ENTER/EXIT mezi kartami). HOVER_EXIT chodí i těsně před stiskem → 90 ms odklad.
+4. **3D náklon jen přes `RenderNode.setRotationX/Y`** (vlastní perspektivní matice kartu
+   po odrolování nevykreslila).
+5. **AGSL shadery** (hloubka ostrosti, čočka kukátka) jsou vidět až na headsetu – emulace je neumí.
+
+---
+
+## 8. Mapa hlavních souborů (`app/src/main/java/com/neolauncher/`)
+
+| Soubor | Co dělá |
+|---|---|
+| `LauncherActivity.java` | Jediná aktivita, skládá všechno, otevírá dialogy |
+| `ui/NeoLauncherView.java` | Panel, mřížka, hover, ornament, levá lišta (ladicí konstanty nahoře) |
+| `ui/QuickMenuView.java` | Rychlé menu |
+| `ui/SettingsSheet.java`, `SearchSheet.java`, `AppMenu.java`, `WhatsNewSheet.java`, `UpdateSheet.java` | Dialogy |
+| `ui/CarouselView.java` | Karusel |
+| `ui/Glass.java`, `GlassSurface.java`, `GlassDrawable.java`, `Palette.java` | Tokeny mezer, sklo, barvy |
+| `ui/Icons.java`, `IconPaths.java`, `SvgPath.java` | Ikony Lucide |
+| `ui/PeepholeAnimation.java`, `LaunchLens.java` | Animace spuštění |
+| `ui/Spring.java`, `ModalDepth.java`, `OverlayHost.java` | Fyzika, ustoupení launcheru, dialogy „vyrůstající“ z místa |
+| `data/AppRepository.java`, `Prefs.java`, `UsageInfo.java` | Seznam aplikací, nastavení, herní čas |
+| `art/ArtworkLoader.java` | Obrázky her (bannery) |
+| `launch/AppLauncher.java` | Spouštění aplikací na Questu |
+| `update/Updater.java` | Aktualizace z GitHubu |
+| `app/src/main/assets/novinky.txt` | Texty „Co je nového“ |
+
+Licence: GPL-3.0 (odvozeno z Lightning Launcheru, threethan); ikony Lucide (ISC) –
+viz `THIRD_PARTY_NOTICES.md`.

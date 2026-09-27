@@ -84,7 +84,7 @@ java -Xmx4g -Dneo.banners="$W/banners" -Dneo.out="$W/out" -Dneo.scroll=0.9 -Dneo
 
 # 6) Slozit s ilustracnim pozadim
 javac -nowarn -d classes "$HERE/Compose.java"
-for n in idle hover launch-1 launch-2 launch-3 launch-4 launch-5 launch-6 carousel carousel-move rail quickmenu-open quickmenu idle-vision settings search whatsnew appmenu; do
+for n in idle hover launch-1 launch-2 launch-3 launch-4 launch-5 launch-6 carousel carousel-move rail quickmenu-open quickmenu idle-vision settings settings-2 settings-3 settings-4 settings-5 settings-light search whatsnew appmenu; do
   java -Djava.awt.headless=true -cp classes Compose out/neo-$n.png out/neo-quest-$n.png
 done
 echo "Hotovo: $W/out"

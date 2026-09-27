@@ -234,7 +234,7 @@ public final class SettingsSheet {
 
         final boolean usageOk = new UsageInfo(c).hasPermission();
         grid(c, page,
-                toggleTile(c, Icons.CLOUD, "Obrázky z internetu", "Bannery her ze stejných zdrojů jako Lightning Launcher",
+                toggleTile(c, Icons.CLOUD, "Obrázky z internetu", "Chybějící bannery her se stáhnou z veřejných databází",
                         prefs.onlineArt(), prefs::setOnlineArt),
                 actionTile(c, Icons.REFRESH, "Obrázky znovu", "Smaže stažené bannery a stáhne je znovu",
                         "Stáhnout", v -> {

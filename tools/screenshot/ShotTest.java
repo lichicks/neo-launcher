@@ -260,18 +260,40 @@ public class ShotTest {
         pump(500);
         capture(a, root, outDir + "/neo-quickmenu.png");
 
-        // --- Nastaveni jako dashboard (sklo visionOS) + svetly styl panelu ---
+        // --- Nastaveni jako dashboard: vsech 5 stranek v tmavem skle (vychozi) ---
         overlay.close();
         pump(600);
-        prefs.setGlassStyle(com.neolauncher.data.Prefs.GLASS_VISION);
-        pump(300);
-        capture(a, root, outDir + "/neo-idle-vision.png");
         android.view.View sheet = com.neolauncher.ui.SettingsSheet.build(a, prefs,
                 new com.neolauncher.data.AppRepository(a, prefs), art, () -> { }, () -> { }, () -> { },
                 overlay::close);
         overlay.show(sheet, null, grid.settingsRect(), grid.frameRect(), Math.round(1000 * d));
         pump(1500);
         capture(a, root, outDir + "/neo-settings.png");
+        final String[] pages = {"Aplikace", "Quest", "Aktualizace", "O Neo"};
+        for (int i = 0; i < pages.length; i++) {
+            android.view.View pill = findText(sheet, pages[i]);
+            if (pill != null) pill.performClick();
+            pump(1300);
+            capture(a, root, outDir + "/neo-settings-" + (i + 2) + ".png");
+        }
+
+        // --- Svetly styl skla (panel i dialogy, jako po prepnuti v nastaveni) ---
+        overlay.close();
+        pump(600);
+        prefs.setGlassStyle(com.neolauncher.data.Prefs.GLASS_VISION);
+        com.neolauncher.ui.Glass.setStyle(true);
+        pump(300);
+        capture(a, root, outDir + "/neo-idle-vision.png");
+        android.view.View light = com.neolauncher.ui.SettingsSheet.build(a, prefs,
+                new com.neolauncher.data.AppRepository(a, prefs), art, () -> { }, () -> { }, () -> { },
+                overlay::close);
+        overlay.show(light, null, grid.settingsRect(), grid.frameRect(), Math.round(1000 * d));
+        pump(1500);
+        capture(a, root, outDir + "/neo-settings-light.png");
+        overlay.close();
+        pump(600);
+        prefs.setGlassStyle(com.neolauncher.data.Prefs.GLASS_DARK);
+        com.neolauncher.ui.Glass.setStyle(false);
 
         // --- Hledani ---
         overlay.close();
@@ -319,6 +341,19 @@ public class ShotTest {
         overlay.show(menuView, cardAt, grid.frameRect(), Math.round(300 * d));
         pump(1200);
         capture(a, root, outDir + "/neo-appmenu.png");
+    }
+
+    /** Prvni TextView s presne timto textem (pilulka kategorie v nastaveni). */
+    private static android.view.View findText(android.view.View v, String text) {
+        if (v instanceof android.widget.TextView && text.contentEquals(((android.widget.TextView) v).getText())) return v;
+        if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int i = 0; i < g.getChildCount(); i++) {
+                android.view.View e = findText(g.getChildAt(i), text);
+                if (e != null) return e;
+            }
+        }
+        return null;
     }
 
     private static android.widget.EditText findEdit(android.view.View v) {

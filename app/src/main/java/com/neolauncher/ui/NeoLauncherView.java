@@ -88,6 +88,16 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
      * a baterii - napul zanorena do horni hrany panelu (stred na frame.top).
      */
     private static final float ORN_H = 52f;
+    /** Polozky ornamentu (zalozky, stav) - soustredne s ornamentem: (52 - 40) / 2 = 6. */
+    private static final float ORN_ITEM_H = 40f;
+    private static final float ORN_INSET = 6f;
+    /** Vodorovny okraj textu v polozce ornamentu (zalozky i stav). */
+    private static final float ORN_PAD_X = 18f;
+    /** Mezera mezi zalozkami a oddelovacem (z obou stran stejna). */
+    private static final float ORN_DIVIDER = 10f;
+    /** Mezi casem, baterii a ikonou. */
+    private static final float ORN_STATUS_GAP = 12f;
+    private static final float ORN_ICON = 17f;
     private static final float FRAME_TOP = 36f;
     /** Mrizka zacina pod ornamentem (i zvetsena karta v prvni rade ho nezakryje). */
     private static final float GRID_TOP = 50f;
@@ -270,7 +280,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private long lowBatterySinceNs;
     private static final long LOW_BATTERY_PULSE_NS = 8_000_000_000L;
     private long clockMinute = -1;
-    private String clockTime = "", clockDate = "";
+    private String clockTime = "";
 
     // --- Kresleni ------------------------------------------------------------------
     private final Matrix shaderMatrix = new Matrix();
@@ -1804,11 +1814,13 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             Calendar cal = Calendar.getInstance();
             clockTime = String.format(Locale.ROOT, "%02d:%02d",
                     cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE));
-            clockDate = cal.get(Calendar.DAY_OF_MONTH) + ". " + (cal.get(Calendar.MONTH) + 1) + ".";
         }
-        // Ornament: [zalozky] | cas datum [baterie], stred na horni hrane panelu.
+        // Ornament: [zalozky] | cas [baterie] ikona, stred na horni hrane panelu.
+        // Soumerne: text prvni zalozky i ikona na konci maji od okraje ORN_INSET + ORN_PAD_X,
+        // oddelovac ma z obou stran ORN_DIVIDER, polozky stavu mezi sebou ORN_STATUS_GAP.
+        // Datum je az v rychlem menu (tady by jen zabiralo misto).
         final float midY = frame.top;
-        final float padX = dp(18), itemH = dp(40), inner = dp(6);
+        final float padX = dp(ORN_PAD_X), itemH = dp(ORN_ITEM_H), inner = dp(ORN_INSET);
         float tabsW = 0;
         final float[] widths = new float[TAB_NAMES.length];
         for (int i = 0; i < TAB_NAMES.length; i++) {
@@ -1816,9 +1828,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             tabsW += widths[i];
         }
         // Na konci ikonka posuvniku = napoveda, ze klepnuti otevre rychle menu.
-        final float statusW = dp(14) + clockText.measureText(clockTime) + dp(10)
-                + clockText.measureText(clockDate) + dp(12) + batteryWidth() + dp(12) + dp(18) + dp(10);
-        final float w = inner + tabsW + dp(20) + statusW + inner;
+        final float statusW = padX + clockText.measureText(clockTime) + dp(ORN_STATUS_GAP)
+                + batteryWidth() + dp(ORN_STATUS_GAP) + dp(ORN_ICON) + padX;
+        final float w = inner + tabsW + 2 * dp(ORN_DIVIDER) + statusW + inner;
         ornRect.set(frame.centerX() - w / 2f, midY - dp(ORN_H) / 2f, frame.centerX() + w / 2f, midY + dp(ORN_H) / 2f);
         float x = ornRect.left + inner;
         for (int i = 0; i < TAB_NAMES.length; i++) {
@@ -1826,8 +1838,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             x += widths[i];
         }
         tabsRect.set(tabRects[0].left, tabRects[0].top, x, tabRects[0].bottom);
-        ornDividerX = x + dp(10);
-        statusRect.set(ornDividerX + dp(4), midY - itemH / 2f, ornRect.right - inner, midY + itemH / 2f);
+        ornDividerX = x + dp(ORN_DIVIDER);
+        statusRect.set(ornDividerX + dp(ORN_DIVIDER), midY - itemH / 2f, ornRect.right - inner, midY + itemH / 2f);
 
         // Leva lista: logo, oddelovac, 4 polozky. Rozbaleni = sirsi (popisky).
         final float e = Math.max(0f, railExpand.get(now));
@@ -1879,7 +1891,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 radius, radius, stroke);
     }
 
-    /** Horni "ornament": zalozky s posuvnym indikatorem, oddelovac, hodiny, datum a baterie. */
+    /** Horni "ornament": zalozky s posuvnym indikatorem, oddelovac, hodiny a baterie. */
     private void drawOrnament(Canvas c, long now) {
         final float midY = ornRect.centerY();
         final float itemH = tabRects[0].height();
@@ -1925,16 +1937,12 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         }
         final Paint.FontMetrics cfm = clockText.getFontMetrics();
         final float cbase = midY - (cfm.ascent + cfm.descent) / 2f;
-        float x = ornDividerX + dp(14);
+        float x = statusRect.left + dp(ORN_PAD_X);
         clockText.setColor(0xF2FFFFFF);
         c.drawText(clockTime, x, cbase, clockText);
-        x += clockText.measureText(clockTime) + dp(10);
-        clockText.setColor(0xB3FFFFFF);
-        c.drawText(clockDate, x, cbase, clockText);
-        clockText.setColor(0xF2FFFFFF);
-        x += clockText.measureText(clockDate) + dp(12);
+        x += clockText.measureText(clockTime) + dp(ORN_STATUS_GAP);
         drawBattery(c, x, midY);
-        Icons.draw(c, Icons.SLIDERS, batteryRect.right + dp(12) + dp(9), midY, dp(17),
+        Icons.draw(c, Icons.SLIDERS, batteryRect.right + dp(ORN_STATUS_GAP) + dp(ORN_ICON) / 2f, midY, dp(ORN_ICON),
                 Color.argb(Math.round(lerp(0xB3, 0xFF, sh)), 255, 255, 255), dp(1.7f), 1f, fill);
     }
 

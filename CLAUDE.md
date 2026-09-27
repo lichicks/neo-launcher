@@ -25,10 +25,22 @@ Starý fork (v1.x) se dá pořád postavit ručně přes
 **Dialogy (nastavení, rychlé menu, menu karty, aktualizace)** mají od
 2026-09-27 styl skla z visionOS podle dvou předloh od uživatele (smart-home
 dashboardy): světle šedé matné sklo s bílým okrajem a světlou horní hranou,
-uvnitř světlejší dlaždice (radius 24), ikony v kulatém skle, pilulky (vybraná
+uvnitř světlejší dlaždice, ikony v kulatém skle, pilulky (vybraná
 = bílá s tmavým textem), přepínač bílý s tmavou tečkou, velké bílé nadpisy.
 Barvy jsou v `Glass` (`GLASS_TOP/BOTTOM`, `TILE`, `INK`). Hlavní panel má
-volbu „Styl skla“: Tmavé (preview, výchozí) / visionOS (světlejší šedé).
+volbu „Styl skla“: Tmavé (preview, výchozí) / Světlé (světlejší šedé).
+
+**Mezery a zaoblení (od 2026-09-27, uživateli vadily „náhodné“ mezery):**
+všechno bere tokeny z `Glass` — vnitřní okraj panelu `PAD` 20 (ze všech
+stran stejný), nadpis → obsah `SECTION` 20, mezi dlaždicemi `GAP` 12
+(vodorovně i svisle), malé prvky vedle sebe `GAP_S` 8, text v dlaždici
+`TILE_PAD` 16, hlavní tlačítko `BUTTON_H` 48. Rohy jsou **soustředné**
+(vnitřní radius = vnější − odsazení): dlaždice `R_TILE` 20, panel
+`R_PANEL` = 20 + 20 = 40, náhled v dlaždici odsazený `INSET` 8 má `R_INNER`
+12, kolečko ikony v kapsli má stejný okraj ze všech stran (hledání: kapsle
+52, kolečko 40, okraj 6). Ornament: položky 40 v bublině 52 (okraj 6),
+oddělovač má z obou stran stejnou mezeru. Nová okna stavět jen z těchto
+tokenů, žádná „od oka“ čísla.
 
 **`docs/preview_neo.html`** — interaktivní HTML prototyp. Uživatel ho
 schválil větou "přesně takhle to chci v tom Questu". Když je spor o to,
@@ -74,14 +86,17 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 ### Rozložení okna (od 2026-09-27, podle předloh z visionOS od uživatele)
 - **Skleněný panel** jen s mřížkou karet (všechny rohy zaoblené).
 - **Ornament nahoře** — plovoucí „bublina“ se záložkami (Hry / Aplikace /
-  Vše), časem, datem a baterií, **napůl zanořená do horní hrany panelu**
-  (střed na `frame.top`). Klepnutí na čas/baterii = rychlé menu.
+  Vše), časem (bez data – to je v rychlém menu, přání uživatele) a baterií,
+  **napůl zanořená do horní hrany panelu** (střed na `frame.top`).
+  Klepnutí na čas/baterii = rychlé menu.
 - **Levá lišta** (jako tab bar ve visionOS) — logo Neo a ikony Knihovna
   (klepnutí odroluje nahoru), Hledat, Karusel, Rychlé menu, Nastavení. Po najetí
   laserem se na pružině rozbalí a ukáže popisky. Uživatel chtěl viditelné
   tlačítko nastavení („průměrný uživatel neví, že má klepnout na logo“).
 - **Rychlé menu** vyjede jako boční panel vpravo přes celou výšku panelu
-  (`OverlayHost.showSide`), dole tlačítko „Nastavení Nea“.
+  (`OverlayHost.showSide`): nahoře hodiny + celé datum, vpravo v řadě
+  pilulky Wi-Fi a baterie, pak karta „Naposledy hráno“, posuvníky, dlaždice
+  (vyplní zbytek výšky) a dole tlačítko „Nastavení Nea“ — mezi vším `GAP`.
 - Okno 1176×664 dp: vlevo 88 dp na lištu, nahoře 36 dp (půlka ornamentu),
   vpravo 24 / dole 30 dp průhledný okraj pro „vyskočení“ karty (vypínatelné).
 
@@ -138,7 +153,7 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
   (pak jen ztmavení okolí)
 - Gumové rolování: lerp 0.16, rubber band 0.38, squish max 4.5 % (konstanty
   z preview), setrvačnost po tažení, thumbstick (ACTION_SCROLL)
-- Ornament: záložky Hry / Aplikace / Vše, hodiny + datum, baterie (barvy
+- Ornament: záložky Hry / Aplikace / Vše, hodiny, baterie (barvy
   dle %, 1 blesk = nabíjení, 2 = rychlé > 7.5 W). Logo Neo je v levé liště
   (klik = nastavení, 5× = karusel).
 - Přesouvání: podržet kartu 450 ms → zvedne se → táhnout (auto-rolování
@@ -203,7 +218,7 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
   (Android nastavení, záložně Nastavení Questu), Nastavení Questu, Menu Questu
   (`systemux://quick_settings` — systémové rychlé nastavení na vše ostatní:
   průchod, sdílení…), Soubory, Prohlížeč, Fotoaparát, Neo (nastavení).
-  Úložiště dole. Addon Meta tlačítka zůstává beze změny.
+  Úložiště je v nastavení (widget). Addon Meta tlačítka zůstává beze změny.
 - Nastavení jako dashboard (visionOS): nadpis, kategorie pilulkami (Vzhled,
   Aplikace, Quest, Aktualizace, O Neo), dlaždice s ikonou a přepínačem
   (klepnutí kamkoliv na dlaždici přepne = velký cíl pro laser) nebo volbami,
@@ -335,7 +350,7 @@ Možnosti:
 RenderEffect i AGSL shader jedou přes opravdovou Skia/HWUI. Stáhne opravdové
 bannery her, vyfotí klidový stav, stav s kartou pod "laserem" po odrolování,
 6 fází animace spuštění (6× zpomalené), karusel (klid + pohyb), rychlé menu,
-panel ve stylu visionOS a nastavení, a složí to s ilustračním pozadím. Potřebuje jen JDK, Maven a přístup na Maven
+světlé sklo, nastavení, hledání, „Co je nového“ a menu karty, a složí to s ilustračním pozadím. Potřebuje jen JDK, Maven a přístup na Maven
 Central + GitHub (funguje i v cloudové session). Trvá ~3 min, poprvé stáhne
 ~350 MB. **Používat po každé změně kreslení** — takhle se našla chyba v bodě 6.
 Pozadí a systémové rozmazání prostředí jsou jen ilustrace; skutečný vzhled
@@ -382,6 +397,11 @@ byl odinstalovaný.)
   česky s diakritikou – jak píšeš uživateli, ne technicky). Launcher ji ukáže
   po aktualizaci v okně „Co je nového“ a CI ji dá do poznámek k releasu
   (okno aktualizace). Starší sekce nech pod ní.
+
+- **Žádné cizí značky v textech pro uživatele** (UI, `novinky.txt`, poznámky
+  k releasu): nepsat „visionOS“, „iOS“, „iPhone“, „Apple“ apod. Inspirace je
+  jasná, ale uživatel to tam psát nechce. (Interní poznámky v kódu a tady
+  v CLAUDE.md nevadí.)
 
 - **Uživatel mluví česky** — komentáře v kódu i komunikace česky.
   V kódu komentáře bez diakritiky, texty v UI a `.md` s diakritikou.

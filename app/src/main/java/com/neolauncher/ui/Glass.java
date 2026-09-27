@@ -15,9 +15,9 @@ import android.widget.TextView;
 import java.util.function.IntConsumer;
 
 /**
- * Stavebnice pro dialogy ve stylu skla z visionOS (nastaveni, menu aplikace,
- * aktualizace): svetlejsi matne sklo s bilym okrajem a svetlou horni hranou,
- * dlazdice, pilulky (vybrana = bila s tmavym textem). Vse programove, bez XML.
+ * Stavebnice pro dialogy ve stylu matneho skla (nastaveni, menu aplikace,
+ * aktualizace): sklo s bilym okrajem a svetlou horni hranou, dlazdice,
+ * pilulky (vybrana = bila s tmavym textem). Vse programove, bez XML.
  * Prvky maji stav "hovered", ktery Quest nastavi, kdyz na ne mirite laserem.
  */
 public final class Glass {
@@ -28,6 +28,32 @@ public final class Glass {
     private static final int[] EMPTY = {};
 
     private Glass() {}
+
+    /*
+     * Jednotny rytmus mezer a zaobleni (dp) pro vsechna okna i rychle menu.
+     * Rohy jsou soustredne: vnitrni radius = vnejsi radius - odsazeni, takze
+     * okraj dlazdice bezi s okrajem panelu rovnobezne (jinak roh "nesedi").
+     */
+    /** Vnitrni okraj panelu - vsude a ze vsech stran stejny. */
+    public static final float PAD = 20f;
+    /** Mezi nadpisem panelu a obsahem (a mezi velkymi celky). */
+    public static final float SECTION = 20f;
+    /** Mezi dlazdicemi a prvky v mrizce - vodorovne i svisle stejne. */
+    public static final float GAP = 12f;
+    /** Hlavni tlacitko pres celou sirku (Hotovo, Nastaveni Nea...). */
+    public static final float BUTTON_H = 48f;
+    /** Mezi malymi prvky vedle sebe (pilulky, tlacitka). */
+    public static final float GAP_S = 8f;
+    /** Dlazdice, karty, posuvniky. */
+    public static final float R_TILE = 20f;
+    /** Panel = dlazdice + okraj (soustredne). */
+    public static final float R_PANEL = R_TILE + PAD;
+    /** Vnitrni okraj dlazdice s textem (dlazdice nastaveni, widgety). */
+    public static final float TILE_PAD = 16f;
+    /** Odsazeni obsahu uvnitr dlazdice (nahled hry v karte). */
+    public static final float INSET = 8f;
+    /** Nahled uvnitr dlazdice (soustredne s dlazdici). */
+    public static final float R_INNER = R_TILE - INSET;
 
     public static float dp(Context c, float v) {
         return TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v,
@@ -41,7 +67,7 @@ public final class Glass {
     /*
      * Barvy skla dialogu (nahore svetlejsi) - sdili je i rychle menu. Ridi se
      * volbou "Styl skla", at dialog vypada jako zbytek launcheru: tmave sklo
-     * (vychozi, jako panel z preview) nebo svetle sede jako ve visionOS.
+     * (vychozi, jako panel z preview) nebo svetle sede.
      */
     public static int GLASS_TOP;
     public static int GLASS_BOTTOM;
@@ -56,7 +82,7 @@ public final class Glass {
         setStyle(false);
     }
 
-    /** @param vision true = svetle sklo visionOS, false = tmave sklo jako panel launcheru */
+    /** @param vision true = svetle sede sklo, false = tmave sklo jako panel launcheru */
     public static void setStyle(boolean vision) {
         if (vision) {
             GLASS_TOP = 0xD6646872;
@@ -79,9 +105,9 @@ public final class Glass {
     /** Tmavy text na bilem (vybrana pilulka, hlavni tlacitko). */
     public static final int INK = 0xFF1C212B;
 
-    /** Matne sklo jako ve visionOS: svetle sede, bily okraj, svetla horni hrana. */
+    /** Matne sklo: bily okraj, svetla horni hrana, radius R_PANEL. */
     public static Drawable panel(Context c) {
-        return panel(c, 30);
+        return panel(c, R_PANEL);
     }
 
     public static Drawable panel(Context c, float radiusDp) {
@@ -98,15 +124,15 @@ public final class Glass {
     /** Dlazdice (karta nastaveni, widget) - pri miren laserem se rozsviti. */
     public static Drawable tile(Context c) {
         StateListDrawable s = new StateListDrawable();
-        s.addState(PRESSED, round(c, 0x40FFFFFF, 24, 0x80FFFFFF));
-        s.addState(HOVERED, round(c, TILE_HOVER, 24, 0x66FFFFFF));
-        s.addState(EMPTY, round(c, TILE, 24, TILE_STROKE));
+        s.addState(PRESSED, round(c, 0x40FFFFFF, R_TILE, 0x80FFFFFF));
+        s.addState(HOVERED, round(c, TILE_HOVER, R_TILE, 0x66FFFFFF));
+        s.addState(EMPTY, round(c, TILE, R_TILE, TILE_STROKE));
         return s;
     }
 
     /** Staticka dlazdice bez hoveru (widgety). */
     public static Drawable widget(Context c) {
-        return round(c, TILE, 24, TILE_STROKE);
+        return round(c, TILE, R_TILE, TILE_STROKE);
     }
 
     /** Pilulka (kategorie, volba): vybrana = bila s tmavym textem, jinak obrys. */
@@ -167,7 +193,7 @@ public final class Glass {
         return t;
     }
 
-    /** Tlacitko-pilulka. accent = hlavni akce (bila s tmavym textem jako ve visionOS), jinak obrys. */
+    /** Tlacitko-pilulka. accent = hlavni akce (bila s tmavym textem), jinak obrys. */
     public static TextView button(Context c, String label, boolean accent, View.OnClickListener l) {
         TextView b = text(c, label, 14, accent ? INK : Color.WHITE, true);
         b.setGravity(Gravity.CENTER);
@@ -188,7 +214,7 @@ public final class Glass {
         TextView b = text(c, label, 15, danger ? 0xFFFCA5A5 : Color.WHITE, false);
         b.setGravity(Gravity.CENTER_VERTICAL);
         b.setPadding(dpi(c, 14), dpi(c, 11), dpi(c, 14), dpi(c, 11));
-        b.setBackground(states(c, 14, 0x00FFFFFF, 0x2EFFFFFF, 0x47FFFFFF, 0, 0));
+        b.setBackground(states(c, R_TILE, 0x00FFFFFF, 0x2EFFFFFF, 0x47FFFFFF, 0, 0));
         b.setClickable(true);
         b.setFocusable(true);
         b.setOnClickListener(l);

@@ -44,17 +44,17 @@ public final class WhatsNewSheet {
 
         LinearLayout root = new LinearLayout(c);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackground(Glass.panel(c, 28));
-        final int pad = Glass.dpi(c, 24);
-        root.setPadding(pad, Glass.dpi(c, 20), pad, Glass.dpi(c, 18));
+        root.setBackground(Glass.panel(c));
+        final int pad = Glass.dpi(c, Glass.PAD);
+        root.setPadding(pad, pad, pad, pad);
 
         LinearLayout header = new LinearLayout(c);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        header.addView(new GlassWidgets.IconView(c, Icons.SPARKLE, 44, Color.WHITE));
+        header.addView(new GlassWidgets.IconView(c, Icons.SPARKLE, 40, Color.WHITE));
         LinearLayout titles = new LinearLayout(c);
         titles.setOrientation(LinearLayout.VERTICAL);
-        titles.setPadding(Glass.dpi(c, 14), 0, 0, 0);
+        titles.setPadding(Glass.dpi(c, Glass.GAP), 0, 0, 0);
         titles.addView(Glass.text(c, "Co je nového", 24, Color.WHITE, true));
         titles.addView(Glass.text(c, "Neo " + version, 13, 0xB3FFFFFF, false));
         header.addView(titles, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -67,7 +67,7 @@ public final class WhatsNewSheet {
         body.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(body);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-        slp.topMargin = Glass.dpi(c, 12);
+        slp.topMargin = Glass.dpi(c, Glass.SECTION);
         root.addView(scroll, slp);
 
         for (int i = 0; i < sections.size(); i++) {
@@ -76,11 +76,11 @@ public final class WhatsNewSheet {
             if (i == 1) {
                 TextView older = Glass.text(c, "DŘÍVE", 12, 0x80FFFFFF, true);
                 older.setLetterSpacing(0.08f);
-                older.setPadding(0, Glass.dpi(c, 22), 0, 0);
+                older.setPadding(0, Glass.dpi(c, Glass.SECTION), 0, 0);
                 body.addView(older);
             }
             TextView t = Glass.text(c, s.title, latest ? 18 : 15, latest ? Color.WHITE : 0xCCFFFFFF, true);
-            t.setPadding(0, Glass.dpi(c, latest ? 6 : 12), 0, Glass.dpi(c, 6));
+            t.setPadding(0, latest ? 0 : Glass.dpi(c, Glass.GAP), 0, Glass.dpi(c, Glass.GAP_S));
             body.addView(t);
             for (String p : s.points) {
                 LinearLayout row = new LinearLayout(c);
@@ -97,10 +97,10 @@ public final class WhatsNewSheet {
         }
 
         TextView ok = Glass.button(c, "Super", true, v -> onClose.run());
-        ok.setPadding(0, Glass.dpi(c, 12), 0, Glass.dpi(c, 12));
+        ok.setPadding(0, 0, 0, 0);
         LinearLayout.LayoutParams olp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        olp.topMargin = Glass.dpi(c, 14);
+                Glass.dpi(c, Glass.BUTTON_H));
+        olp.topMargin = Glass.dpi(c, Glass.SECTION);
         root.addView(ok, olp);
         return root;
     }

@@ -297,6 +297,28 @@ public class ShotTest {
         overlay.show(news, null, null, grid.frameRect(), Math.round(620 * d));
         pump(1200);
         capture(a, root, outDir + "/neo-whatsnew.png");
+
+        // --- Menu karty (podrzet kartu) ---
+        overlay.close();
+        pump(500);
+        final AppEntry first = apps.get(0);
+        final android.graphics.RectF cardAt = new android.graphics.RectF(grid.frameRect().left + 24 * d, grid.frameRect().top + 50 * d,
+                grid.frameRect().left + 290 * d, grid.frameRect().top + 216 * d);
+        android.view.View menuView = com.neolauncher.ui.AppMenu.build(a, first, first.systemLabel, false, true,
+                new com.neolauncher.ui.AppMenu.Actions() {
+                    @Override public void launch() {}
+                    @Override public void favorite() {}
+                    @Override public void rename() {}
+                    @Override public void pickImage() {}
+                    @Override public void removeImage() {}
+                    @Override public void reloadImage() {}
+                    @Override public void hide() {}
+                    @Override public void info() {}
+                    @Override public void uninstall() {}
+                });
+        overlay.show(menuView, cardAt, grid.frameRect(), Math.round(300 * d));
+        pump(1200);
+        capture(a, root, outDir + "/neo-appmenu.png");
     }
 
     private static android.widget.EditText findEdit(android.view.View v) {

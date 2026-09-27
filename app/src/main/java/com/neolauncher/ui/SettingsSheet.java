@@ -34,7 +34,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Nastaveni jako dashboard ve stylu skla z visionOS (predlohy od uzivatele):
+ * Nastaveni jako dashboard z matneho skla (predlohy od uzivatele):
  * vlevo nadpis, kategorie jako pilulky a dlazdice s ikonou v kolecku,
  * prepinacem nebo volbami; vpravo widgety (datum, cas, Neo, system).
  * Otevira se klepnutim na logo Neo a "vyroste" z nej (OverlayHost).
@@ -49,8 +49,8 @@ public final class SettingsSheet {
                              Runnable onClose) {
         LinearLayout root = new LinearLayout(c);
         root.setOrientation(LinearLayout.HORIZONTAL);
-        root.setBackground(Glass.panel(c, 32));
-        final int pad = Glass.dpi(c, 22);
+        root.setBackground(Glass.panel(c));
+        final int pad = Glass.dpi(c, Glass.PAD);
         root.setPadding(pad, pad, pad, pad);
         root.setMinimumHeight(Glass.dpi(c, 560));
 
@@ -77,7 +77,7 @@ public final class SettingsSheet {
         pills.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        plp.topMargin = Glass.dpi(c, 16);
+        plp.topMargin = Glass.dpi(c, Glass.GAP);
         left.addView(pills, plp);
 
         ScrollView scroll = new ScrollView(c);
@@ -89,7 +89,7 @@ public final class SettingsSheet {
         page.setPadding(0, 0, 0, Glass.dpi(c, 4));
         scroll.addView(page);
         LinearLayout.LayoutParams slp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f);
-        slp.topMargin = Glass.dpi(c, 16);
+        slp.topMargin = Glass.dpi(c, Glass.SECTION);
         left.addView(scroll, slp);
 
         final Ctx x = new Ctx(c, prefs, repo, art, onAppsChanged, onCheckUpdates, onWhatsNew);
@@ -103,7 +103,7 @@ public final class SettingsSheet {
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-            if (i > 0) lp.leftMargin = Glass.dpi(c, 8);
+            if (i > 0) lp.leftMargin = Glass.dpi(c, Glass.GAP_S);
             pills.addView(pillViews[i], lp);
         }
         showPage(x, page, 0);
@@ -113,7 +113,7 @@ public final class SettingsSheet {
         right.setOrientation(LinearLayout.VERTICAL);
         LinearLayout.LayoutParams rlp = new LinearLayout.LayoutParams(Glass.dpi(c, 236),
                 LinearLayout.LayoutParams.MATCH_PARENT);
-        rlp.leftMargin = Glass.dpi(c, 20);
+        rlp.leftMargin = Glass.dpi(c, Glass.SECTION);
         root.addView(right, rlp);
         buildWidgets(x, right, onClose);
         return root;
@@ -158,7 +158,7 @@ public final class SettingsSheet {
                 pageAbout(x, page);
                 break;
         }
-        // Dlazdice nastoupi postupne (kaskada), jako ve visionOS.
+        // Dlazdice nastoupi postupne (kaskada).
         List<View> tiles = new ArrayList<>();
         for (int i = 0; i < page.getChildCount(); i++) {
             View rowView = page.getChildAt(i);
@@ -183,8 +183,8 @@ public final class SettingsSheet {
                 wide(c, Icons.APERTURE, "Hloubka ostrosti", "Rozmazání okolních karet, když na hru míříš",
                         Glass.segmented(c, new String[]{"Vypnuto", "Jemná", "Silná"}, prefs.dofMode(),
                                 prefs::setDofMode)),
-                wide(c, Icons.PALETTE, "Styl skla", "Tmavé z návrhu Nea, nebo světlé jako ve visionOS",
-                        Glass.segmented(c, new String[]{"Tmavé", "visionOS"}, prefs.glassStyle(),
+                wide(c, Icons.PALETTE, "Styl skla", "Tmavé matné sklo, nebo světlejší šedé",
+                        Glass.segmented(c, new String[]{"Tmavé", "Světlé"}, prefs.glassStyle(),
                                 prefs::setGlassStyle)));
 
         final int[] colOptions = {3, 4, 5, 6};
@@ -376,7 +376,7 @@ public final class SettingsSheet {
         top.addView(bigWidget(c, String.valueOf(cal.get(Calendar.DAY_OF_MONTH)), days[cal.get(Calendar.DAY_OF_WEEK) - 1]),
                 new LinearLayout.LayoutParams(0, Glass.dpi(c, 112), 1f));
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, Glass.dpi(c, 112), 1f);
-        tlp.leftMargin = Glass.dpi(c, 12);
+        tlp.leftMargin = Glass.dpi(c, Glass.GAP);
         top.addView(bigWidget(c, String.format(Locale.ROOT, "%d:%02d", cal.get(Calendar.HOUR_OF_DAY),
                 cal.get(Calendar.MINUTE)), months[cal.get(Calendar.MONTH)]), tlp);
         right.addView(top);
@@ -385,9 +385,9 @@ public final class SettingsSheet {
         LinearLayout neo = new LinearLayout(c);
         neo.setOrientation(LinearLayout.VERTICAL);
         neo.setBackground(Glass.widget(c));
-        final int p = Glass.dpi(c, 16);
+        final int p = Glass.dpi(c, Glass.TILE_PAD);
         neo.setPadding(p, p, p, p);
-        neo.addView(new GlassWidgets.IconView(c, Icons.NEO, 44, Color.WHITE));
+        neo.addView(new GlassWidgets.IconView(c, Icons.NEO, 40, Color.WHITE));
         TextView nt = Glass.text(c, "Neo " + version(c), 17, Color.WHITE, true);
         nt.setPadding(0, Glass.dpi(c, 10), 0, 0);
         neo.addView(nt);
@@ -395,12 +395,12 @@ public final class SettingsSheet {
         TextView upd = Glass.button(c, "Aktualizace", false, v -> x.onCheckUpdates.run());
         LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
-        ulp.topMargin = Glass.dpi(c, 12);
+        ulp.topMargin = Glass.dpi(c, Glass.GAP);
         ulp.gravity = Gravity.END;
         neo.addView(upd, ulp);
         LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
-        nlp.topMargin = Glass.dpi(c, 12);
+        nlp.topMargin = Glass.dpi(c, Glass.GAP);
         right.addView(neo, nlp);
 
         // System: aplikace a uloziste.
@@ -432,14 +432,14 @@ public final class SettingsSheet {
         }
         LinearLayout.LayoutParams sylp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
-        sylp.topMargin = Glass.dpi(c, 12);
+        sylp.topMargin = Glass.dpi(c, Glass.GAP);
         right.addView(sys, sylp);
 
         right.addView(new View(c), new LinearLayout.LayoutParams(1, 0, 1f));
         TextView done = Glass.button(c, "Hotovo", true, v -> onClose.run());
-        done.setPadding(0, Glass.dpi(c, 12), 0, Glass.dpi(c, 12));
+        done.setPadding(0, 0, 0, 0);
         right.addView(done, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
+                Glass.dpi(c, Glass.BUTTON_H)));
     }
 
     private static View bigWidget(Context c, String big, String small) {
@@ -487,7 +487,7 @@ public final class SettingsSheet {
         LinearLayout t = new LinearLayout(c);
         t.setOrientation(LinearLayout.VERTICAL);
         t.setBackground(Glass.tile(c));
-        final int p = Glass.dpi(c, 16);
+        final int p = Glass.dpi(c, Glass.TILE_PAD);
         t.setPadding(p, p, p, p);
         return t;
     }
@@ -572,7 +572,7 @@ public final class SettingsSheet {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 control instanceof GlassWidgets.Slider ? LinearLayout.LayoutParams.MATCH_PARENT
                         : LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = Glass.dpi(c, 14);
+        lp.topMargin = Glass.dpi(c, Glass.GAP);
         t.addView(control, lp);
         return t;
     }
@@ -581,7 +581,7 @@ public final class SettingsSheet {
     private static void grid(Context c, LinearLayout page, View... tiles) {
         LinearLayout row = new LinearLayout(c);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        final int gap = Glass.dpi(c, 12);
+        final int gap = Glass.dpi(c, Glass.GAP);
         for (int i = 0; i < tiles.length; i++) {
             View t = tiles[i] != null ? tiles[i] : new View(c);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0,
@@ -595,7 +595,7 @@ public final class SettingsSheet {
     private static void addRow(Context c, LinearLayout page, View row) {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
-        if (page.getChildCount() > 0) lp.topMargin = Glass.dpi(c, 12);
+        if (page.getChildCount() > 0) lp.topMargin = Glass.dpi(c, Glass.GAP);
         page.addView(row, lp);
     }
 

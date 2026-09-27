@@ -1,3 +1,9 @@
+# Úhlednější vzhled
+• Mezery a zaoblení rohů jsou teď všude stejné – rychlé menu, hledání, nastavení i ostatní okna do sebe líp zapadají
+• V horní liště je jen čas, celé datum najdeš v rychlém menu
+• Rychlé menu: baterie a Wi-Fi jsou nahoře vedle sebe a mezi všemi prvky je stejná mezera
+• Lupa v poli hledání sedí přesně uprostřed svého kolečka
+
 # Hvězdičky, chytré řazení a hledání
 • Oblíbené: v menu karty (podržet kartu) přidáš hvězdičku a hra se drží nahoře
 • Nové řazení v Nastavení → Aplikace: „Nejhranější“ podle herního času a „Chytré“ – nové hry první, pak ty, co hraješ nejvíc
@@ -9,15 +15,15 @@
 • V horní liště je ikonka rychlého menu (klepni na čas nebo baterii) a dialogy mají stejné sklo jako zbytek launcheru
 • Po každé aktualizaci se ukáže tohle okno s novinkami
 
-# Rozložení jako ve visionOS
+# Nové rozložení
 • Horní lišta je plovoucí bublina napůl zanořená do panelu
 • Vlevo lišta s ikonami (Knihovna, Karusel, Rychlé menu, Nastavení) – po najetí se vysune s popisky
 • Rychlé menu vyjíždí zprava jako boční panel
 
-# Nastavení ve stylu visionOS
+# Nový vzhled nastavení
 • Nastavení je přehledný dashboard s dlaždicemi a přepínači
-• Volba stylu skla: tmavé, nebo světlé jako ve visionOS
+• Volba stylu skla: tmavé, nebo světlé
 
 # Rychlé menu a fyzikální animace
 • Jas, hlasitost, Wi-Fi a zkratky na funkce Questu
-• Animace na pružinách jako na iPhonu, dialogy vyrůstají z místa, odkud je otevřeš
+• Plynulé animace na pružinách, dialogy vyrůstají z místa, odkud je otevřeš

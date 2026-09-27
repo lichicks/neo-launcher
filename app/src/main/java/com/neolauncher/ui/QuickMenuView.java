@@ -14,8 +14,6 @@ import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
-import android.os.Environment;
-import android.os.StatFs;
 import android.provider.Settings;
 import android.text.TextPaint;
 import android.view.InputDevice;
@@ -26,10 +24,13 @@ import java.util.Calendar;
 import java.util.Locale;
 
 /**
- * Rychle menu Nea - vlastni obdoba systemoveho menu Questu (Control Center
- * z iOS/visionOS): hodiny, baterie, Wi-Fi, posuvniky jasu a hlasitosti,
- * dlazdice hlavnich funkci Questu a volne misto. Otevira se klepnutim na
- * hodiny/baterii (vyjede z nich) nebo tlacitkem menu na ovladaci.
+ * Rychle menu Nea - vlastni obdoba systemoveho menu Questu (ovladaci
+ * centrum): hodiny, baterie, Wi-Fi, posuvniky jasu a hlasitosti, dlazdice
+ * hlavnich funkci Questu. Vyjede jako bocni panel vpravo po klepnuti na
+ * hodiny/baterii nebo tlacitkem menu na ovladaci.
+ * <p>
+ * Rozmery jsou z tokenu v Glass (PAD, SECTION, GAP, R_TILE...), at mezery
+ * a zaobleni sedi se vsemi ostatnimi okny.
  * <p>
  * Jas = Settings.System.SCREEN_BRIGHTNESS (potrebuje "Upravu systemovych
  * nastaveni", stejne jako QuestDim), hlasitost = AudioManager (bez opravneni).
@@ -59,19 +60,25 @@ public final class QuickMenuView extends View {
             "Soubory", "Prohlížeč", "Fotoaparát", "Neo"};
     private static final int[] TILE_ICONS = {Icons.WIFI, Icons.BLUETOOTH, Icons.GEAR, Icons.SLIDERS,
             Icons.FOLDER, Icons.GLOBE, Icons.CAMERA, Icons.NEO};
-    private static final float W_DP = 540f;
-    private static final float H_DP = 506f;
-    private static final float PAD = 24f;
-    private static final float SLIDER_H = 54f;
-    private static final float TILE_H = 86f;
-    private static final float GAP = 12f;
-    /** Postupny nastup prvku (kaskada jako v iOS), ms mezi prvky. */
+    private static final float W_DP = 400f;
+    private static final float H_DP = 598f;
+    /** Karta "Naposledy hrano": vyska a tlacitko uvnitr. */
+    private static final float CARD_H = 68f;
+    private static final float CARD_BTN_H = 36f;
+    private static final float SLIDER_H = 44f;
+    /** Pilulky baterie a Wi-Fi v hlavicce. */
+    private static final float PILL_H = 32f;
+    private static final float PILL_PAD = 12f;
+    /** Dlazdice rostou do volneho mista, ale jen v rozumnych mezich. */
+    private static final float TILE_MIN = 40f;
+    private static final float TILE_MAX = 72f;
+    /** Postupny nastup prvku (kaskada), ms mezi prvky. */
     private static final float STAGGER_MS = 28f;
 
     private static final int EL_BRIGHT = 0;
     private static final int EL_VOLUME = 1;
     private static final int EL_TILE0 = 2;
-    /** Karta "Naposledy hrano" (jen v uzkem panelu). */
+    /** Karta "Naposledy hrano". */
     private static final int EL_LAST = EL_TILE0 + TILE_LABELS.length;
     private static final int EL_COUNT = EL_LAST + 1;
 
@@ -89,10 +96,9 @@ public final class QuickMenuView extends View {
     private boolean charging, fastCharging;
     private boolean wifiOn;
     private int wifiBars;
-    private long freeBytes, totalBytes;
     private long shownNs;
-    /** Uzke rozlozeni (bocni panel): dlazdice vodorovne ve 2 sloupcich, dole "Vsechna nastaveni". */
-    private boolean narrow;
+    /** Zakladni linky hlavicky (spocitane z metriky pisma, aby cislice zacinaly presne na okraji). */
+    private float timeBase, dateBase;
     private com.neolauncher.data.AppEntry lastApp;
     private String lastTitle, lastSub, lastButton;
     private android.graphics.BitmapShader lastShader;
@@ -116,6 +122,7 @@ public final class QuickMenuView extends View {
     private final Path path = new Path();
     private final Path boltPath = new Path();
     private final RectF tmp = new RectF();
+    private final android.graphics.Rect textBounds = new android.graphics.Rect();
     private Shader highlight, glass;
 
     public QuickMenuView(Context c, Actions actions) {
@@ -168,18 +175,13 @@ public final class QuickMenuView extends View {
         return v * d;
     }
 
-    /** Sirka bocniho panelu vpravo (uzsi rozlozeni, dlazdice ve dvou sloupcich). */
+    /** Sirka bocniho panelu vpravo (dlazdice ve dvou sloupcich). */
     public static int sideWidth(Context c) {
-        return Glass.dpi(c, 400);
-    }
-
-    /** Preferovana velikost panelu (px) - pro OverlayHost. */
-    public static int preferredWidth(Context c) {
         return Glass.dpi(c, W_DP);
     }
 
     /**
-     * Naposledy hrana hra / aplikace - karta s tlacitkem "Hrat" (jen v bocnim panelu).
+     * Naposledy hrana hra / aplikace - karta s tlacitkem "Hrat".
      * Klepnuti hru spusti znovu (bezi-li jeste na pozadi, Quest se do ni vrati).
      */
     public void setLastPlayed(com.neolauncher.data.AppEntry app, String title, String sub,
@@ -202,7 +204,7 @@ public final class QuickMenuView extends View {
         invalidate();
     }
 
-    /** Nacte aktualni stav systemu (jas, hlasitost, Wi-Fi, uloziste). */
+    /** Nacte aktualni stav systemu (jas, hlasitost, Wi-Fi). */
     public void refresh() {
         final ContentResolver cr = getContext().getContentResolver();
         try {
@@ -233,13 +235,6 @@ public final class QuickMenuView extends View {
             }
         } catch (Exception ignored) {
         }
-        try {
-            StatFs fs = new StatFs(Environment.getDataDirectory().getPath());
-            freeBytes = fs.getAvailableBytes();
-            totalBytes = fs.getTotalBytes();
-        } catch (Exception e) {
-            freeBytes = totalBytes = 0;
-        }
         final long now = System.nanoTime();
         if (!draggingSlider) {
             brightShown.set(bright, now);
@@ -265,59 +260,46 @@ public final class QuickMenuView extends View {
     @Override
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
-        final float pad = dp(PAD);
-        narrow = w < dp(460);
-        if (narrow) {
-            layoutNarrow(w, h, pad);
-        } else {
-            layoutWide(w, pad);
-        }
+        layout(w, h);
         highlight = new LinearGradient(0, 0, 0, h * 0.5f, Glass.GLASS_SHINE, 0x00FFFFFF, Shader.TileMode.CLAMP);
         glass = new LinearGradient(0, 0, 0, h, Glass.GLASS_TOP, Glass.GLASS_BOTTOM, Shader.TileMode.CLAMP);
     }
 
-    private void layoutNarrow(int w, int h, float pad) {
-        // Hlavicka: hodiny vlevo, baterie a Wi-Fi pod sebou vpravo (setri vysku).
-        float y = dp(104);
+    /**
+     * Svisle: okraj | hlavicka | SECTION | karta | GAP | jas | GAP | hlasitost | GAP
+     * | dlazdice (GAP mezi nimi) | GAP | tlacitko | okraj. Vsude stejne mezery,
+     * dlazdice si vezmou zbytek vysky.
+     */
+    private void layout(int w, int h) {
+        final float pad = dp(Glass.PAD), gap = dp(Glass.GAP);
+        // Hlavicka: vrch cislic hodin presne na vnitrnim okraji, datum pod nimi.
+        timeText.getTextBounds("0123456789", 0, 10, textBounds);
+        timeBase = pad - textBounds.top;
+        dateText.getTextBounds("0123456789", 0, 10, textBounds);
+        dateBase = timeBase + dp(12) - textBounds.top;
+        float y = dateBase + dp(4) + dp(Glass.SECTION);
         if (lastApp != null) {
-            rects[EL_LAST].set(pad, y, w - pad, y + dp(72));
-            y += dp(72) + dp(12);
+            rects[EL_LAST].set(pad, y, w - pad, y + dp(CARD_H));
+            y += dp(CARD_H) + gap;
         } else {
             rects[EL_LAST].setEmpty();
         }
-        final float sh = dp(46);
+        final float sh = dp(SLIDER_H);
         rects[EL_BRIGHT].set(pad, y, w - pad, y + sh);
-        y += sh + dp(8);
+        y += sh + gap;
         rects[EL_VOLUME].set(pad, y, w - pad, y + sh);
-        y += sh + dp(16);
-        // Posledni "dlazdice" (Neo) = tlacitko "Vsechna nastaveni" pres celou sirku dole.
-        final float btnH = dp(46);
-        final float btnTop = h - pad - btnH;
-        rects[EL_TILE0 + T_NEO].set(pad, btnTop, w - pad, btnTop + btnH);
+        y += sh + gap;
+        // Posledni "dlazdice" (Neo) = tlacitko "Nastaveni Nea" pres celou sirku dole.
+        final float btnTop = h - pad - dp(Glass.BUTTON_H);
+        rects[EL_TILE0 + T_NEO].set(pad, btnTop, w - pad, h - pad);
         final int rows = (T_NEO + 1) / 2;
-        final float g = dp(8);
-        final float th = Math.max(dp(38), Math.min(dp(56), (btnTop - dp(14) - y - (rows - 1) * g) / rows));
-        final float tw = (w - 2 * pad - g) / 2f;
+        final float th = clamp((btnTop - gap - y - (rows - 1) * gap) / rows, dp(TILE_MIN), dp(TILE_MAX));
+        final float tw = (w - 2 * pad - gap) / 2f;
         for (int i = 0; i < T_NEO; i++) {
             final int col = i % 2, row = i / 2;
-            final float l = pad + col * (tw + g);
-            final float t = y + row * (th + g);
+            final float l = pad + col * (tw + gap);
+            final float t = y + row * (th + gap);
             rects[EL_TILE0 + i].set(l, t, l + tw, t + th);
-        }
-    }
-
-    private void layoutWide(int w, float pad) {
-        float y = dp(108);
-        rects[EL_BRIGHT].set(pad, y, w - pad, y + dp(SLIDER_H));
-        y += dp(SLIDER_H) + dp(GAP);
-        rects[EL_VOLUME].set(pad, y, w - pad, y + dp(SLIDER_H));
-        y += dp(SLIDER_H) + dp(20);
-        final float tw = (w - 2 * pad - 3 * dp(GAP)) / 4f;
-        for (int i = 0; i < TILE_LABELS.length; i++) {
-            final int col = i % 4, row = i / 4;
-            final float l = pad + col * (tw + dp(GAP));
-            final float t = y + row * (dp(TILE_H) + dp(GAP));
-            rects[EL_TILE0 + i].set(l, t, l + tw, t + dp(TILE_H));
         }
     }
 
@@ -325,9 +307,10 @@ public final class QuickMenuView extends View {
     // Kresleni
     // =========================================================================
 
-    /** Nastup prvku i: kriticky tlumena pruzina se zpozdenim (kaskada). */
-    private float appear(int i, long now) {
-        final float t = (now - shownNs) / 1e6f - i * STAGGER_MS;
+    /** Nastup prvku el: kriticky tlumena pruzina se zpozdenim (kaskada shora dolu). */
+    private float appear(int el, long now) {
+        final int order = el == EL_LAST ? 0 : el + 1;
+        final float t = (now - shownNs) / 1e6f - order * STAGGER_MS;
         if (t <= 0f) return 0f;
         final float w = (float) (2 * Math.PI / 0.42) * t / 1000f;
         return 1f - (1f + w) * (float) Math.exp(-w);
@@ -337,8 +320,8 @@ public final class QuickMenuView extends View {
     protected void onDraw(Canvas c) {
         final long now = System.nanoTime();
         final float w = getWidth(), h = getHeight();
-        final float r = dp(28);
-        // Matne sklo jako ostatni dialogy (visionOS): svetle sede, bily okraj, svetla horni hrana.
+        final float r = dp(Glass.R_PANEL);
+        // Matne sklo jako ostatni dialogy: bily okraj, svetla horni hrana.
         fill.setShader(glass);
         fill.setColor(Color.WHITE);
         c.drawRoundRect(0, 0, w, h, r, r, fill);
@@ -355,8 +338,7 @@ public final class QuickMenuView extends View {
                 brightOk ? "Jas" : "Jas – klepni pro povolení", brightOk);
         drawSlider(c, EL_VOLUME, now, volumeShown.get(now), "Hlasitost", true);
         for (int i = 0; i < TILE_LABELS.length; i++) drawTile(c, i, now);
-        if (narrow && lastApp != null) drawLastPlayed(c, now);
-        drawStorage(c, w, h);
+        if (lastApp != null) drawLastPlayed(c, now);
 
         boolean anim = brightShown.active(now) || volumeShown.active(now)
                 || (now - shownNs) / 1e6f < EL_COUNT * STAGGER_MS + 900f;
@@ -373,34 +355,35 @@ public final class QuickMenuView extends View {
                 "srpna", "září", "října", "listopadu", "prosince"};
         final String date = days[cal.get(Calendar.DAY_OF_WEEK) - 1] + " " + cal.get(Calendar.DAY_OF_MONTH)
                 + ". " + months[cal.get(Calendar.MONTH)];
-        final float pad = dp(PAD);
-        c.drawText(time, pad, dp(62), timeText);
-        c.drawText(date, pad, dp(86), dateText);
+        final float pad = dp(Glass.PAD);
+        c.drawText(time, pad, timeBase, timeText);
+        c.drawText(date, pad, dateBase, dateText);
 
-        // Vpravo: baterie a Wi-Fi jako pilulky (stejne jako stav v horni liste).
+        // Vpravo nahore v jedne rade: Wi-Fi a baterie jako pilulky, vrch na vnitrnim okraji.
         final String pct = batteryLevel >= 0 ? batteryLevel + " %" : "–";
         final int bolts = charging ? (fastCharging ? 2 : 1) : 0;
-        // Na svetlem skle bily text; barva nabiti je v tecce pred nim (zelena/modra/oranzova/cervena).
+        final float pp = dp(PILL_PAD), dot = dp(8), inner = dp(Glass.GAP_S);
         labelText.setColor(0xF2FFFFFF);
         final float pw = labelText.measureText(pct);
-        final float dot = dp(8);
-        final float bw = dp(12) + dot + dp(8) + pw + (bolts > 0 ? dp(6) + bolts * dp(9) : 0) + dp(14);
+        final float bw = pp + dot + inner + pw + (bolts > 0 ? dp(6) + bolts * dp(9) - dp(1) : 0) + pp;
         final String wl = wifiOn ? "Wi-Fi" : "Offline";
-        final float ww = dp(12) + dp(18) + dp(8) + labelText.measureText(wl) + dp(14);
-        // Siroke: pilulky vpravo nahore. Uzke (bocni panel): v rade pod datem.
-        final float top = dp(28), ph = dp(32);
+        final float wifiIcon = dp(18);
+        final float ww = pp + wifiIcon + inner + labelText.measureText(wl) + pp;
+        final float top = pad, ph = dp(PILL_H);
+        final Paint.FontMetrics fm = labelText.getFontMetrics();
+        final float base = top + ph / 2f - (fm.ascent + fm.descent) / 2f;
+
+        // Baterie (barva nabiti je v tecce - na skle je bily text citelnejsi).
         tmp.set(w - pad - bw, top, w - pad, top + ph);
-        final float batLeft = tmp.left, batRight = tmp.right;
+        final float batLeft = tmp.left;
         drawPill(c, tmp);
         fill.setShader(null);
         fill.setColor(batteryColor());
         fill.setShadowLayer(dp(5), 0, 0, batteryColor());
-        c.drawCircle(tmp.left + dp(12) + dot / 2f, tmp.centerY(), dot / 2f, fill);
+        c.drawCircle(tmp.left + pp + dot / 2f, tmp.centerY(), dot / 2f, fill);
         fill.clearShadowLayer();
-        final Paint.FontMetrics fm = labelText.getFontMetrics();
-        final float base = tmp.centerY() - (fm.ascent + fm.descent) / 2f;
-        c.drawText(pct, tmp.left + dp(12) + dot + dp(8), base, labelText);
-        float x = tmp.left + dp(12) + dot + dp(8) + pw + dp(6);
+        c.drawText(pct, tmp.left + pp + dot + inner, base, labelText);
+        float x = tmp.left + pp + dot + inner + pw + dp(6);
         if (bolts > 0) {
             fill.setShader(null);
             fill.setColor(Color.WHITE);
@@ -414,15 +397,12 @@ public final class QuickMenuView extends View {
                 x += dp(9);
             }
         }
-        // Wi-Fi: vysec s ukazatelem signalu.
-        labelText.setColor(wifiOn ? 0xF2FFFFFF : 0x99FFFFFF);
-        // Uzky panel: Wi-Fi pod baterii (zarovnane vpravo), siroky: vlevo od baterie.
-        if (narrow) tmp.set(w - pad - ww, top + ph + dp(8), w - pad, top + ph + dp(8) + ph);
-        else tmp.set(batLeft - dp(10) - ww, top, batLeft - dp(10), top + ph);
+        // Wi-Fi: vysec s ukazatelem signalu, vlevo od baterie.
+        tmp.set(batLeft - inner - ww, top, batLeft - inner, top + ph);
         drawPill(c, tmp);
-        drawWifiIcon(c, tmp.left + dp(12) + dp(9), tmp.centerY() + dp(5), dp(9), wifiOn ? wifiBars : 0);
-        // Vlastni zakladni linka - v uzkem panelu je Wi-Fi v druhem radku.
-        c.drawText(wl, tmp.left + dp(12) + dp(18) + dp(8), tmp.centerY() - (fm.ascent + fm.descent) / 2f, labelText);
+        drawWifiIcon(c, tmp.left + pp + wifiIcon / 2f, tmp.centerY() + dp(5), dp(9), wifiOn ? wifiBars : 0);
+        labelText.setColor(wifiOn ? 0xF2FFFFFF : 0x99FFFFFF);
+        c.drawText(wl, tmp.left + pp + wifiIcon + inner, base, labelText);
     }
 
     private void drawPill(Canvas c, RectF r) {
@@ -454,7 +434,7 @@ public final class QuickMenuView extends View {
         c.drawRoundRect(tmp.left, tmp.top + dp(3), tmp.right, tmp.bottom + dp(3), rr, rr, fill);
         fill.setColor(Color.argb(Math.round((0x26 + 0x14 * hv) * a), 255, 255, 255));
         c.drawRoundRect(tmp, rr, rr, fill);
-        // Vypln (bila jako v iOS) - zaoblena, oriznuta stopou.
+        // Bila vypln - zaoblena, oriznuta stopou.
         final float v = clamp(value, 0f, 1f);
         final float fw = Math.max(v > 0.004f ? tmp.height() : 0f, tmp.width() * v);
         if (fw > 0f) {
@@ -473,22 +453,25 @@ public final class QuickMenuView extends View {
                 : Color.argb(Math.round(0xB0 * a), 56, 189, 248));
         c.drawRoundRect(tmp, rr, rr, stroke);
 
-        // Ikona vlevo - tmava, kdyz je pod ni bila vypln.
-        final float ix = tmp.left + dp(28), iy = tmp.centerY();
+        // Ikona vlevo ve ctverci o strane vysky posuvniku (stejny okraj zleva i shora),
+        // tmava, kdyz je pod ni bila vypln.
+        final float ix = tmp.left + tmp.height() / 2f, iy = tmp.centerY();
         final boolean onFill = fw > dp(44);
         final int ic = onFill ? Color.argb(alpha, 16, 21, 31) : Color.argb(alpha, 255, 255, 255);
         Icons.draw(c, el == EL_BRIGHT ? Icons.SUN : Icons.SPEAKER, ix, iy, dp(20), ic, dp(2), v, icon);
         final Paint.FontMetrics fm = labelText.getFontMetrics();
         final float base = iy - (fm.ascent + fm.descent) / 2f;
-        final boolean labelOnFill = fw > dp(56) + labelText.measureText(label);
+        final float lx = tmp.left + tmp.height();
+        final boolean labelOnFill = fw > lx - tmp.left + labelText.measureText(label) + dp(4);
         labelText.setColor(labelOnFill ? Color.argb(alpha, 16, 21, 31) : Color.argb(alpha, 255, 255, 255));
-        c.drawText(label, tmp.left + dp(52), base, labelText);
+        c.drawText(label, lx, base, labelText);
         if (enabled) {
             final String pct = Math.round(v * 100) + " %";
             final float pw = labelText.measureText(pct);
-            final boolean pctOnFill = fw > tmp.width() - dp(18);
+            final float px = tmp.right - dp(16) - pw;
+            final boolean pctOnFill = fw > px - tmp.left + pw;
             labelText.setColor(pctOnFill ? Color.argb(alpha, 16, 21, 31) : Color.argb(Math.round(alpha * 0.8f), 255, 255, 255));
-            c.drawText(pct, tmp.right - dp(18) - pw, base, labelText);
+            c.drawText(pct, px, base, labelText);
         }
         c.restore();
     }
@@ -503,12 +486,13 @@ public final class QuickMenuView extends View {
         c.save();
         c.translate(r.centerX(), r.centerY() + (1f - a) * dp(14));
         c.scale(s, s);
-        final float w2 = r.width() / 2f, h2 = r.height() / 2f, rr = dp(20);
+        final boolean button = i == T_NEO;
+        final float w2 = r.width() / 2f, h2 = r.height() / 2f, rr = button ? h2 : Math.min(dp(Glass.R_TILE), h2);
         final float hc = clamp(hv, 0f, 1f);
         fill.setShader(null);
         fill.setColor(Color.argb(Math.round(0x33 * a), 0, 0, 0));
         c.drawRoundRect(-w2, -h2 + dp(3), w2, h2 + dp(3), rr, rr, fill);
-        if (!(narrow && i == T_NEO)) {
+        if (!button) {
             fill.setColor(Color.argb(Math.round((0x1F + 0x22 * hc) * a), 255, 255, 255));
             if (hc > 0.01f) fill.setShadowLayer(dp(14) * hc, 0, 0, Color.argb(Math.round(110 * hc * a), 56, 189, 248));
             c.drawRoundRect(-w2, -h2, w2, h2, rr, rr, fill);
@@ -523,8 +507,8 @@ public final class QuickMenuView extends View {
             fill.clearShadowLayer();
         }
         final int col = Color.argb(Math.round(255 * clamp(a, 0f, 1f)), 255, 255, 255);
-        if (narrow && i == T_NEO) {
-            // Tlacitko "Vsechna nastaveni": bila pilulka s tmavym textem (hlavni akce jako ve visionOS).
+        if (button) {
+            // Tlacitko "Nastaveni Nea": bila pilulka s tmavym textem (hlavni akce).
             fill.setColor(Color.argb(Math.round(0xF2 * clamp(a, 0f, 1f)), 255, 255, 255));
             c.drawRoundRect(-w2, -h2, w2, h2, h2, h2, fill);
             final int ink = (Glass.INK & 0x00FFFFFF) | (Math.round(255 * clamp(a, 0f, 1f)) << 24);
@@ -535,20 +519,16 @@ public final class QuickMenuView extends View {
             Icons.draw(c, Icons.GEAR, -total / 2f + dp(10), 0, dp(20), ink, dp(1.9f), 1f, icon);
             final Paint.FontMetrics fm = labelText.getFontMetrics();
             c.drawText(t, -total / 2f + dp(30), -(fm.ascent + fm.descent) / 2f, labelText);
-        } else if (narrow) {
-            // Vodorovna dlazdice: ikona vlevo, nazev vedle.
-            Icons.draw(c, TILE_ICONS[i], -w2 + dp(26), 0, dp(22), col, dp(2), 1f, icon);
+        } else {
+            // Vodorovna dlazdice: ikona vlevo (stejny okraj jako u posuvniku), nazev vedle.
+            final float ix = -w2 + dp(24);
+            Icons.draw(c, TILE_ICONS[i], ix, 0, dp(22), col, dp(2), 1f, icon);
             tileText.setTextAlign(Paint.Align.LEFT);
             tileText.setColor(Color.argb(Math.round(235 * clamp(a, 0f, 1f)), 255, 255, 255));
             final Paint.FontMetrics fm = tileText.getFontMetrics();
-            // V uzkem panelu je misto na presnejsi nazev (odliseni od nastaveni Nea).
+            // Presnejsi nazev (odliseni od nastaveni Nea).
             c.drawText(i == T_QUEST_SETTINGS ? "Nastavení Questu" : TILE_LABELS[i],
-                    -w2 + dp(48), -(fm.ascent + fm.descent) / 2f, tileText);
-            tileText.setTextAlign(Paint.Align.CENTER);
-        } else {
-            Icons.draw(c, TILE_ICONS[i], 0, -dp(10), dp(26), col, dp(2), 1f, icon);
-            tileText.setColor(Color.argb(Math.round(230 * clamp(a, 0f, 1f)), 255, 255, 255));
-            c.drawText(TILE_LABELS[i], 0, h2 - dp(14), tileText);
+                    ix + dp(11) + dp(10), -(fm.ascent + fm.descent) / 2f, tileText);
         }
         c.restore();
     }
@@ -562,7 +542,7 @@ public final class QuickMenuView extends View {
         final float ac = clamp(a, 0f, 1f);
         c.save();
         c.translate(0, (1f - a) * dp(12));
-        final float rr = dp(20);
+        final float rr = dp(Glass.R_TILE);
         fill.setShader(null);
         fill.setColor(Color.argb(Math.round(0x33 * ac), 0, 0, 0));
         c.drawRoundRect(r.left, r.top + dp(3), r.right, r.bottom + dp(3), rr, rr, fill);
@@ -571,35 +551,37 @@ public final class QuickMenuView extends View {
         stroke.setStrokeWidth(dp(1));
         stroke.setColor(Color.argb(Math.round((0x2E + 0x40 * hv) * ac), 255, 255, 255));
         c.drawRoundRect(r, rr, rr, stroke);
-        // Banner hry (na sirku) vlevo.
-        final float th = r.height() - dp(16), tw = th * 1.6f;
-        final float tl = r.left + dp(8), tt = r.top + dp(8);
+        // Banner hry (na sirku) vlevo - odsazeny INSET, zaobleni soustredne s kartou.
+        final float in = dp(Glass.INSET), ri = dp(Glass.R_INNER);
+        final float th = r.height() - 2 * in, tw = th * 1.6f;
+        final float tl = r.left + in, tt = r.top + in;
         if (lastShader != null && lastArt != null) {
             lastMatrix.setScale(tw / lastArt.getWidth(), th / lastArt.getHeight());
             lastMatrix.postTranslate(tl, tt);
             lastShader.setLocalMatrix(lastMatrix);
             artPaint.setShader(lastShader);
             artPaint.setAlpha(Math.round(255 * ac));
-            c.drawRoundRect(tl, tt, tl + tw, tt + th, dp(12), dp(12), artPaint);
+            c.drawRoundRect(tl, tt, tl + tw, tt + th, ri, ri, artPaint);
             artPaint.setShader(null);
         } else {
             fill.setColor(Color.argb(Math.round(0x33 * ac), 255, 255, 255));
-            c.drawRoundRect(tl, tt, tl + tw, tt + th, dp(12), dp(12), fill);
+            c.drawRoundRect(tl, tt, tl + tw, tt + th, ri, ri, fill);
         }
-        // Tlacitko vpravo: bila pilulka s tmavym textem.
+        // Tlacitko vpravo: bila pilulka s tmavym textem, od praveho okraje stejne jako shora.
         labelText.setColor(Glass.INK);
-        final float bw = labelText.measureText(lastButton) + dp(30), bh = dp(34);
-        final float bl = r.right - dp(12) - bw, bt = r.centerY() - bh / 2f;
+        final float bh = dp(CARD_BTN_H), bm = (r.height() - bh) / 2f;
+        final float bw = labelText.measureText(lastButton) + dp(32);
+        final float bl = r.right - bm - bw, bt = r.centerY() - bh / 2f;
         fill.setColor(Color.argb(Math.round(0xF2 * ac), 255, 255, 255));
         if (hv > 0.01f) fill.setShadowLayer(dp(12) * hv, 0, 0, Color.argb(Math.round(120 * hv), 255, 255, 255));
         c.drawRoundRect(bl, bt, bl + bw, bt + bh, bh / 2f, bh / 2f, fill);
         fill.clearShadowLayer();
         final Paint.FontMetrics fm = labelText.getFontMetrics();
         labelText.setColor((Glass.INK & 0x00FFFFFF) | (Math.round(255 * ac) << 24));
-        c.drawText(lastButton, bl + dp(15), bt + bh / 2f - (fm.ascent + fm.descent) / 2f, labelText);
+        c.drawText(lastButton, bl + dp(16), bt + bh / 2f - (fm.ascent + fm.descent) / 2f, labelText);
         // Texty mezi bannerem a tlacitkem.
-        final float tx = tl + tw + dp(12);
-        final float maxW = bl - dp(10) - tx;
+        final float tx = tl + tw + dp(Glass.GAP);
+        final float maxW = bl - dp(Glass.GAP) - tx;
         smallText.setColor(Color.argb(Math.round(0xB3 * ac), 255, 255, 255));
         c.drawText(android.text.TextUtils.ellipsize(lastSub, smallText, maxW,
                 android.text.TextUtils.TruncateAt.END).toString(), tx, r.centerY() - dp(6), smallText);
@@ -607,28 +589,6 @@ public final class QuickMenuView extends View {
         c.drawText(android.text.TextUtils.ellipsize(lastTitle, labelText, maxW,
                 android.text.TextUtils.TruncateAt.END).toString(), tx, r.centerY() + dp(14), labelText);
         c.restore();
-    }
-
-    private void drawStorage(Canvas c, float w, float h) {
-        if (totalBytes <= 0 || narrow) return;
-        final float pad = dp(PAD);
-        final float y = h - dp(30);
-        final String txt = "Úložiště: " + gb(freeBytes) + " volných z " + gb(totalBytes);
-        smallText.setColor(0x99FFFFFF);
-        c.drawText(txt, pad, y, smallText);
-        final float bl = pad + smallText.measureText(txt) + dp(14), br = w - pad;
-        if (br - bl < dp(40)) return;
-        final float bh = dp(6), bt = y - dp(8);
-        fill.setShader(null);
-        fill.setColor(0x26FFFFFF);
-        c.drawRoundRect(bl, bt, br, bt + bh, bh / 2f, bh / 2f, fill);
-        final float used = 1f - freeBytes / (float) totalBytes;
-        fill.setColor(used > 0.9f ? 0xFFF97316 : Glass.ACCENT);
-        c.drawRoundRect(bl, bt, bl + (br - bl) * clamp(used, 0.02f, 1f), bt + bh, bh / 2f, bh / 2f, fill);
-    }
-
-    private static String gb(long bytes) {
-        return Math.round(bytes / 1e9) + " GB";
     }
 
     private int batteryColor() {

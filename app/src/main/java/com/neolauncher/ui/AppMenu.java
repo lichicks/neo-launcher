@@ -44,21 +44,26 @@ public final class AppMenu {
                              boolean favorite, Actions a) {
         LinearLayout root = new LinearLayout(c);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackground(Glass.panel(c));
-        int pad = Glass.dpi(c, 10);
-        root.setPadding(pad, Glass.dpi(c, 14), pad, pad);
+        // Soustredne rohy: polozky (radius R_TILE) odsazene INSET -> panel R_TILE + INSET.
+        root.setBackground(Glass.panel(c, Glass.R_TILE + Glass.INSET));
+        int pad = Glass.dpi(c, Glass.INSET);
+        root.setPadding(pad, pad, pad, pad);
 
         TextView title = Glass.text(c, label, 17, Color.WHITE, true);
-        title.setPadding(Glass.dpi(c, 14), 0, Glass.dpi(c, 14), 0);
+        title.setPadding(Glass.dpi(c, 14), Glass.dpi(c, 12), Glass.dpi(c, 14), 0);
         title.setSingleLine(true);
         root.addView(title);
         String kind = app.type == AppEntry.TYPE_VR ? "VR hra"
                 : app.type == AppEntry.TYPE_PANEL ? "Systémový panel" : "2D aplikace";
         TextView sub = Glass.text(c, kind + " · " + app.pkg, 12, 0x80FFFFFF, false);
-        sub.setPadding(Glass.dpi(c, 14), Glass.dpi(c, 2), Glass.dpi(c, 14), Glass.dpi(c, 8));
+        sub.setPadding(Glass.dpi(c, 14), Glass.dpi(c, 2), Glass.dpi(c, 14), Glass.dpi(c, 12));
         sub.setSingleLine(true);
         root.addView(sub);
-        root.addView(Glass.divider(c));
+        // Oddelovac zarovnany s textem polozek, pod nim kousek mista pro zvyrazneni prvni polozky.
+        View div = Glass.divider(c);
+        LinearLayout.LayoutParams dlp = (LinearLayout.LayoutParams) div.getLayoutParams();
+        dlp.setMargins(Glass.dpi(c, 14), 0, Glass.dpi(c, 14), Glass.dpi(c, 4));
+        root.addView(div, dlp);
 
         root.addView(Glass.menuItem(c, "Spustit", false, v -> a.launch()));
         root.addView(Glass.menuItem(c, favorite ? "★  Odebrat z oblíbených" : "☆  Přidat do oblíbených",
@@ -84,8 +89,8 @@ public final class AppMenu {
         LinearLayout root = new LinearLayout(c);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(Glass.panel(c));
-        int pad = Glass.dpi(c, 22);
-        root.setPadding(pad, Glass.dpi(c, 18), pad, Glass.dpi(c, 16));
+        int pad = Glass.dpi(c, Glass.PAD);
+        root.setPadding(pad, pad, pad, pad);
         root.addView(Glass.title(c, "Přejmenovat"));
         TextView hint = Glass.text(c, "Původní název: " + original, 12.5f, 0x99FFFFFF, false);
         hint.setPadding(0, Glass.dpi(c, 4), 0, Glass.dpi(c, 12));
@@ -113,13 +118,13 @@ public final class AppMenu {
         LinearLayout buttons = new LinearLayout(c);
         buttons.setOrientation(LinearLayout.HORIZONTAL);
         buttons.setGravity(Gravity.END);
-        buttons.setPadding(0, Glass.dpi(c, 14), 0, 0);
+        buttons.setPadding(0, Glass.dpi(c, Glass.SECTION), 0, 0);
         View reset = Glass.button(c, "Původní", false, v -> onSave.accept(null));
         View cancel = Glass.button(c, "Zrušit", false, v -> onCancel.run());
         View save = Glass.button(c, "Uložit", true, v -> onSave.accept(edit.getText().toString()));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.leftMargin = Glass.dpi(c, 8);
+        lp.leftMargin = Glass.dpi(c, Glass.GAP_S);
         buttons.addView(reset, lp);
         buttons.addView(cancel, new LinearLayout.LayoutParams(lp));
         buttons.addView(save, new LinearLayout.LayoutParams(lp));

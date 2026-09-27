@@ -6,15 +6,54 @@ import android.database.Cursor;
 import android.database.MatrixCursor;
 import android.net.Uri;
 
+import com.neolauncher.data.Platform;
+import com.neolauncher.data.Prefs;
+
+/**
+ * Odpovida addonu pro Meta tlacitko (RedirectServices z Lightning Launcheru).
+ * Addon se pred otevrenim launcheru pta na tri sloupce:
+ * isOpen (je uz v popredi?), shouldBlur (spustit s rozmazanim pozadi?)
+ * a allowShortcuts (smi se launcher otevirat zkratkou?).
+ */
 public class ShortcutStateProvider extends ContentProvider {
-    @Override public boolean onCreate() { return true; }
-    @Override public Cursor query(Uri uri, String[] p, String s, String[] a, String o) {
+
+    @Override
+    public boolean onCreate() {
+        return true;
+    }
+
+    @Override
+    public Cursor query(Uri uri, String[] projection, String selection,
+                        String[] selectionArgs, String sortOrder) {
         MatrixCursor c = new MatrixCursor(new String[]{"isOpen", "shouldBlur", "allowShortcuts"});
-        c.addRow(new Object[]{0, 1, 1});
+        NeoApp app = NeoApp.get();
+        Prefs prefs = app != null ? app.prefs() : null;
+        if (prefs != null && !prefs.allowShortcuts()) {
+            c.addRow(new Object[]{0, 0, 0});
+            return c;
+        }
+        boolean blur = prefs != null && prefs.systemBlur() && Platform.supportsBlendEffects();
+        c.addRow(new Object[]{LauncherActivity.isInForeground() ? 1 : 0, blur ? 1 : 0, 1});
         return c;
     }
-    @Override public String getType(Uri uri) { return null; }
-    @Override public Uri insert(Uri uri, ContentValues v) { return null; }
-    @Override public int delete(Uri uri, String s, String[] a) { return 0; }
-    @Override public int update(Uri uri, ContentValues v, String s, String[] a) { return 0; }
+
+    @Override
+    public String getType(Uri uri) {
+        return null;
+    }
+
+    @Override
+    public Uri insert(Uri uri, ContentValues values) {
+        return null;
+    }
+
+    @Override
+    public int delete(Uri uri, String selection, String[] selectionArgs) {
+        return 0;
+    }
+
+    @Override
+    public int update(Uri uri, ContentValues values, String selection, String[] selectionArgs) {
+        return 0;
+    }
 }

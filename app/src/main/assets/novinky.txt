@@ -1,3 +1,8 @@
+# Doladění vzhledu
+• Obsah nastavení, hledání a novinek se u okraje jemně rozplyne, místo aby byl ostře useknutý
+• Hodiny v rychlém menu mají nad sebou víc místa
+• V nastavení je u času název dne a u data měsíc
+
 # Úhlednější vzhled
 • Mezery a zaoblení rohů jsou teď všude stejné – rychlé menu, hledání, nastavení i ostatní okna do sebe líp zapadají
 • V horní liště je jen čas, celé datum najdeš v rychlém menu

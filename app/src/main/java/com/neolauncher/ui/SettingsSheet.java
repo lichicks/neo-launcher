@@ -84,6 +84,7 @@ public final class SettingsSheet {
         scroll.setVerticalScrollBarEnabled(false);
         scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
         scroll.setClipToPadding(false);
+        Glass.fadeEdges(scroll);
         final LinearLayout page = new LinearLayout(c);
         page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(0, 0, 0, Glass.dpi(c, 4));
@@ -373,12 +374,13 @@ public final class SettingsSheet {
                 "srpna", "září", "října", "listopadu", "prosince"};
         LinearLayout top = new LinearLayout(c);
         top.setOrientation(LinearLayout.HORIZONTAL);
-        top.addView(bigWidget(c, String.valueOf(cal.get(Calendar.DAY_OF_MONTH)), days[cal.get(Calendar.DAY_OF_WEEK) - 1]),
+        // Datum = den a mesic ("27 / zari"), cas = s nazvem dne ("14:59 / nedele").
+        top.addView(bigWidget(c, String.valueOf(cal.get(Calendar.DAY_OF_MONTH)), months[cal.get(Calendar.MONTH)]),
                 new LinearLayout.LayoutParams(0, Glass.dpi(c, 112), 1f));
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(0, Glass.dpi(c, 112), 1f);
         tlp.leftMargin = Glass.dpi(c, Glass.GAP);
         top.addView(bigWidget(c, String.format(Locale.ROOT, "%d:%02d", cal.get(Calendar.HOUR_OF_DAY),
-                cal.get(Calendar.MINUTE)), months[cal.get(Calendar.MONTH)]), tlp);
+                cal.get(Calendar.MINUTE)), days[cal.get(Calendar.DAY_OF_WEEK) - 1]), tlp);
         right.addView(top);
 
         // Neo + aktualizace.

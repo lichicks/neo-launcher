@@ -115,6 +115,7 @@ public final class SearchSheet {
         ScrollView scroll = new ScrollView(c);
         scroll.setVerticalScrollBarEnabled(false);
         scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        Glass.fadeEdges(scroll);
         final LinearLayout list = new LinearLayout(c);
         list.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(list);

@@ -66,6 +66,11 @@ public final class QuickMenuView extends View {
     private static final float CARD_H = 68f;
     private static final float CARD_BTN_H = 36f;
     private static final float SLIDER_H = 44f;
+    /**
+     * Vrch cislic hodin: vic nez PAD - velke pismo u rohu s radiusem 40 by jinak
+     * pusobilo namackane. Pod datem uz jen GAP ke karte.
+     */
+    private static final float HEADER_TOP = 30f;
     /** Pilulky baterie a Wi-Fi v hlavicce. */
     private static final float PILL_H = 32f;
     private static final float PILL_PAD = 12f;
@@ -98,7 +103,7 @@ public final class QuickMenuView extends View {
     private int wifiBars;
     private long shownNs;
     /** Zakladni linky hlavicky (spocitane z metriky pisma, aby cislice zacinaly presne na okraji). */
-    private float timeBase, dateBase;
+    private float timeTop, digitH, timeBase, dateBase;
     private com.neolauncher.data.AppEntry lastApp;
     private String lastTitle, lastSub, lastButton;
     private android.graphics.BitmapShader lastShader;
@@ -266,18 +271,20 @@ public final class QuickMenuView extends View {
     }
 
     /**
-     * Svisle: okraj | hlavicka | SECTION | karta | GAP | jas | GAP | hlasitost | GAP
-     * | dlazdice (GAP mezi nimi) | GAP | tlacitko | okraj. Vsude stejne mezery,
+     * Svisle: HEADER_TOP | hodiny + datum | GAP | karta | GAP | jas | GAP | hlasitost
+     * | GAP | dlazdice (GAP mezi nimi) | GAP | tlacitko | PAD. Vsude stejne mezery,
      * dlazdice si vezmou zbytek vysky.
      */
     private void layout(int w, int h) {
         final float pad = dp(Glass.PAD), gap = dp(Glass.GAP);
-        // Hlavicka: vrch cislic hodin presne na vnitrnim okraji, datum pod nimi.
+        // Hlavicka: hodiny s volnym mistem nad sebou, datum pod nimi, pak GAP ke karte.
         timeText.getTextBounds("0123456789", 0, 10, textBounds);
-        timeBase = pad - textBounds.top;
+        timeTop = dp(HEADER_TOP);
+        digitH = -textBounds.top;
+        timeBase = timeTop + digitH;
         dateText.getTextBounds("0123456789", 0, 10, textBounds);
         dateBase = timeBase + dp(12) - textBounds.top;
-        float y = dateBase + dp(4) + dp(Glass.SECTION);
+        float y = dateBase + dp(4) + dp(Glass.GAP);
         if (lastApp != null) {
             rects[EL_LAST].set(pad, y, w - pad, y + dp(CARD_H));
             y += dp(CARD_H) + gap;
@@ -359,7 +366,7 @@ public final class QuickMenuView extends View {
         c.drawText(time, pad, timeBase, timeText);
         c.drawText(date, pad, dateBase, dateText);
 
-        // Vpravo nahore v jedne rade: Wi-Fi a baterie jako pilulky, vrch na vnitrnim okraji.
+        // Vpravo nahore v jedne rade: Wi-Fi a baterie jako pilulky, svisle na stredu cislic hodin.
         final String pct = batteryLevel >= 0 ? batteryLevel + " %" : "–";
         final int bolts = charging ? (fastCharging ? 2 : 1) : 0;
         final float pp = dp(PILL_PAD), dot = dp(8), inner = dp(Glass.GAP_S);
@@ -369,7 +376,7 @@ public final class QuickMenuView extends View {
         final String wl = wifiOn ? "Wi-Fi" : "Offline";
         final float wifiIcon = dp(18);
         final float ww = pp + wifiIcon + inner + labelText.measureText(wl) + pp;
-        final float top = pad, ph = dp(PILL_H);
+        final float ph = dp(PILL_H), top = timeTop + digitH / 2f - ph / 2f;
         final Paint.FontMetrics fm = labelText.getFontMetrics();
         final float base = top + ph / 2f - (fm.ascent + fm.descent) / 2f;
 

@@ -40,7 +40,10 @@ stran stejný), nadpis → obsah `SECTION` 20, mezi dlaždicemi `GAP` 12
 12, kolečko ikony v kapsli má stejný okraj ze všech stran (hledání: kapsle
 52, kolečko 40, okraj 6). Ornament: položky 40 v bublině 52 (okraj 6),
 oddělovač má z obou stran stejnou mezeru. Nová okna stavět jen z těchto
-tokenů, žádná „od oka“ čísla.
+tokenů, žádná „od oka“ čísla. Rolovací plochy mají `Glass.fadeEdges`
+(obsah se u okraje rozplyne, uživateli vadila ostrá „zakousnutá“ hrana).
+Hodiny v rychlém menu mají nahoře víc místa (`HEADER_TOP` 30) — u rohu
+s radiusem 40 působily namačkaně.
 
 **`docs/preview_neo.html`** — interaktivní HTML prototyp. Uživatel ho
 schválil větou "přesně takhle to chci v tom Questu". Když je spor o to,

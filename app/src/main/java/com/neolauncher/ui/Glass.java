@@ -42,6 +42,8 @@ public final class Glass {
     public static final float GAP = 12f;
     /** Hlavni tlacitko pres celou sirku (Hotovo, Nastaveni Nea...). */
     public static final float BUTTON_H = 48f;
+    /** Delka rozplynuti obsahu u okraje rolovaci plochy. */
+    public static final float FADE = 32f;
     /** Mezi malymi prvky vedle sebe (pilulky, tlacitka). */
     public static final float GAP_S = 8f;
     /** Dlazdice, karty, posuvniky. */
@@ -171,6 +173,16 @@ public final class Glass {
         s.addState(HOVERED, round(c, hovered, radius, 0x40FFFFFF));
         s.addState(EMPTY, round(c, normal, radius, stroke));
         return s;
+    }
+
+    /**
+     * Obsah rolovaci plochy se u horniho/dolniho okraje jemne rozplyne do
+     * pruhledna (misto ostre "zakousnute" hrany). Okraj se ukaze jen na strane,
+     * kam jde jeste rolovat.
+     */
+    public static void fadeEdges(android.widget.ScrollView sv) {
+        sv.setVerticalFadingEdgeEnabled(true);
+        sv.setFadingEdgeLength(dpi(sv.getContext(), FADE));
     }
 
     public static TextView text(Context c, String s, float sizeDp, int color, boolean bold) {

@@ -63,6 +63,7 @@ public final class WhatsNewSheet {
         ScrollView scroll = new ScrollView(c);
         scroll.setVerticalScrollBarEnabled(false);
         scroll.setOverScrollMode(View.OVER_SCROLL_NEVER);
+        Glass.fadeEdges(scroll);
         LinearLayout body = new LinearLayout(c);
         body.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(body);

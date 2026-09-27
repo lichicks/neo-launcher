@@ -36,6 +36,9 @@ public final class UpdateSheet {
 
         if (!r.notes.isEmpty()) {
             ScrollView sv = new ScrollView(c);
+            sv.setVerticalScrollBarEnabled(false);
+            sv.setOverScrollMode(View.OVER_SCROLL_NEVER);
+            Glass.fadeEdges(sv);
             TextView notes = Glass.text(c, r.notes, 13.5f, 0xE6FFFFFF, false);
             notes.setLineSpacing(0, 1.15f);
             sv.addView(notes);

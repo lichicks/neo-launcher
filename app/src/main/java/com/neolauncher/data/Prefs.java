@@ -40,6 +40,8 @@ public final class Prefs {
     private static final String K_MENU_HOLD = "menu_hold_ms";
     private static final String K_ONLINE_ART = "online_art";
     private static final String K_LAUNCH_ANIM = "launch_animation";
+    private static final String K_CLOSE_AFTER_LAUNCH = "close_after_launch";
+    private static final String K_CAROUSEL = "carousel_mode";
     private static final String K_UPDATE_TEST = "update_test_builds";
     private static final String K_UPDATE_LAST_CHECK = "update_last_check";
     private static final String K_UPDATE_DISMISSED = "update_dismissed";
@@ -53,11 +55,13 @@ public final class Prefs {
 
     private final SharedPreferences sp;
     private final SharedPreferences recents;
+    private final SharedPreferences counts;
     private final List<Listener> listeners = new CopyOnWriteArrayList<>();
 
     public Prefs(Context c) {
         sp = c.getSharedPreferences("neo", Context.MODE_PRIVATE);
         recents = c.getSharedPreferences("neo_recents", Context.MODE_PRIVATE);
+        counts = c.getSharedPreferences("neo_launch_counts", Context.MODE_PRIVATE);
     }
 
     public void addListener(Listener l) {
@@ -147,6 +151,27 @@ public final class Prefs {
 
     public void setLaunchAnimation(boolean b) {
         sp.edit().putBoolean(K_LAUNCH_ANIM, b).apply();
+        changed();
+    }
+
+    /** Po spusteni hry/aplikace launcher zavrit (jako klasicky launcher). */
+    public boolean closeAfterLaunch() {
+        return sp.getBoolean(K_CLOSE_AFTER_LAUNCH, true);
+    }
+
+    public void setCloseAfterLaunch(boolean b) {
+        sp.edit().putBoolean(K_CLOSE_AFTER_LAUNCH, b).apply();
+        changed();
+    }
+
+    /** Testovaci karuselovy rezim (5x klepnout na logo Neo). */
+    public boolean carouselMode() {
+        return sp.getBoolean(K_CAROUSEL, false);
+    }
+
+    public void setCarouselMode(boolean b) {
+        if (b == carouselMode()) return;
+        sp.edit().putBoolean(K_CAROUSEL, b).apply();
         changed();
     }
 
@@ -257,6 +282,12 @@ public final class Prefs {
 
     public void markLaunched(String pkg) {
         recents.edit().putLong(pkg, System.currentTimeMillis()).apply();
+        counts.edit().putInt(pkg, launchCount(pkg) + 1).apply();
+    }
+
+    /** Kolikrat se aplikace spustila z Nea (pocita se od verze s karuselem). */
+    public int launchCount(String pkg) {
+        return counts.getInt(pkg, 0);
     }
 
     private static int clamp(int v, int lo, int hi) {

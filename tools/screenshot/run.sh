@@ -2,7 +2,7 @@
 # Skutecny snimek NeoLauncherView bez headsetu a bez Android SDK:
 # Robolectric (emulace Androidu na JVM) s nativni grafikou a HW vykreslovanim
 # (RenderNode, RenderEffect i AGSL shader jedou pres skutecnou Skia/HWUI).
-# Vysledek: out/neo-idle.png, out/neo-hover.png (pruhledne pozadi)
+# Vysledek: out/neo-idle.png, out/neo-hover.png, out/neo-carousel*.png (pruhledne pozadi)
 #           out/neo-quest-*.png (slozeno s ilustracnim pozadim "Quest domov").
 # Pozadi a systemove rozmazani prostredi jsou jen ilustrace, launcher sam je skutecny.
 #
@@ -83,7 +83,7 @@ java -Xmx4g -Dneo.banners="$W/banners" -Dneo.out="$W/out" -Dneo.scroll=0.9 -Dneo
 
 # 6) Slozit s ilustracnim pozadim
 javac -nowarn -d classes "$HERE/Compose.java"
-for n in idle hover launch-1 launch-2 launch-3 launch-4 launch-5 launch-6; do
+for n in idle hover launch-1 launch-2 launch-3 launch-4 launch-5 launch-6 carousel carousel-move; do
   java -Djava.awt.headless=true -cp classes Compose out/neo-$n.png out/neo-quest-$n.png
 done
 echo "Hotovo: $W/out"

@@ -25,7 +25,8 @@ pak v Neo → Nastavení → "Otevírat Meta tlačítkem".
 - **Podržet a táhnout** → přesunout kartu (pořadí se uloží)
 - **Podržet a pustit** → menu karty (přejmenovat, vlastní obrázek, skrýt…)
 - **Thumbstick / tažení** → rolování
-- **Logo Neo** → nastavení
+- **Logo Neo** → nastavení; **5× rychle** → testovací karusel (karty na výšku
+  jako ve visionOS, joystick ←/→, herní čas a počet spuštění)
 
 ## Vývoj
 

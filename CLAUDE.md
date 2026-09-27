@@ -51,6 +51,9 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 | `launch/AppLauncher.java` | Spouštění (vrshell broadcast na v71+, panely, 2D), info o aplikaci, odinstalace |
 | `update/Updater.java`, `InstallReceiver.java` | Aktualizace z GitHub Releases: najde nejnovější build, stáhne, nainstaluje přes PackageInstaller |
 | `ui/NeoLauncherView.java` | Sklo, horní lišta (logo, záložky, hodiny, baterie), mřížka, hover pop-out, hloubka ostrosti, gumové rolování, přesouvání |
+| `ui/CarouselView.java` | Testovací karusel (5× klepnout na logo): karty na výšku jako ve visionOS, štítky se statistikami |
+| `ui/PeepholeAnimation.java`, `ui/LaunchLens.java` | Animace spuštění „kukátko“ (sdílí mřížka i karusel) + AGSL čočka |
+| `data/UsageInfo.java` | Herní čas a poslední spuštění z UsageStats (jako plugin Playtime v LL) |
 | `ui/Eased.java` | Animovaná hodnota jako CSS transition (retarget z aktuální hodnoty, bez callbacků) |
 | `ui/DepthBlur.java` | Radiální rozmazání: AGSL shader (Android 13+), jinak obyčejný blur |
 | `ui/ShadowSprite.java` | Předpočítané rozmazané stíny karet (box-shadow) |
@@ -123,13 +126,39 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
   90 %, 130 ms) → **kukátko** (pružný návrat karty, tma se stáhne do kruhu,
   rámeček/název karty zmizí, rybí oko, 320 ms) → **průlet** (kruh se roztáhne,
   banner se přiblíží přes celé okno, radiální "zoom blur" do stran, 400 ms)
-  → **rozplynutí** zpět do launcheru. Easingy navazují bez skoků. Aplikace
-  se spouští v 48 %. Čočka (rybí oko + zoom blur + měkký okraj + tma) je
-  JEDEN AGSL efekt na vrstvu `launchNode` (`ui/LaunchLens.java`); bez shaderu
+  → **setmění do černa** a zavření launcheru (nebo rozplynutí zpět, když je
+  zavírání vypnuté). Easingy navazují bez skoků. Aplikace se spouští v 48 %.
+  Kód je v `ui/PeepholeAnimation.java`. Čočka (rybí oko + měkký okraj) je
+  JEDEN AGSL efekt na vrstvu animace (`ui/LaunchLens.java`); bez shaderu
   záložní kreslení (kruhový ořez). Stav odvozený jen z času, respektuje
   systémové měřítko animací (0 = bez animace), vypínatelná v nastavení.
   Omezení: 2D panel nemůže kreslit mimo své okno — "přiblížení k očím" se
   odehrává v okně (včetně průhledného okraje), panel sám se k hráči nepohne.
+  Rozmazání do stran při průletu jsou vrstvené zvětšené kopie banneru (jede
+  i bez shaderu, je vidět i v náhledu).
+- Po spuštění se launcher zavře (`finish()` na konci animace, zapnuté
+  v nastavení "Po spuštění zavřít launcher"): poslední fáze animace ztmaví do
+  černa, takže pod ní launcher neprosvítá. Zavře se jen když se aplikace
+  opravdu spustila; kdyby se okno nezavřelo, po 2,5 s se launcher zase ukáže.
+- Prémiový vzhled: záře hovernuté karty v barvě obrázku hry (průměrná barva
+  banneru vytažená do syta — `ArtworkLoader.ambientColor`), jemná modrá záře
+  okolo skla (jen v průhledném okraji, `setShadowLayer` + `clipOutPath`),
+  ploché ostré stíny pod kartami, pilulkami, záložkami a stavem, modrá záře
+  indikátoru záložky, puls tečky loga při klepnutí.
+- **Karusel (testovací režim)** — 5× rychle klepnout na logo Neo (jedno
+  klepnutí otevře nastavení se zpožděním 380 ms), nebo přepínač v nastavení.
+  Úplně průhledný, jen karty na výšku (poměr 0.68) jako na obrázku z visionOS,
+  který poslal uživatel: prostřední velká, do stran menší, dokola (od 5
+  položek), pořadí "3 / 13" v zářezu karty, záře v barvě hry pod prostřední
+  kartou. Obrázek na výšku: vlastní → stažený obal `portrait` z MetaMetadata
+  (stejný JSON jako banner v LL, oculuscdn) → složený z banneru (rozmazané
+  pozadí + banner uprostřed). Štítky: herní čas (UsageStats — potřebuje
+  "Přístup k využití", štítek "Herní čas – povolit" otevře nastavení),
+  naposledy spuštěno, počet spuštění z Nea (počítá se od této verze), datum
+  instalace. Ovládání: joystick ←/→ (ACTION_SCROLL, drží-li se, opakuje
+  se), klepnutí na boční kartu ji přinese doprostřed, klepnutí na prostřední
+  spustí (kukátko), tažení laserem roluje, podržení otevře menu karty.
+  Šipka vlevo nahoře = zpět do mřížky.
 - Nastavení: hloubka ostrosti, krytí skla, sloupce, přesah karet, řazení
   (vlastní/abecedně/naposledy), prodleva menu karty, stahování obrázků
   z internetu (zap/vyp), skryté aplikace, znovu stáhnout obrázky,
@@ -164,6 +193,15 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
    tag `NeoDepthBlur` hlásí, když shader selže a jede se na záložní blur.
 6. Spuštění VR hry i 2D aplikace, Nastavení Questu (`systemux://settings`).
 7. Meta tlačítko přes addon (musí být nainstalovaný z legacy workflow).
+8. Kukátko: zavře se launcher hned po spuštění hry (bez probliknutí mřížky)?
+9. Karusel: 5× klepnout na logo. Směr joysticku (doprava = další karta; když
+   obráceně → prohodit znaménko v `CarouselView.onGenericMotionEvent`),
+   rychlost opakování (`STICK_*`). Otevře štítek "Herní čas – povolit"
+   nastavení přístupu k využití? Záložně z PC:
+   `adb -P 5038 shell appops set com.neolauncher.v1 GET_USAGE_STATS allow`.
+   Stáhnou se obaly na výšku (oculuscdn), nebo jen složené z banneru?
+10. Záře: je vidět barevná záře hovernuté karty a modrá záře okolo skla?
+    Není moc? (alfa v `drawCardBody` / `drawGlass`)
 
 ## Meta tlačítko (addon RedirectServices) — rozbor
 
@@ -195,6 +233,8 @@ Možnosti:
 - Addon RedirectServices přenést do tohoto repa (viz rozbor výše)
 - Rozložení jako v Lightning Launcheru: hry velké karty, aplikace malá
   kolečka dole (uživatel zvažuje místo záložek)
+- Karusel: podle zpětné vazby z headsetu buď vylepšit (paralaxa, zvuk,
+  tapeta), nebo zahodit — je to testovací režim
 - Češtinu přesunout do `strings.xml` (teď natvrdo v kódu — Quest češtinu
   jako systémový jazyk nemá, takže `values-cs` by se stejně nepoužilo)
 
@@ -203,8 +243,9 @@ Možnosti:
 `tools/screenshot/run.sh` spustí skutečný `NeoLauncherView` v Robolectricu
 (emulace Androidu na JVM) s nativní grafikou a HW vykreslováním — RenderNode,
 RenderEffect i AGSL shader jedou přes opravdovou Skia/HWUI. Stáhne opravdové
-bannery her, vyfotí klidový stav, stav s kartou pod "laserem" po odrolování
-a 5 fází animace spuštění (6× zpomalené), a složí to s ilustračním pozadím. Potřebuje jen JDK, Maven a přístup na Maven
+bannery her, vyfotí klidový stav, stav s kartou pod "laserem" po odrolování,
+6 fází animace spuštění (6× zpomalené) a karusel (klid + pohyb), a složí to
+s ilustračním pozadím. Potřebuje jen JDK, Maven a přístup na Maven
 Central + GitHub (funguje i v cloudové session). Trvá ~3 min, poprvé stáhne
 ~350 MB. **Používat po každé změně kreslení** — takhle se našla chyba v bodě 6.
 Pozadí a systémové rozmazání prostředí jsou jen ilustrace; skutečný vzhled

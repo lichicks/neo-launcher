@@ -15,6 +15,7 @@ import android.view.PixelCopy;
 import com.neolauncher.art.ArtworkLoader;
 import com.neolauncher.data.AppEntry;
 import com.neolauncher.data.Prefs;
+import com.neolauncher.ui.CarouselView;
 import com.neolauncher.ui.NeoLauncherView;
 
 import org.junit.Test;
@@ -61,7 +62,7 @@ public class ShotTest {
         shadowOf(Looper.getMainLooper()).idle();
     }
 
-    private static void capture(Activity a, NeoLauncherView v, String out) throws Exception {
+    private static void capture(Activity a, android.view.View v, String out) throws Exception {
         Bitmap bmp = Bitmap.createBitmap(v.getWidth(), v.getHeight(), Bitmap.Config.ARGB_8888);
         final int[] res = {-1};
         PixelCopy.request(a.getWindow(), bmp, r -> res[0] = r, new Handler(Looper.getMainLooper()));
@@ -72,7 +73,7 @@ public class ShotTest {
         }
     }
 
-    private static void hover(NeoLauncherView v, float x, float y) {
+    private static void hover(android.view.View v, float x, float y) {
         long t = SystemClock.uptimeMillis();
         MotionEvent e = MotionEvent.obtain(t, t, MotionEvent.ACTION_HOVER_MOVE, x, y, 0);
         e.setSource(InputDevice.SOURCE_MOUSE);
@@ -152,6 +153,7 @@ public class ShotTest {
         hover(v, (left + cardW * 0.80f) * d, (top + cardH * 0.28f) * d);
         pump(900);
         dumpState(v);
+        System.out.println("glow BONELAB=" + Integer.toHexString(art.glowColor("com.StressLevelZero.BONELAB", 0)));
         capture(a, v, outDir + "/neo-hover.png");
         dumpState(v);
 
@@ -177,6 +179,52 @@ public class ShotTest {
             System.out.println("launch frame " + (i + 1) + " at " + (System.currentTimeMillis() - start) + " ms");
         }
         setScale.invoke(null, 1f);
+
+        // --- Karusel (testovaci rezim) ---
+        CarouselView car = new CarouselView(a);
+        final long day = 24L * 60 * 60 * 1000;
+        final long nowMs = System.currentTimeMillis();
+        car.bind(prefs, art, new CarouselView.Stats() {
+            @Override public boolean hasUsageAccess() { return true; }
+            @Override public long playtimeMs(String pkg) { return (42L * 60 + 17) * 60 * 1000 + pkg.length() * 3_600_000L; }
+            @Override public long lastUsed(String pkg) { return nowMs - day - 3_600_000L; }
+            @Override public int launchCount(String pkg) { return 23; }
+            @Override public long installTime(String pkg) { return nowMs - 420 * day; }
+        });
+        car.setBattery(92, true, true);
+        a.setContentView(car);
+        pump(300);
+        car.setApps(apps, labels, 0);
+        car.show();
+        pump(2500); // obrazky na vysku se skladaji na pozadi
+        for (int i = 0; i < 5; i++) {
+            scroll(car, 555 * d, 300 * d, MotionEvent.AXIS_HSCROLL, 1f);
+            pump(260);
+        }
+        pump(1200);
+        hover(car, 555 * d + 60 * d, 336 * d - 90 * d);
+        pump(700);
+        capture(a, car, outDir + "/neo-carousel.png");
+        scroll(car, 555 * d, 300 * d, MotionEvent.AXIS_HSCROLL, 1f);
+        Thread.sleep(120);
+        shadowOf(Looper.getMainLooper()).idle();
+        capture(a, car, outDir + "/neo-carousel-move.png");
+        pump(1200);
+    }
+
+    private static void scroll(android.view.View v, float x, float y, int axis, float value) {
+        long t = SystemClock.uptimeMillis();
+        MotionEvent.PointerProperties[] pp = {new MotionEvent.PointerProperties()};
+        pp[0].id = 0;
+        pp[0].toolType = MotionEvent.TOOL_TYPE_MOUSE;
+        MotionEvent.PointerCoords[] pc = {new MotionEvent.PointerCoords()};
+        pc[0].x = x;
+        pc[0].y = y;
+        pc[0].setAxisValue(axis, value);
+        MotionEvent e = MotionEvent.obtain(t, t, MotionEvent.ACTION_SCROLL, 1, pp, pc, 0, 0,
+                1f, 1f, 0, 0, InputDevice.SOURCE_MOUSE, 0);
+        v.dispatchGenericMotionEvent(e);
+        e.recycle();
     }
 
     static Object f(Object o, String name) throws Exception {

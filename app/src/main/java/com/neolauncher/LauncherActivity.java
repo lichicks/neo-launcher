@@ -23,9 +23,11 @@ import com.neolauncher.art.ArtworkLoader;
 import com.neolauncher.data.AppEntry;
 import com.neolauncher.data.AppRepository;
 import com.neolauncher.data.Prefs;
+import com.neolauncher.data.UsageInfo;
 import com.neolauncher.launch.AppLauncher;
 import com.neolauncher.update.Updater;
 import com.neolauncher.ui.AppMenu;
+import com.neolauncher.ui.CarouselView;
 import com.neolauncher.ui.Glass;
 import com.neolauncher.ui.NeoLauncherView;
 import com.neolauncher.ui.OverlayHost;
@@ -38,7 +40,7 @@ import java.util.List;
 
 /** Jedina aktivita launcheru. Drzi NeoLauncherView a vrstvu dialogu. */
 public class LauncherActivity extends Activity
-        implements NeoLauncherView.Host, AppRepository.Listener, OverlayHost.Listener {
+        implements NeoLauncherView.Host, AppRepository.Listener, OverlayHost.Listener, Prefs.Listener {
 
     private static final int REQ_PICK_IMAGE = 41;
     /** Automaticka kontrola aktualizaci nejvys jednou za 6 hodin. */
@@ -49,10 +51,15 @@ public class LauncherActivity extends Activity
     private AppRepository repo;
     private ArtworkLoader artwork;
     private NeoLauncherView launcher;
+    /** Testovaci karuselovy rezim (5x logo Neo); lezi nad mrizkou, ukazan je vzdy jen jeden. */
+    private CarouselView carousel;
+    private boolean carouselShown;
+    private UsageInfo usage;
     private OverlayHost overlay;
     private String pendingImagePkg;
     private boolean receiversRegistered;
     private long lastRefreshMs;
+    private boolean lastLaunchOk;
 
     /** Pro addon Meta tlacitka: je launcher prave v popredi? */
     public static boolean isInForeground() {
@@ -77,6 +84,13 @@ public class LauncherActivity extends Activity
         launcher.setHost(this);
         root.addView(launcher, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        usage = new UsageInfo(this);
+        carousel = new CarouselView(this);
+        carousel.bind(prefs, artwork, carouselStats);
+        carousel.setHost(carouselHost);
+        usage.setListener(carousel::statsChanged);
+        root.addView(carousel, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         overlay = new OverlayHost(this);
         overlay.setListener(this);
         root.addView(overlay, new FrameLayout.LayoutParams(
@@ -84,6 +98,8 @@ public class LauncherActivity extends Activity
         setContentView(root);
 
         repo.addListener(this);
+        prefs.addListener(this);
+        applyMode(false);
         repo.loadCache();
         if (!repo.apps().isEmpty()) showApps(false);
         repo.refreshAsync();
@@ -107,6 +123,7 @@ public class LauncherActivity extends Activity
         super.onResume();
         sForeground = true;
         launcher.onClockTick();
+        carousel.onClockTick();
         // Pri navratu do launcheru (napr. po odinstalaci ve Store) prekontrolovat aplikace.
         long now = System.currentTimeMillis();
         if (now - lastRefreshMs > 1500) {
@@ -114,6 +131,10 @@ public class LauncherActivity extends Activity
             repo.refreshAsync();
         }
         if (prefs.sortMode() == Prefs.SORT_RECENT) showApps(true);
+        if (carouselShown) {
+            usage.refresh(false);
+            carousel.statsChanged();
+        }
         checkForUpdates(false);
     }
 
@@ -122,12 +143,14 @@ public class LauncherActivity extends Activity
         super.onPause();
         sForeground = false;
         launcher.clearPointer();
+        carousel.clearPointer();
     }
 
     @Override
     protected void onDestroy() {
         super.onDestroy();
         repo.removeListener(this);
+        prefs.removeListener(this);
     }
 
     @Override
@@ -145,8 +168,111 @@ public class LauncherActivity extends Activity
 
     private void showApps(boolean animate) {
         List<AppEntry> list = repo.forTab(launcher.tab());
-        launcher.setApps(list, labelsFor(list), animate);
+        List<String> labels = labelsFor(list);
+        launcher.setApps(list, labels, animate);
+        carousel.setApps(list, labels, launcher.tab());
     }
+
+    // --- Karusel (testovaci rezim) ------------------------------------------------
+
+    @Override
+    public void onPrefsChanged() {
+        if (prefs.carouselMode() != carouselShown) applyMode(true);
+    }
+
+    /** Ukaze mrizku, nebo karusel (podle nastaveni). Druhy pohled je INVISIBLE, ale rozlozeny. */
+    private void applyMode(boolean animate) {
+        carouselShown = prefs.carouselMode();
+        launcher.setVisibility(carouselShown ? View.INVISIBLE : View.VISIBLE);
+        carousel.setVisibility(carouselShown ? View.VISIBLE : View.INVISIBLE);
+        if (carouselShown) {
+            launcher.clearPointer();
+            usage.refresh(false);
+            if (animate) carousel.show();
+        } else {
+            carousel.clearPointer();
+        }
+    }
+
+    @Override
+    public void onToggleCarousel() {
+        final boolean on = !prefs.carouselMode();
+        prefs.setCarouselMode(on);
+        if (on) toast("Karusel (testovací) – zpět šipkou vlevo nahoře");
+    }
+
+    private void requestUsageAccess() {
+        if (UsageInfo.requestPermission(this)) {
+            toast("Najdi Neo Launcher a povol mu přístup k využití");
+        } else {
+            toast("Nastavení není dostupné. Z PC: adb shell appops set "
+                    + getPackageName() + " GET_USAGE_STATS allow");
+        }
+    }
+
+    private final CarouselView.Stats carouselStats = new CarouselView.Stats() {
+        @Override
+        public boolean hasUsageAccess() {
+            return usage.hasPermission();
+        }
+
+        @Override
+        public long playtimeMs(String pkg) {
+            return usage.playtimeMs(pkg);
+        }
+
+        @Override
+        public long lastUsed(String pkg) {
+            return Math.max(prefs.lastLaunch(pkg), usage.lastUsed(pkg));
+        }
+
+        @Override
+        public int launchCount(String pkg) {
+            return prefs.launchCount(pkg);
+        }
+
+        @Override
+        public long installTime(String pkg) {
+            return usage.installTime(pkg);
+        }
+    };
+
+    private final CarouselView.Host carouselHost = new CarouselView.Host() {
+        @Override
+        public void onLaunch(AppEntry app) {
+            LauncherActivity.this.onLaunch(app);
+        }
+
+        @Override
+        public void onLaunchSequenceDone() {
+            LauncherActivity.this.onLaunchSequenceDone();
+        }
+
+        @Override
+        public void onAppMenu(AppEntry app, RectF cardRect) {
+            LauncherActivity.this.onAppMenu(app, cardRect);
+        }
+
+        @Override
+        public void onOpenSettings() {
+            LauncherActivity.this.onOpenSettings();
+        }
+
+        @Override
+        public void onExitCarousel() {
+            prefs.setCarouselMode(false);
+        }
+
+        @Override
+        public void onTabSelected(int tab) {
+            LauncherActivity.this.onTabSelected(tab);
+        }
+
+        @Override
+        public void onRequestUsageAccess() {
+            requestUsageAccess();
+        }
+    };
 
     private List<String> labelsFor(List<AppEntry> list) {
         List<String> labels = new ArrayList<>(list.size());
@@ -159,7 +285,14 @@ public class LauncherActivity extends Activity
     @Override
     public void onLaunch(AppEntry app) {
         prefs.markLaunched(app.pkg);
-        AppLauncher.launch(this, app);
+        carousel.statsChanged();
+        lastLaunchOk = AppLauncher.launch(this, app);
+    }
+
+    @Override
+    public void onLaunchSequenceDone() {
+        // Launcher se zavre jen kdyz se aplikace opravdu spustila.
+        if (lastLaunchOk && prefs.closeAfterLaunch() && !isFinishing()) finish();
     }
 
     @Override
@@ -259,7 +392,9 @@ public class LauncherActivity extends Activity
     public void onTabSelected(int tab) {
         prefs.setTab(tab);
         List<AppEntry> list = repo.forTab(tab);
-        launcher.showTab(tab, list, labelsFor(list));
+        List<String> labels = labelsFor(list);
+        launcher.showTab(tab, list, labels);
+        carousel.setApps(list, labels, tab);
     }
 
     @Override
@@ -351,12 +486,16 @@ public class LauncherActivity extends Activity
     public void onOverlayShown() {
         launcher.setInteractive(false);
         launcher.setModalBlur(true);
+        carousel.setInteractive(false);
+        carousel.setModalBlur(true);
     }
 
     @Override
     public void onOverlayClosed() {
         launcher.setModalBlur(false);
         launcher.setInteractive(true);
+        carousel.setModalBlur(false);
+        carousel.setInteractive(true);
     }
 
     // --- Vlastni obrazek ----------------------------------------------------------
@@ -389,6 +528,7 @@ public class LauncherActivity extends Activity
         @Override
         public void onReceive(Context c, Intent i) {
             launcher.onClockTick();
+            carousel.onClockTick();
         }
     };
 
@@ -446,7 +586,9 @@ public class LauncherActivity extends Activity
         int plugged = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
         boolean charging = plugged != 0 && (status == BatteryManager.BATTERY_STATUS_CHARGING
                 || status == BatteryManager.BATTERY_STATUS_FULL);
-        launcher.setBattery(pct, charging, charging && isFastCharging(i));
+        final boolean fast = charging && isFastCharging(i);
+        launcher.setBattery(pct, charging, fast);
+        carousel.setBattery(pct, charging, fast);
     }
 
     /**

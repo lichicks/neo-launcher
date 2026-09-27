@@ -15,6 +15,7 @@ import com.neolauncher.data.AppEntry;
 import com.neolauncher.data.AppRepository;
 import com.neolauncher.data.Platform;
 import com.neolauncher.data.Prefs;
+import com.neolauncher.data.UsageInfo;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -79,6 +80,26 @@ public final class SettingsSheet {
         body.addView(Glass.row(c, "Animace spuštění (kukátko)",
                 "Okolí se stáhne do kruhu a hrou jakoby projdeš kukátkem",
                 Glass.toggle(c, prefs.launchAnimation(), prefs::setLaunchAnimation), false));
+
+        body.addView(Glass.row(c, "Po spuštění zavřít launcher",
+                "Launcher se zavře hned, jak se hra spustí (jinak zůstane otevřený vedle)",
+                Glass.toggle(c, prefs.closeAfterLaunch(), prefs::setCloseAfterLaunch), false));
+
+        body.addView(Glass.row(c, "Karusel (testovací)",
+                "Karty na výšku jako ve visionOS, bez skla. Přepíná se i 5× klepnutím na logo Neo.",
+                Glass.toggle(c, prefs.carouselMode(), prefs::setCarouselMode), false));
+
+        final boolean usageOk = new UsageInfo(c).hasPermission();
+        body.addView(Glass.row(c, "Herní čas v karuselu",
+                usageOk ? "Povoleno – karusel ukazuje, kolik jsi hrál"
+                        : "Potřebuje „Přístup k využití“ (jako plugin v Lightning Launcheru)",
+                Glass.button(c, usageOk ? "Nastavení" : "Povolit", false, v -> {
+                    if (!(c instanceof android.app.Activity)
+                            || !UsageInfo.requestPermission((android.app.Activity) c)) {
+                        Toast.makeText(c, "Z PC: adb shell appops set " + c.getPackageName()
+                                + " GET_USAGE_STATS allow", Toast.LENGTH_LONG).show();
+                    }
+                }), false));
 
         body.addView(Glass.row(c, "Karty vyskakují z panelu",
                 "Průhledný okraj okolo skla, do kterého se zvětšená karta vejde",

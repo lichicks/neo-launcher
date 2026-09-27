@@ -45,6 +45,37 @@ tokenů, žádná „od oka“ čísla. Rolovací plochy mají `Glass.fadeEdges`
 Hodiny v rychlém menu mají nahoře víc místa (`HEADER_TOP` 30) — u rohu
 s radiusem 40 působily namačkaně.
 
+**Barvy, sklo a ikony (od 2026-09-27, uživatel: „dobrý design = barevná
+paleta a ikonky“):**
+- **Paleta** `ui/Palette.java` (vybral uživatel z dsgn.house): Void Black
+  `#06070A`, Electric Cobalt `#3D5AFE` (akcent: NOVÉ, pokrok, výběr),
+  Synth Magenta `#FF2FA3` (upozornění, baterie ≤ 20 %), Toxic Amber
+  `#FF8A1E` (baterie ≤ 50 %, hvězda oblíbených), Titanium Fog `#AEB6C2`
+  (vedlejší text, světlé sklo), Holographic Pearl `#F5F7FF` (text, vybraná
+  pilulka, hlavní tlačítko – s jemným přechodem do fialova/modra). Žádné
+  jiné barvy „od oka“. Vedlejší text přes `Palette.text2()/text3()` (na
+  světlém skle je perlový, šedá by zanikla).
+- **Sklo** = jeden recept `ui/GlassSurface.java` pro panel, ornament,
+  lištu, rychlé menu, dialogy (`GlassDrawable`) i dlazdice: průhledná
+  tónovaná výplň (nahoře světlejší), měkký odlesk vlevo nahoře, **okraj
+  s přechodem** (nahoře jasný, po stranách slábne, dole jemný odraz –
+  jednobarevný okraj působí jako plast). Za dialogem `ModalDepth`: blur
+  10 dp + sytost 1,3 (barvy her prosvítají sklem, žádné šedé „zakalení“).
+- **Hover = sklo, ne neon:** dlaždice se zesvětlí, zjasní okraj a pod
+  laserem je měkké bílé světlo (rychlé menu). **Žádná barevná záře**
+  (uživateli vadila modrá záře u Wi-Fi). Vybraná záložka = světlejší
+  skleněná kapsle.
+- **Ikony** = sada **Lucide** (ISC, `THIRD_PARTY_NOTICES.md`):
+  `tools/icons/gen_icons.py <lucide/icons>` vygeneruje `ui/IconPaths.java`
+  (SVG cesty 24×24), `ui/SvgPath.java` je parsuje (včetně oblouků),
+  `Icons.draw(...)` kreslí tahem 2/24 se zaoblenými konci. Novou ikonu
+  přidat do seznamu `ICONS` v generátoru a znovu vygenerovat (Lucide:
+  `git clone --depth 1 --filter=blob:none --sparse
+  https://github.com/lucide-icons/lucide.git` + `sparse-checkout set icons`).
+  Logo Neo je kreslené zvlášť.
+- Velké nadpisy (Nastavení, hodiny v rychlém menu) mají nahoře
+  `Glass.TITLE_TOP` 30 (u rohu R 40 jinak působí namačkaně).
+
 **`docs/preview_neo.html`** — interaktivní HTML prototyp. Uživatel ho
 schválil větou "přesně takhle to chci v tom Questu". Když je spor o to,
 jak se má něco chovat, rozhoduje tenhle soubor. Rozměry v kódu (dp) jsou
@@ -84,7 +115,9 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 | `ui/DepthBlur.java` | Radiální rozmazání: AGSL shader (Android 13+), jinak obyčejný blur |
 | `ui/ShadowSprite.java` | Předpočítané rozmazané stíny karet (box-shadow) |
 | `ui/Glass.java`, `OverlayHost.java`, `SettingsSheet.java`, `AppMenu.java`, `UpdateSheet.java` | Dialogy ve stylu skla visionOS (normální Android Views). `OverlayHost` je nechá „vyrůst“ na pružině z místa, odkud se otevřely. Nastavení = dashboard s dlaždicemi |
-| `ui/GlassWidgets.java`, `ui/Icons.java`, `ui/Cascade.java` | Přepínač a posuvník ve stylu visionOS, ikony kreslené kódem (jako SF Symbols), postupný nástup dlaždic |
+| `ui/GlassWidgets.java`, `ui/Cascade.java` | Přepínač, posuvník a ikona v kulatém skle, postupný nástup dlaždic |
+| `ui/Palette.java`, `ui/GlassSurface.java`, `ui/GlassDrawable.java` | Barevná paleta, jeden recept na sklo (Canvas i Drawable) |
+| `ui/Icons.java`, `ui/IconPaths.java`, `ui/SvgPath.java` | Ikony Lucide: vygenerované SVG cesty + parser (viz „Barvy, sklo a ikony“) |
 
 ### Rozložení okna (od 2026-09-27, podle předloh z visionOS od uživatele)
 - **Skleněný panel** jen s mřížkou karet (všechny rohy zaoblené).

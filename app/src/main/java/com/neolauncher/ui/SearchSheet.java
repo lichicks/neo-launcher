@@ -93,7 +93,7 @@ public final class SearchSheet {
         edit.setSingleLine(true);
         edit.setHint("Název hry nebo aplikace");
         edit.setTextColor(Color.WHITE);
-        edit.setHintTextColor(0x80FFFFFF);
+        edit.setHintTextColor(Palette.text3());
         edit.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 17);
         edit.setBackground(null);
         edit.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
@@ -107,7 +107,7 @@ public final class SearchSheet {
         root.addView(field, flp);
 
         // Nadpis sekce zarovnany s nahledy ve vysledcich (odsazeni INSET).
-        final TextView section = Glass.text(c, "", 12, 0x99FFFFFF, true);
+        final TextView section = Glass.text(c, "", 12, Palette.text3(), true);
         section.setLetterSpacing(0.08f);
         section.setPadding(Glass.dpi(c, Glass.INSET), Glass.dpi(c, Glass.SECTION), 0, Glass.dpi(c, Glass.GAP_S));
         root.addView(section);
@@ -217,7 +217,7 @@ public final class SearchSheet {
         t.setEllipsize(TextUtils.TruncateAt.END);
         texts.addView(t);
         TextView s = Glass.text(c, e.isVr() ? "VR hra" : e.isSystemPanel() ? "Systém Questu" : "Aplikace",
-                12.5f, 0xA6FFFFFF, false);
+                12.5f, Palette.text2(), false);
         texts.addView(s);
         row.addView(texts, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         return row;

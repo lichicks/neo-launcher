@@ -1,3 +1,12 @@
+# Nové sklo, barvy a ikonky
+• Sklo je skutečně průhledné: za oknem prosvítají rozmazané barvy her a okraj se leskne jako u opravdového skla (nahoře světlejší, po stranách slábne)
+• Nová barevná paleta – tmavá, perlová, šedomodrá a jen pár barevných akcentů (kobaltová, jantarová, purpurová)
+• Všechny ikonky jsou nové, v jednom jednoduchém stylu
+• Najetí laserem už nesvítí modře – dlaždice se jen jemně rozjasní a pod laserem je měkké světlo
+• Vybrané volby a hlavní tlačítka jsou perlové s jemným duhovým nádechem
+• Nadpis v nastavení má kolem sebe víc místa
+• Baterie: do 50 % jantarová, pod 20 % purpurová
+
 # Doladění vzhledu
 • Obsah nastavení, hledání a novinek se u okraje jemně rozplyne, místo aby byl ostře useknutý
 • Hodiny v rychlém menu mají nad sebou víc místa

@@ -7,6 +7,7 @@ import android.graphics.Color;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.RadialGradient;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
@@ -70,7 +71,7 @@ public final class QuickMenuView extends View {
      * Vrch cislic hodin: vic nez PAD - velke pismo u rohu s radiusem 40 by jinak
      * pusobilo namackane. Pod datem uz jen GAP ke karte.
      */
-    private static final float HEADER_TOP = 30f;
+    private static final float HEADER_TOP = Glass.TITLE_TOP;
     /** Pilulky baterie a Wi-Fi v hlavicce. */
     private static final float PILL_H = 32f;
     private static final float PILL_PAD = 12f;
@@ -128,7 +129,14 @@ public final class QuickMenuView extends View {
     private final Path boltPath = new Path();
     private final RectF tmp = new RectF();
     private final android.graphics.Rect textBounds = new android.graphics.Rect();
-    private Shader highlight, glass;
+    /** Sklo: panel, pilulky v hlavicce a kazdy prvek zvlast (vlastni cache shaderu). */
+    private final GlassSurface panelGlass = new GlassSurface();
+    private final GlassSurface[] pillGlass = {new GlassSurface(), new GlassSurface()};
+    private final HoverGlass[] glass = new HoverGlass[EL_COUNT];
+    /** Posledni poloha laseru (pro svetlo pod ukazatelem), -1 = mimo. */
+    private float pointerX = -1, pointerY = -1;
+    private Shader spot;
+    private float spotX, spotY, spotR;
 
     public QuickMenuView(Context c, Actions actions) {
         super(c);
@@ -138,6 +146,7 @@ public final class QuickMenuView extends View {
         setClickable(true);
         for (int i = 0; i < EL_COUNT; i++) {
             rects[i] = new RectF();
+            glass[i] = new HoverGlass();
             hover[i] = new Spring(0, 0.30f, 0.78f, 0.002f);
         }
         Typeface semi = Typeface.create(Typeface.SANS_SERIF, 600, false);
@@ -266,8 +275,6 @@ public final class QuickMenuView extends View {
     protected void onSizeChanged(int w, int h, int oldw, int oldh) {
         super.onSizeChanged(w, h, oldw, oldh);
         layout(w, h);
-        highlight = new LinearGradient(0, 0, 0, h * 0.5f, Glass.GLASS_SHINE, 0x00FFFFFF, Shader.TileMode.CLAMP);
-        glass = new LinearGradient(0, 0, 0, h, Glass.GLASS_TOP, Glass.GLASS_BOTTOM, Shader.TileMode.CLAMP);
     }
 
     /**
@@ -327,18 +334,8 @@ public final class QuickMenuView extends View {
     protected void onDraw(Canvas c) {
         final long now = System.nanoTime();
         final float w = getWidth(), h = getHeight();
-        final float r = dp(Glass.R_PANEL);
-        // Matne sklo jako ostatni dialogy: bily okraj, svetla horni hrana.
-        fill.setShader(glass);
-        fill.setColor(Color.WHITE);
-        c.drawRoundRect(0, 0, w, h, r, r, fill);
-        fill.setShader(highlight);
-        fill.setColor(Color.WHITE);
-        c.drawRoundRect(0, 0, w, h, r, r, fill);
-        fill.setShader(null);
-        stroke.setStrokeWidth(dp(1.5f));
-        stroke.setColor(Glass.GLASS_STROKE);
-        c.drawRoundRect(dp(0.75f), dp(0.75f), w - dp(0.75f), h - dp(0.75f), r, r, stroke);
+        // Sklo panelu stejnym receptem jako ostatni okna (GlassSurface).
+        panelGlass.draw(c, 0, 0, w, h, dp(Glass.R_PANEL), GlassSurface.panel(), d, 1f);
 
         drawHeader(c, w);
         drawSlider(c, EL_BRIGHT, now, brightOk ? brightShown.get(now) : 0f,
@@ -363,14 +360,16 @@ public final class QuickMenuView extends View {
         final String date = days[cal.get(Calendar.DAY_OF_WEEK) - 1] + " " + cal.get(Calendar.DAY_OF_MONTH)
                 + ". " + months[cal.get(Calendar.MONTH)];
         final float pad = dp(Glass.PAD);
+        timeText.setColor(Palette.TEXT);
         c.drawText(time, pad, timeBase, timeText);
+        dateText.setColor(Palette.text2());
         c.drawText(date, pad, dateBase, dateText);
 
-        // Vpravo nahore v jedne rade: Wi-Fi a baterie jako pilulky, svisle na stredu cislic hodin.
+        // Vpravo nahore v jedne rade: Wi-Fi a baterie jako sklenene pilulky, svisle na stredu cislic hodin.
         final String pct = batteryLevel >= 0 ? batteryLevel + " %" : "–";
         final int bolts = charging ? (fastCharging ? 2 : 1) : 0;
         final float pp = dp(PILL_PAD), dot = dp(8), inner = dp(Glass.GAP_S);
-        labelText.setColor(0xF2FFFFFF);
+        labelText.setColor(Palette.TEXT);
         final float pw = labelText.measureText(pct);
         final float bw = pp + dot + inner + pw + (bolts > 0 ? dp(6) + bolts * dp(9) - dp(1) : 0) + pp;
         final String wl = wifiOn ? "Wi-Fi" : "Offline";
@@ -380,20 +379,21 @@ public final class QuickMenuView extends View {
         final Paint.FontMetrics fm = labelText.getFontMetrics();
         final float base = top + ph / 2f - (fm.ascent + fm.descent) / 2f;
 
-        // Baterie (barva nabiti je v tecce - na skle je bily text citelnejsi).
+        // Baterie: barva stavu je v tecce (perla / jantar / magenta), text zustava svetly.
         tmp.set(w - pad - bw, top, w - pad, top + ph);
         final float batLeft = tmp.left;
-        drawPill(c, tmp);
+        pillGlass[0].draw(c, tmp, ph / 2f, GlassSurface.TILE, d);
+        final int bc = Palette.battery(batteryLevel);
         fill.setShader(null);
-        fill.setColor(batteryColor());
-        fill.setShadowLayer(dp(5), 0, 0, batteryColor());
+        fill.setColor(bc);
+        fill.setShadowLayer(dp(4), 0, 0, Palette.alpha(bc, 0.8f));
         c.drawCircle(tmp.left + pp + dot / 2f, tmp.centerY(), dot / 2f, fill);
         fill.clearShadowLayer();
         c.drawText(pct, tmp.left + pp + dot + inner, base, labelText);
         float x = tmp.left + pp + dot + inner + pw + dp(6);
         if (bolts > 0) {
             fill.setShader(null);
-            fill.setColor(Color.WHITE);
+            fill.setColor(Palette.TEXT);
             for (int i = 0; i < bolts; i++) {
                 c.save();
                 c.translate(x, tmp.centerY() - dp(6));
@@ -404,24 +404,38 @@ public final class QuickMenuView extends View {
                 x += dp(9);
             }
         }
-        // Wi-Fi: vysec s ukazatelem signalu, vlevo od baterie.
+        // Wi-Fi: ikona podle sily signalu, vlevo od baterie.
         tmp.set(batLeft - inner - ww, top, batLeft - inner, top + ph);
-        drawPill(c, tmp);
-        drawWifiIcon(c, tmp.left + pp + wifiIcon / 2f, tmp.centerY() + dp(5), dp(9), wifiOn ? wifiBars : 0);
-        labelText.setColor(wifiOn ? 0xF2FFFFFF : 0x99FFFFFF);
+        pillGlass[1].draw(c, tmp, ph / 2f, GlassSurface.TILE, d);
+        final int wc = wifiOn ? Palette.TEXT : Palette.text3();
+        Icons.draw(c, Icons.wifi(wifiOn ? wifiBars : 0), tmp.left + pp + wifiIcon / 2f, tmp.centerY(),
+                wifiIcon, wc, dp(1.6f), 1f, icon);
+        labelText.setColor(wifiOn ? Palette.TEXT : Palette.text2());
         c.drawText(wl, tmp.left + pp + wifiIcon + inner, base, labelText);
     }
 
-    private void drawPill(Canvas c, RectF r) {
-        final float rr = r.height() / 2f;
+    /**
+     * Hover jako sklo, ne jako neon: dlazdice se zesvetli, zjasni se okraj
+     * a pod laserem je mekke svetlo (sleduje ukazatel). Zadna barevna zare.
+     */
+    private void drawHoverLight(Canvas c, int el, float l, float t, float r, float b, float radius, float hv,
+                                float px, float py) {
+        if (hv <= 0.01f) return;
+        glass[el].drawHover(c, l, t, r, b, radius, hv, d);
+        if (el != hovered || pointerX < 0) return;
+        final float lx = clamp(px, l, r), ly = clamp(py, t, b);
+        final float rad = Math.max(r - l, b - t) * 0.9f;
+        if (spot == null || Math.abs(spotX - lx) > 0.5f || Math.abs(spotY - ly) > 0.5f || Math.abs(spotR - rad) > 0.5f) {
+            spot = new RadialGradient(lx, ly, rad, 0x33FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
+            spotX = lx;
+            spotY = ly;
+            spotR = rad;
+        }
+        fill.setShader(spot);
+        fill.setAlpha(Math.round(255 * clamp(hv, 0f, 1f)));
+        c.drawRoundRect(l, t, r, b, radius, radius, fill);
         fill.setShader(null);
-        fill.setColor(0x33000000);
-        c.drawRoundRect(r.left, r.top + dp(2), r.right, r.bottom + dp(2), rr, rr, fill);
-        fill.setColor(0x26FFFFFF);
-        c.drawRoundRect(r, rr, rr, fill);
-        stroke.setStrokeWidth(dp(1));
-        stroke.setColor(0x40FFFFFF);
-        c.drawRoundRect(r, rr, rr, stroke);
+        fill.setAlpha(255);
     }
 
     private void drawSlider(Canvas c, int el, long now, float value, String label, boolean enabled) {
@@ -429,19 +443,18 @@ public final class QuickMenuView extends View {
         final float a = appear(el, now);
         if (a <= 0.004f) return;
         final float hv = clamp(hover[el].get(now), 0f, 1.2f);
+        final float ac = clamp(a, 0f, 1f);
         c.save();
         c.translate(0, (1f - a) * dp(12));
-        final float grow = dp(2) * hv;
+        final float grow = dp(1.5f) * hv;
         tmp.set(r.left - grow, r.top - grow, r.right + grow, r.bottom + grow);
         final float rr = tmp.height() / 2f;
-        final int alpha = Math.round(255 * clamp(a, 0f, 1f));
-        // Stopa (sklo) + plochy stin.
-        fill.setShader(null);
-        fill.setColor(Color.argb(Math.round(0x33 * a), 0, 0, 0));
-        c.drawRoundRect(tmp.left, tmp.top + dp(3), tmp.right, tmp.bottom + dp(3), rr, rr, fill);
-        fill.setColor(Color.argb(Math.round((0x26 + 0x14 * hv) * a), 255, 255, 255));
-        c.drawRoundRect(tmp, rr, rr, fill);
-        // Bila vypln - zaoblena, oriznuta stopou.
+        final int alpha = Math.round(255 * ac);
+        // Stopa = sklenena dlazdice, pri hoveru se zesvetli.
+        glass[el].draw(c, tmp.left, tmp.top, tmp.right, tmp.bottom, rr, GlassSurface.TILE, d, ac);
+        drawHoverLight(c, el, tmp.left, tmp.top, tmp.right, tmp.bottom, rr, clamp(hv, 0f, 1f) * ac,
+                pointerX, pointerY - (1f - a) * dp(12));
+        // Perlova vypln - zaoblena, oriznuta stopou.
         final float v = clamp(value, 0f, 1f);
         final float fw = Math.max(v > 0.004f ? tmp.height() : 0f, tmp.width() * v);
         if (fw > 0f) {
@@ -449,38 +462,50 @@ public final class QuickMenuView extends View {
             path.reset();
             path.addRoundRect(tmp, rr, rr, Path.Direction.CW);
             c.clipPath(path);
-            fill.setColor(Color.argb(Math.round(0xF2 * a), 255, 255, 255));
-            fill.setShadowLayer(dp(12) * hv, 0, 0, Color.argb(Math.round(120 * hv * a), 56, 189, 248));
+            fill.setShader(pearlShader(tmp.left, tmp.top, tmp.left + fw, tmp.bottom));
+            fill.setAlpha(alpha);
             c.drawRoundRect(tmp.left, tmp.top, tmp.left + fw, tmp.bottom, rr, rr, fill);
-            fill.clearShadowLayer();
+            fill.setShader(null);
+            fill.setAlpha(255);
             c.restore();
         }
-        stroke.setStrokeWidth(dp(1));
-        stroke.setColor(enabled ? Color.argb(Math.round((0x2E + 0x40 * hv) * a), 255, 255, 255)
-                : Color.argb(Math.round(0xB0 * a), 56, 189, 248));
-        c.drawRoundRect(tmp, rr, rr, stroke);
+        if (!enabled) {
+            // Bez povoleni: kobaltovy obrys = "klepni pro povoleni".
+            stroke.setShader(null);
+            stroke.setStrokeWidth(dp(1.2f));
+            stroke.setColor(Palette.alpha(Palette.COBALT_LIGHT, 0.8f * ac));
+            c.drawRoundRect(tmp.left + dp(0.6f), tmp.top + dp(0.6f), tmp.right - dp(0.6f), tmp.bottom - dp(0.6f),
+                    rr, rr, stroke);
+        }
 
         // Ikona vlevo ve ctverci o strane vysky posuvniku (stejny okraj zleva i shora),
-        // tmava, kdyz je pod ni bila vypln.
+        // tmava, kdyz je pod ni perlova vypln.
         final float ix = tmp.left + tmp.height() / 2f, iy = tmp.centerY();
-        final boolean onFill = fw > dp(44);
-        final int ic = onFill ? Color.argb(alpha, 16, 21, 31) : Color.argb(alpha, 255, 255, 255);
-        Icons.draw(c, el == EL_BRIGHT ? Icons.SUN : Icons.SPEAKER, ix, iy, dp(20), ic, dp(2), v, icon);
+        final boolean onFill = fw > tmp.height() * 0.8f;
+        final int ink = Palette.alpha(Palette.VOID, ac), light = Palette.alpha(Palette.TEXT, ac);
+        Icons.draw(c, el == EL_BRIGHT ? Icons.SUN : Icons.SPEAKER, ix, iy, dp(20), onFill ? ink : light,
+                dp(1.8f), v, icon);
         final Paint.FontMetrics fm = labelText.getFontMetrics();
         final float base = iy - (fm.ascent + fm.descent) / 2f;
         final float lx = tmp.left + tmp.height();
         final boolean labelOnFill = fw > lx - tmp.left + labelText.measureText(label) + dp(4);
-        labelText.setColor(labelOnFill ? Color.argb(alpha, 16, 21, 31) : Color.argb(alpha, 255, 255, 255));
+        labelText.setColor(labelOnFill ? ink : light);
         c.drawText(label, lx, base, labelText);
         if (enabled) {
             final String pct = Math.round(v * 100) + " %";
             final float pw = labelText.measureText(pct);
             final float px = tmp.right - dp(16) - pw;
             final boolean pctOnFill = fw > px - tmp.left + pw;
-            labelText.setColor(pctOnFill ? Color.argb(alpha, 16, 21, 31) : Color.argb(Math.round(alpha * 0.8f), 255, 255, 255));
+            labelText.setColor(pctOnFill ? ink : Palette.alpha(Palette.text2(), ac));
             c.drawText(pct, px, base, labelText);
         }
         c.restore();
+    }
+
+    /** Perlovy prechod (temer bila s nadechem do fialova a modra) pro vyplne a hlavni tlacitka. */
+    private Shader pearlShader(float l, float t, float r, float b) {
+        return new LinearGradient(l, t, r, b, new int[]{Palette.PEARL, Palette.PEARL_LILAC, Palette.PEARL_BLUE},
+                null, Shader.TileMode.CLAMP);
     }
 
     private void drawTile(Canvas c, int i, long now) {
@@ -489,49 +514,44 @@ public final class QuickMenuView extends View {
         final float a = appear(el, now);
         if (a <= 0.004f) return;
         final float hv = hover[el].get(now);
-        final float s = 1f + 0.05f * hv - (pressed == el ? 0.03f : 0f);
+        final float hc = clamp(hv, 0f, 1f);
+        final float ac = clamp(a, 0f, 1f);
+        final float s = 1f + 0.03f * hv - (pressed == el ? 0.03f : 0f);
         c.save();
         c.translate(r.centerX(), r.centerY() + (1f - a) * dp(14));
         c.scale(s, s);
         final boolean button = i == T_NEO;
         final float w2 = r.width() / 2f, h2 = r.height() / 2f, rr = button ? h2 : Math.min(dp(Glass.R_TILE), h2);
-        final float hc = clamp(hv, 0f, 1f);
-        fill.setShader(null);
-        fill.setColor(Color.argb(Math.round(0x33 * a), 0, 0, 0));
-        c.drawRoundRect(-w2, -h2 + dp(3), w2, h2 + dp(3), rr, rr, fill);
-        if (!button) {
-            fill.setColor(Color.argb(Math.round((0x1F + 0x22 * hc) * a), 255, 255, 255));
-            if (hc > 0.01f) fill.setShadowLayer(dp(14) * hc, 0, 0, Color.argb(Math.round(110 * hc * a), 56, 189, 248));
-            c.drawRoundRect(-w2, -h2, w2, h2, rr, rr, fill);
-            fill.clearShadowLayer();
-            stroke.setStrokeWidth(dp(1));
-            stroke.setColor(Color.argb(Math.round((0x24 + 0x50 * hc) * a), 255, 255, 255));
-            c.drawRoundRect(-w2, -h2, w2, h2, rr, rr, stroke);
-        } else if (hc > 0.01f) {
-            fill.setColor(Color.argb(Math.round(0x80 * hc * a), 255, 255, 255));
-            fill.setShadowLayer(dp(16) * hc, 0, 0, Color.argb(Math.round(130 * hc * a), 255, 255, 255));
-            c.drawRoundRect(-w2, -h2, w2, h2, h2, h2, fill);
-            fill.clearShadowLayer();
-        }
-        final int col = Color.argb(Math.round(255 * clamp(a, 0f, 1f)), 255, 255, 255);
         if (button) {
-            // Tlacitko "Nastaveni Nea": bila pilulka s tmavym textem (hlavni akce).
-            fill.setColor(Color.argb(Math.round(0xF2 * clamp(a, 0f, 1f)), 255, 255, 255));
+            // Tlacitko "Nastaveni Nea": perlova pilulka s tmavym textem (hlavni akce), hover = jasnejsi.
+            fill.setShader(pearlShader(-w2, -h2, w2, h2));
+            fill.setAlpha(Math.round(255 * ac));
             c.drawRoundRect(-w2, -h2, w2, h2, h2, h2, fill);
-            final int ink = (Glass.INK & 0x00FFFFFF) | (Math.round(255 * clamp(a, 0f, 1f)) << 24);
+            fill.setShader(null);
+            if (hc > 0.01f) {
+                fill.setColor(Palette.alpha(0xFFFFFFFF, 0.55f * hc * ac));
+                c.drawRoundRect(-w2, -h2, w2, h2, h2, h2, fill);
+            }
+            fill.setAlpha(255);
+            final int ink = Palette.alpha(Glass.INK, ac);
             final String t = "Nastavení Nea";
             labelText.setColor(ink);
             final float tw = labelText.measureText(t);
             final float total = dp(20) + dp(10) + tw;
-            Icons.draw(c, Icons.GEAR, -total / 2f + dp(10), 0, dp(20), ink, dp(1.9f), 1f, icon);
+            Icons.draw(c, Icons.GEAR, -total / 2f + dp(10), 0, dp(20), ink, dp(1.8f), 1f, icon);
             final Paint.FontMetrics fm = labelText.getFontMetrics();
             c.drawText(t, -total / 2f + dp(30), -(fm.ascent + fm.descent) / 2f, labelText);
         } else {
+            glass[el].draw(c, -w2, -h2, w2, h2, rr, GlassSurface.TILE, d, ac);
+            // Svetlo pod laserem: souradnice View prepocitane do lokalnich (stred dlazdice).
+            drawHoverLight(c, el, -w2, -h2, w2, h2, rr, hc * ac,
+                    (pointerX - r.centerX()) / s, (pointerY - r.centerY() - (1f - a) * dp(14)) / s);
             // Vodorovna dlazdice: ikona vlevo (stejny okraj jako u posuvniku), nazev vedle.
+            final int col = Palette.alpha(Palette.TEXT, ac);
             final float ix = -w2 + dp(24);
-            Icons.draw(c, TILE_ICONS[i], ix, 0, dp(22), col, dp(2), 1f, icon);
+            Icons.draw(c, TILE_ICONS[i], ix, 0, dp(22), col, dp(1.8f), 1f, icon);
             tileText.setTextAlign(Paint.Align.LEFT);
-            tileText.setColor(Color.argb(Math.round(235 * clamp(a, 0f, 1f)), 255, 255, 255));
+            tileText.setColor(Palette.alpha(Palette.TEXT, 0.94f * ac));
             final Paint.FontMetrics fm = tileText.getFontMetrics();
             // Presnejsi nazev (odliseni od nastaveni Nea).
             c.drawText(i == T_QUEST_SETTINGS ? "Nastavení Questu" : TILE_LABELS[i],
@@ -550,14 +570,9 @@ public final class QuickMenuView extends View {
         c.save();
         c.translate(0, (1f - a) * dp(12));
         final float rr = dp(Glass.R_TILE);
-        fill.setShader(null);
-        fill.setColor(Color.argb(Math.round(0x33 * ac), 0, 0, 0));
-        c.drawRoundRect(r.left, r.top + dp(3), r.right, r.bottom + dp(3), rr, rr, fill);
-        fill.setColor(Color.argb(Math.round((0x1F + 0x1A * hv) * ac), 255, 255, 255));
-        c.drawRoundRect(r, rr, rr, fill);
-        stroke.setStrokeWidth(dp(1));
-        stroke.setColor(Color.argb(Math.round((0x2E + 0x40 * hv) * ac), 255, 255, 255));
-        c.drawRoundRect(r, rr, rr, stroke);
+        glass[EL_LAST].draw(c, r.left, r.top, r.right, r.bottom, rr, GlassSurface.TILE, d, ac);
+        drawHoverLight(c, EL_LAST, r.left, r.top, r.right, r.bottom, rr, hv * ac,
+                pointerX, pointerY - (1f - a) * dp(12));
         // Banner hry (na sirku) vlevo - odsazeny INSET, zaobleni soustredne s kartou.
         final float in = dp(Glass.INSET), ri = dp(Glass.R_INNER);
         final float th = r.height() - 2 * in, tw = th * 1.6f;
@@ -571,64 +586,36 @@ public final class QuickMenuView extends View {
             c.drawRoundRect(tl, tt, tl + tw, tt + th, ri, ri, artPaint);
             artPaint.setShader(null);
         } else {
-            fill.setColor(Color.argb(Math.round(0x33 * ac), 255, 255, 255));
+            fill.setColor(Palette.alpha(0x33FFFFFF, ac));
             c.drawRoundRect(tl, tt, tl + tw, tt + th, ri, ri, fill);
         }
-        // Tlacitko vpravo: bila pilulka s tmavym textem, od praveho okraje stejne jako shora.
-        labelText.setColor(Glass.INK);
+        // Tlacitko vpravo: perlova pilulka s tmavym textem, od praveho okraje stejne jako shora.
         final float bh = dp(CARD_BTN_H), bm = (r.height() - bh) / 2f;
         final float bw = labelText.measureText(lastButton) + dp(32);
         final float bl = r.right - bm - bw, bt = r.centerY() - bh / 2f;
-        fill.setColor(Color.argb(Math.round(0xF2 * ac), 255, 255, 255));
-        if (hv > 0.01f) fill.setShadowLayer(dp(12) * hv, 0, 0, Color.argb(Math.round(120 * hv), 255, 255, 255));
+        fill.setShader(pearlShader(bl, bt, bl + bw, bt + bh));
+        fill.setAlpha(Math.round(255 * ac));
         c.drawRoundRect(bl, bt, bl + bw, bt + bh, bh / 2f, bh / 2f, fill);
-        fill.clearShadowLayer();
+        fill.setShader(null);
+        if (hv > 0.01f) {
+            fill.setColor(Palette.alpha(0xFFFFFFFF, 0.55f * hv * ac));
+            c.drawRoundRect(bl, bt, bl + bw, bt + bh, bh / 2f, bh / 2f, fill);
+        }
+        fill.setAlpha(255);
         final Paint.FontMetrics fm = labelText.getFontMetrics();
-        labelText.setColor((Glass.INK & 0x00FFFFFF) | (Math.round(255 * ac) << 24));
+        labelText.setColor(Palette.alpha(Glass.INK, ac));
         c.drawText(lastButton, bl + dp(16), bt + bh / 2f - (fm.ascent + fm.descent) / 2f, labelText);
         // Texty mezi bannerem a tlacitkem.
         final float tx = tl + tw + dp(Glass.GAP);
         final float maxW = bl - dp(Glass.GAP) - tx;
-        smallText.setColor(Color.argb(Math.round(0xB3 * ac), 255, 255, 255));
+        smallText.setColor(Palette.alpha(Palette.text2(), ac));
         c.drawText(android.text.TextUtils.ellipsize(lastSub, smallText, maxW,
                 android.text.TextUtils.TruncateAt.END).toString(), tx, r.centerY() - dp(6), smallText);
-        labelText.setColor(Color.argb(Math.round(255 * ac), 255, 255, 255));
+        labelText.setColor(Palette.alpha(Palette.TEXT, ac));
         c.drawText(android.text.TextUtils.ellipsize(lastTitle, labelText, maxW,
                 android.text.TextUtils.TruncateAt.END).toString(), tx, r.centerY() + dp(14), labelText);
         c.restore();
     }
-
-    private int batteryColor() {
-        if (batteryLevel > 80) return 0xFF22C55E;
-        if (batteryLevel > 50) return 0xFF3B82F6;
-        if (batteryLevel > 20) return 0xFFF97316;
-        if (batteryLevel >= 0) return 0xFFEF4444;
-        return 0xFFFFFFFF;
-    }
-
-    // --- Ikony (vektorove, at jsou ostre v jakekoliv velikosti) ------------------
-
-    private void strokeIcon(int color, float width) {
-        icon.setShader(null);
-        icon.setStyle(Paint.Style.STROKE);
-        icon.setStrokeWidth(width);
-        icon.setColor(color);
-    }
-
-
-
-    private void drawWifiIcon(Canvas c, float x, float y, float s, int bars) {
-        strokeIcon(0, dp(2));
-        for (int i = 1; i <= 3; i++) {
-            icon.setColor(bars > i ? 0xF2FFFFFF : 0x4DFFFFFF);
-            final float rr = s * i / 3f * 1.35f;
-            c.drawArc(x - rr, y - rr, x + rr, y + rr, 225, 90, false, icon);
-        }
-        icon.setStyle(Paint.Style.FILL);
-        icon.setColor(bars > 0 ? 0xF2FFFFFF : 0x4DFFFFFF);
-        c.drawCircle(x, y - dp(1), dp(1.8f), icon);
-    }
-
 
     // =========================================================================
     // Vstup
@@ -658,9 +645,13 @@ public final class QuickMenuView extends View {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_HOVER_ENTER:
             case MotionEvent.ACTION_HOVER_MOVE:
-                setHovered(elementAt(e.getX(), e.getY()));
+                pointerX = e.getX();
+                pointerY = e.getY();
+                setHovered(elementAt(pointerX, pointerY));
+                if (hovered >= 0) invalidate(); // svetlo pod laserem jde za ukazatelem
                 break;
             case MotionEvent.ACTION_HOVER_EXIT:
+                pointerX = pointerY = -1;
                 setHovered(-1);
                 break;
             default:
@@ -764,6 +755,20 @@ public final class QuickMenuView extends View {
         }
         volumeShown.set(volume, System.nanoTime());
         invalidate();
+    }
+
+    /** Sklo prvku + zesvetleni pri hoveru (druha vrstva s pruhlednosti podle pruziny). */
+    private static final class HoverGlass {
+        private final GlassSurface base = new GlassSurface();
+        private final GlassSurface lit = new GlassSurface();
+
+        void draw(Canvas c, float l, float t, float r, float b, float radius, GlassSurface.Style s, float d, float a) {
+            base.draw(c, l, t, r, b, radius, s, d, a);
+        }
+
+        void drawHover(Canvas c, float l, float t, float r, float b, float radius, float hv, float d) {
+            lit.draw(c, l, t, r, b, radius, GlassSurface.TILE_HOVER, d, hv);
+        }
     }
 
     private static float clamp(float v, float lo, float hi) {

@@ -136,6 +136,9 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     }
 
     private final float d;
+    private final GlassSurface tabGlass = new GlassSurface();
+    private final GlassSurface backGlass = new GlassSurface();
+    private final GlassSurface settingsGlass = new GlassSurface();
     private final float touchSlop;
     private Host host;
     private Prefs prefs;
@@ -217,7 +220,6 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     private final TextPaint tabText = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private final TextPaint headText = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private final TextPaint hintText = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
-    private final Path iconPath = new Path();
     private final Path boltPath = new Path();
     private final Matrix shaderMatrix = new Matrix();
     private final RectF tmp = new RectF();
@@ -853,25 +855,8 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         settingsRect.set(getWidth() - dp(24) - 2 * r, midY - r, getWidth() - dp(24), midY + r);
         drawRoundButton(c, backRect, zoneHover[ZONE_BACK].get(now));
         drawRoundButton(c, settingsRect, zoneHover[ZONE_SETTINGS].get(now));
-        iconPaint.setStyle(Paint.Style.STROKE);
-        iconPaint.setStrokeWidth(dp(2.2f));
-        iconPaint.setColor(Color.WHITE);
-        iconPath.reset();
-        iconPath.moveTo(backRect.centerX() + dp(3), midY - dp(7));
-        iconPath.lineTo(backRect.centerX() - dp(4), midY);
-        iconPath.lineTo(backRect.centerX() + dp(3), midY + dp(7));
-        c.drawPath(iconPath, iconPaint);
-        // Ikona "posuvniky".
-        iconPaint.setStrokeWidth(dp(1.8f));
-        final float sx = settingsRect.centerX();
-        for (int i = -1; i <= 1; i++) {
-            final float ly = midY + i * dp(5.5f);
-            c.drawLine(sx - dp(8), ly, sx + dp(8), ly, iconPaint);
-        }
-        iconPaint.setStyle(Paint.Style.FILL);
-        c.drawCircle(sx - dp(3.5f), midY - dp(5.5f), dp(2.6f), iconPaint);
-        c.drawCircle(sx + dp(4), midY, dp(2.6f), iconPaint);
-        c.drawCircle(sx - dp(1), midY + dp(5.5f), dp(2.6f), iconPaint);
+        Icons.draw(c, Icons.CHEVRON_LEFT, backRect.centerX(), midY, dp(22), Palette.TEXT, dp(2f), 1f, iconPaint);
+        Icons.draw(c, Icons.SLIDERS, settingsRect.centerX(), midY, dp(20), Palette.TEXT, dp(1.8f), 1f, iconPaint);
 
         drawTabs(c, now, midY);
         drawStatus(c, now, midY);
@@ -886,16 +871,11 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         fill.setShader(null);
         fill.setColor(0x33000000);
         c.drawCircle(r.centerX(), r.centerY() + dp(2), rad, fill);
-        fill.setColor(Color.argb(Math.round(lerp(0x4D, 0x80, hv)), 18, 22, 32));
+        // Kulate sklo stejnym receptem jako zbytek (tmave pod, pak sklo, hover zesvetli).
+        fill.setColor(Palette.alpha(Palette.VOID, 0.55f));
         c.drawCircle(r.centerX(), r.centerY(), rad, fill);
-        if (hv > 0.004f) {
-            fill.setColor(Color.argb(Math.round(28 * hv), 255, 255, 255));
-            c.drawCircle(r.centerX(), r.centerY(), rad, fill);
-        }
-        stroke.setShader(null);
-        stroke.setStrokeWidth(dp(1));
-        stroke.setColor(Color.argb(Math.round(lerp(0x33, 0x80, hv)), 255, 255, 255));
-        c.drawCircle(r.centerX(), r.centerY(), rad - dp(0.5f), stroke);
+        (r == backRect ? backGlass : settingsGlass).draw(c, r, rad,
+                hv > 0.004f ? GlassSurface.TILE_HOVER : GlassSurface.TILE, d);
     }
 
     private void drawTabs(Canvas c, long now, float midY) {
@@ -930,13 +910,8 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         final float f = tp - i0;
         final float il = lerp(tabRects[i0].left, tabRects[i1].left, f);
         final float ir = lerp(tabRects[i0].right, tabRects[i1].right, f);
-        fill.setColor(0x2EFFFFFF);
-        fill.setShadowLayer(dp(10), 0, 0, 0x5538BDF8);
-        c.drawRoundRect(il, midY - itemH / 2f, ir, midY + itemH / 2f, itemH / 2f, itemH / 2f, fill);
-        fill.clearShadowLayer();
-        stroke.setColor(0x6638BDF8);
-        c.drawRoundRect(il + dp(0.5f), midY - itemH / 2f + dp(0.5f), ir - dp(0.5f),
-                midY + itemH / 2f - dp(0.5f), itemH / 2f, itemH / 2f, stroke);
+        // Vybrana zalozka = svetlejsi sklenena kapsle (bez barevne zare), jako v mrizce.
+        tabGlass.draw(c, il, midY - itemH / 2f, ir, midY + itemH / 2f, itemH / 2f, GlassSurface.TILE_HOVER, d, 1f);
         final Paint.FontMetrics fm = tabText.getFontMetrics();
         final float baseY = midY - (fm.ascent + fm.descent) / 2f;
         for (int i = 0; i < TAB_NAMES.length; i++) {
@@ -1003,11 +978,7 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
     }
 
     private int batteryColor() {
-        if (batteryLevel > 80) return 0xFF22C55E;
-        if (batteryLevel > 50) return 0xFF3B82F6;
-        if (batteryLevel > 20) return 0xFFF97316;
-        if (batteryLevel >= 0) return 0xFFEF4444;
-        return 0xFFFFFFFF;
+        return Palette.battery(batteryLevel);
     }
 
     private String countLabel(int n) {
@@ -1081,10 +1052,10 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
             fill.setColor(Color.argb(Math.round(lerp(0x59, 0x80, hv) * f), 18, 22, 32));
             c.drawRoundRect(chip.rect, rr, rr, fill);
             stroke.setStrokeWidth(dp(1));
-            stroke.setColor(chip.action ? Color.argb(Math.round(lerp(0x80, 0xE6, hv) * f), 56, 189, 248)
+            stroke.setColor(chip.action ? Palette.alpha(Palette.COBALT_LIGHT, lerp(0.5f, 0.9f, hv) * f)
                     : Color.argb(Math.round(0x2E * f), 255, 255, 255));
             c.drawRoundRect(chip.rect, rr, rr, stroke);
-            final int col = chip.action ? 0xFF7DD3FC : 0xFFFFFFFF;
+            final int col = chip.action ? Palette.COBALT_LIGHT : Palette.TEXT;
             drawIcon(c, chip.icon, x + dp(12) + icon / 2f, y, icon, (col & 0x00FFFFFF) | (Math.round(al * 0.9f) << 24));
             chipText.setColor((col & 0x00FFFFFF) | (Math.round(al * 0.95f) << 24));
             c.drawText(chip.text, x + dp(12) + icon + dp(7), y - (fm.ascent + fm.descent) / 2f, chipText);
@@ -1092,40 +1063,11 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         }
     }
 
+    /** Ikona stitku (sada Lucide jako vsude jinde). */
     private void drawIcon(Canvas c, int type, float x, float y, float size, int color) {
-        final float s = size / 2f;
-        iconPaint.setColor(color);
-        iconPaint.setStrokeWidth(dp(1.6f));
-        iconPaint.setStyle(Paint.Style.STROKE);
-        switch (type) {
-            case ICON_CLOCK:
-                c.drawCircle(x, y, s * 0.9f, iconPaint);
-                c.drawLine(x, y, x, y - s * 0.5f, iconPaint);
-                c.drawLine(x, y, x + s * 0.4f, y + s * 0.2f, iconPaint);
-                break;
-            case ICON_CAL:
-                c.drawRoundRect(x - s * 0.9f, y - s * 0.7f, x + s * 0.9f, y + s * 0.85f, dp(2), dp(2), iconPaint);
-                c.drawLine(x - s * 0.9f, y - s * 0.2f, x + s * 0.9f, y - s * 0.2f, iconPaint);
-                c.drawLine(x - s * 0.45f, y - s, x - s * 0.45f, y - s * 0.5f, iconPaint);
-                c.drawLine(x + s * 0.45f, y - s, x + s * 0.45f, y - s * 0.5f, iconPaint);
-                break;
-            case ICON_PLAY:
-                iconPaint.setStyle(Paint.Style.FILL_AND_STROKE);
-                iconPath.reset();
-                iconPath.moveTo(x - s * 0.5f, y - s * 0.75f);
-                iconPath.lineTo(x + s * 0.8f, y);
-                iconPath.lineTo(x - s * 0.5f, y + s * 0.75f);
-                iconPath.close();
-                c.drawPath(iconPath, iconPaint);
-                break;
-            default:
-                c.drawLine(x, y - s * 0.9f, x, y + s * 0.3f, iconPaint);
-                c.drawLine(x - s * 0.5f, y - s * 0.15f, x, y + s * 0.35f, iconPaint);
-                c.drawLine(x + s * 0.5f, y - s * 0.15f, x, y + s * 0.35f, iconPaint);
-                c.drawLine(x - s * 0.8f, y + s * 0.85f, x + s * 0.8f, y + s * 0.85f, iconPaint);
-                break;
-        }
-        iconPaint.setStyle(Paint.Style.STROKE);
+        final int id = type == ICON_CLOCK ? Icons.CLOCK : type == ICON_CAL ? Icons.CALENDAR
+                : type == ICON_PLAY ? Icons.PLAY : Icons.DOWNLOAD;
+        Icons.draw(c, id, x, y, size, color, dp(1.6f), 1f, iconPaint);
     }
 
     static String formatDuration(long ms) {

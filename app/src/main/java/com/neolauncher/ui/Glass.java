@@ -21,7 +21,8 @@ import java.util.function.IntConsumer;
  * Prvky maji stav "hovered", ktery Quest nastavi, kdyz na ne mirite laserem.
  */
 public final class Glass {
-    public static final int ACCENT = 0xFF38BDF8;
+    /** Hlavni akcent (Electric Cobalt z palety). */
+    public static final int ACCENT = Palette.COBALT;
     private static final int[] HOVERED = {android.R.attr.state_hovered};
     private static final int[] PRESSED = {android.R.attr.state_pressed};
     private static final int[] SELECTED = {android.R.attr.state_selected};
@@ -40,6 +41,13 @@ public final class Glass {
     public static final float SECTION = 20f;
     /** Mezi dlazdicemi a prvky v mrizce - vodorovne i svisle stejne. */
     public static final float GAP = 12f;
+    /**
+     * Velky nadpis (Nastaveni, hodiny v rychlem menu): nahore 30 misto PAD -
+     * u rohu s radiusem 40 by jinak pusobil namackane. Vodorovne o kousek
+     * odsazeny od obsahu pod nim (opticky zarovnany s textem v dlazdicich).
+     */
+    public static final float TITLE_TOP = 30f;
+    public static final float TITLE_INSET = 4f;
     /** Hlavni tlacitko pres celou sirku (Hotovo, Nastaveni Nea...). */
     public static final float BUTTON_H = 48f;
     /** Delka rozplynuti obsahu u okraje rolovaci plochy. */
@@ -67,74 +75,66 @@ public final class Glass {
     }
 
     /*
-     * Barvy skla dialogu (nahore svetlejsi) - sdili je i rychle menu. Ridi se
-     * volbou "Styl skla", at dialog vypada jako zbytek launcheru: tmave sklo
-     * (vychozi, jako panel z preview) nebo svetle sede.
+     * Styl skla (volba v nastaveni): tmave "Void" sklo (vychozi) nebo svetle
+     * "Titanium Fog". Kresli se jednim receptem (GlassSurface) - panel,
+     * ornament, lista, rychle menu, dialogy i dlazdice.
      */
-    public static int GLASS_TOP;
-    public static int GLASS_BOTTOM;
-    public static int GLASS_STROKE;
-    public static int GLASS_SHINE;
-    /** Dlazdice uvnitr skla. */
-    public static int TILE;
-    public static int TILE_HOVER;
-    public static int TILE_STROKE;
+    private static boolean light;
 
-    static {
-        setStyle(false);
-    }
-
-    /** @param vision true = svetle sede sklo, false = tmave sklo jako panel launcheru */
+    /** @param vision true = svetle sklo (Titanium Fog), false = tmave sklo (Void) */
     public static void setStyle(boolean vision) {
-        if (vision) {
-            GLASS_TOP = 0xD6646872;
-            GLASS_BOTTOM = 0xCF484C55;
-            GLASS_STROKE = 0x59FFFFFF;
-            GLASS_SHINE = 0x2EFFFFFF;
-            TILE = 0x1FFFFFFF;
-            TILE_HOVER = 0x33FFFFFF;
-            TILE_STROKE = 0x33FFFFFF;
-        } else {
-            GLASS_TOP = 0xF01C222D;
-            GLASS_BOTTOM = 0xF2121720;
-            GLASS_STROKE = 0x3DFFFFFF;
-            GLASS_SHINE = 0x1FFFFFFF;
-            TILE = 0x12FFFFFF;
-            TILE_HOVER = 0x26FFFFFF;
-            TILE_STROKE = 0x21FFFFFF;
-        }
+        light = vision;
     }
-    /** Tmavy text na bilem (vybrana pilulka, hlavni tlacitko). */
-    public static final int INK = 0xFF1C212B;
 
-    /** Matne sklo: bily okraj, svetla horni hrana, radius R_PANEL. */
+    public static boolean isLight() {
+        return light;
+    }
+
+    /** Tmavy text na perlovem pozadi (vybrana pilulka, hlavni tlacitko). */
+    public static final int INK = Palette.VOID;
+
+    /** Sklo dialogu, radius R_PANEL. */
     public static Drawable panel(Context c) {
         return panel(c, R_PANEL);
     }
 
     public static Drawable panel(Context c, float radiusDp) {
-        GradientDrawable base = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{GLASS_TOP, GLASS_BOTTOM});
-        base.setCornerRadius(dp(c, radiusDp));
-        base.setStroke(dpi(c, 1.5f), GLASS_STROKE);
-        GradientDrawable shine = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                new int[]{GLASS_SHINE, 0x00FFFFFF, 0x00FFFFFF});
-        shine.setCornerRadius(dp(c, radiusDp));
-        return new android.graphics.drawable.LayerDrawable(new Drawable[]{base, shine});
+        return new GlassDrawable(dp(c, radiusDp), c.getResources().getDisplayMetrics().density,
+                GlassSurface.panel(), null, null);
     }
 
-    /** Dlazdice (karta nastaveni, widget) - pri miren laserem se rozsviti. */
+    /** Dlazdice (karta nastaveni) - pri mireni laserem se rozsviti (bez barevne zare). */
     public static Drawable tile(Context c) {
-        StateListDrawable s = new StateListDrawable();
-        s.addState(PRESSED, round(c, 0x40FFFFFF, R_TILE, 0x80FFFFFF));
-        s.addState(HOVERED, round(c, TILE_HOVER, R_TILE, 0x66FFFFFF));
-        s.addState(EMPTY, round(c, TILE, R_TILE, TILE_STROKE));
-        return s;
+        return new GlassDrawable(dp(c, R_TILE), c.getResources().getDisplayMetrics().density,
+                GlassSurface.TILE, GlassSurface.TILE_HOVER, GlassSurface.TILE_PRESSED);
     }
 
     /** Staticka dlazdice bez hoveru (widgety). */
     public static Drawable widget(Context c) {
-        return round(c, TILE, R_TILE, TILE_STROKE);
+        return new GlassDrawable(dp(c, R_TILE), c.getResources().getDisplayMetrics().density,
+                GlassSurface.TILE, null, null);
+    }
+
+    /**
+     * Perlova plocha (vybrana pilulka, hlavni tlacitko, zapnuty prepinac):
+     * temer bila s jemnym "holografickym" nadechem do fialova a modra.
+     */
+    public static GradientDrawable pearl(Context c, float radiusDp, boolean bright) {
+        GradientDrawable g = new GradientDrawable(GradientDrawable.Orientation.TL_BR, bright
+                ? new int[]{0xFFFFFFFF, 0xFFF7F5FF, 0xFFF2F7FF}
+                : new int[]{Palette.PEARL, Palette.PEARL_LILAC, Palette.PEARL_BLUE});
+        g.setCornerRadius(dp(c, radiusDp));
+        return g;
+    }
+
+    private static Drawable pearlStates(Context c, float radiusDp) {
+        StateListDrawable s = new StateListDrawable();
+        GradientDrawable pressed = pearl(c, radiusDp, false);
+        pressed.setAlpha(0xD9);
+        s.addState(PRESSED, pressed);
+        s.addState(HOVERED, pearl(c, radiusDp, true));
+        s.addState(EMPTY, pearl(c, radiusDp, false));
+        return s;
     }
 
     /** Pilulka (kategorie, volba): vybrana = bila s tmavym textem, jinak obrys. */
@@ -151,10 +151,10 @@ public final class Glass {
 
     public static void setPillSelected(Context c, TextView t, boolean selected) {
         t.setSelected(selected);
-        t.setTextColor(selected ? INK : 0xF2FFFFFF);
+        t.setTextColor(selected ? INK : Palette.TEXT);
         t.setBackground(selected
-                ? states(c, 999, 0xF2FFFFFF, 0xFFFFFFFF, 0xFFE2E8F0, 0, 0)
-                : states(c, 999, 0x00FFFFFF, 0x26FFFFFF, 0x40FFFFFF, 0, 0x59FFFFFF));
+                ? pearlStates(c, 999)
+                : states(c, 999, 0x0DFFFFFF, 0x26FFFFFF, 0x40FFFFFF, 0, 0x40FFFFFF));
     }
 
     private static GradientDrawable round(Context c, int color, float radius, int strokeColor) {
@@ -199,7 +199,7 @@ public final class Glass {
     }
 
     public static TextView section(Context c, String s) {
-        TextView t = text(c, s.toUpperCase(), 12, 0x99FFFFFF, true);
+        TextView t = text(c, s.toUpperCase(), 12, Palette.text3(), true);
         t.setLetterSpacing(0.08f);
         t.setPadding(0, dpi(c, 18), 0, dpi(c, 6));
         return t;
@@ -207,13 +207,13 @@ public final class Glass {
 
     /** Tlacitko-pilulka. accent = hlavni akce (bila s tmavym textem), jinak obrys. */
     public static TextView button(Context c, String label, boolean accent, View.OnClickListener l) {
-        TextView b = text(c, label, 14, accent ? INK : Color.WHITE, true);
+        TextView b = text(c, label, 14, accent ? INK : Palette.TEXT, true);
         b.setGravity(Gravity.CENTER);
         b.setPadding(dpi(c, 18), dpi(c, 9), dpi(c, 18), dpi(c, 9));
         if (accent) {
-            b.setBackground(states(c, 999, 0xF2FFFFFF, 0xFFFFFFFF, 0xFFE2E8F0, 0, 0));
+            b.setBackground(pearlStates(c, 999));
         } else {
-            b.setBackground(states(c, 999, 0x14FFFFFF, 0x33FFFFFF, 0x4DFFFFFF, 0, 0x66FFFFFF));
+            b.setBackground(states(c, 999, 0x14FFFFFF, 0x2EFFFFFF, 0x47FFFFFF, 0, 0x4DFFFFFF));
         }
         b.setClickable(true);
         b.setFocusable(true);
@@ -223,7 +223,7 @@ public final class Glass {
 
     /** Polozka menu pres celou sirku, zarovnana vlevo. */
     public static TextView menuItem(Context c, String label, boolean danger, View.OnClickListener l) {
-        TextView b = text(c, label, 15, danger ? 0xFFFCA5A5 : Color.WHITE, false);
+        TextView b = text(c, label, 15, danger ? Palette.MAGENTA : Palette.TEXT, false);
         b.setGravity(Gravity.CENTER_VERTICAL);
         b.setPadding(dpi(c, 14), dpi(c, 11), dpi(c, 14), dpi(c, 11));
         b.setBackground(states(c, R_TILE, 0x00FFFFFF, 0x2EFFFFFF, 0x47FFFFFF, 0, 0));
@@ -268,7 +268,7 @@ public final class Glass {
         texts.setOrientation(LinearLayout.VERTICAL);
         texts.addView(text(c, title, 15, Color.WHITE, true));
         if (subtitle != null && !subtitle.isEmpty()) {
-            TextView s = text(c, subtitle, 12.5f, 0x99FFFFFF, false);
+            TextView s = text(c, subtitle, 12.5f, Palette.text2(), false);
             s.setPadding(0, dpi(c, 2), 0, 0);
             texts.addView(s);
         }

@@ -56,7 +56,7 @@ public final class WhatsNewSheet {
         titles.setOrientation(LinearLayout.VERTICAL);
         titles.setPadding(Glass.dpi(c, Glass.GAP), 0, 0, 0);
         titles.addView(Glass.text(c, "Co je nového", 24, Color.WHITE, true));
-        titles.addView(Glass.text(c, "Neo " + version, 13, 0xB3FFFFFF, false));
+        titles.addView(Glass.text(c, "Neo " + version, 13, Palette.text2(), false));
         header.addView(titles, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         root.addView(header);
 
@@ -75,22 +75,22 @@ public final class WhatsNewSheet {
             final Section s = sections.get(i);
             final boolean latest = i == 0;
             if (i == 1) {
-                TextView older = Glass.text(c, "DŘÍVE", 12, 0x80FFFFFF, true);
+                TextView older = Glass.text(c, "DŘÍVE", 12, Palette.text3(), true);
                 older.setLetterSpacing(0.08f);
                 older.setPadding(0, Glass.dpi(c, Glass.SECTION), 0, 0);
                 body.addView(older);
             }
-            TextView t = Glass.text(c, s.title, latest ? 18 : 15, latest ? Color.WHITE : 0xCCFFFFFF, true);
+            TextView t = Glass.text(c, s.title, latest ? 18 : 15, latest ? Palette.TEXT : Palette.text2(), true);
             t.setPadding(0, latest ? 0 : Glass.dpi(c, Glass.GAP), 0, Glass.dpi(c, Glass.GAP_S));
             body.addView(t);
             for (String p : s.points) {
                 LinearLayout row = new LinearLayout(c);
                 row.setOrientation(LinearLayout.HORIZONTAL);
                 row.setPadding(0, Glass.dpi(c, 3), 0, Glass.dpi(c, 3));
-                TextView dot = Glass.text(c, "•", latest ? 15 : 13.5f, latest ? Glass.ACCENT : 0x80FFFFFF, true);
+                TextView dot = Glass.text(c, "•", latest ? 15 : 13.5f, latest ? Palette.COBALT_LIGHT : Palette.text3(), true);
                 dot.setPadding(0, 0, Glass.dpi(c, 10), 0);
                 row.addView(dot);
-                TextView pt = Glass.text(c, p, latest ? 15 : 13.5f, latest ? 0xF2FFFFFF : 0xA6FFFFFF, false);
+                TextView pt = Glass.text(c, p, latest ? 15 : 13.5f, latest ? Palette.TEXT : Palette.text2(), false);
                 pt.setLineSpacing(0, 1.12f);
                 row.addView(pt, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
                 body.addView(row);

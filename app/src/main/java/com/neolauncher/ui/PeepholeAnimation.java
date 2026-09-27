@@ -227,11 +227,11 @@ final class PeepholeAnimation {
             edge.setShader(null);
         }
 
-        // 4) Obruba kukatka: jemny bily okraj s modrou zari.
+        // 4) Obruba kukatka: jemny bily okraj s kobaltovou zari.
         if (rimA > 0.004f) {
             rim.setStrokeWidth(2 * d);
             rim.setColor(Color.argb(Math.round(90 * rimA * globalA), 255, 255, 255));
-            rim.setShadowLayer(24 * d, 0, 0, Color.argb(Math.round(140 * rimA * globalA), 56, 189, 248));
+            rim.setShadowLayer(24 * d, 0, 0, Palette.alpha(Palette.COBALT, 0.6f * rimA * globalA));
             c.drawCircle(cx, cy, holeR, rim);
             rim.clearShadowLayer();
         }
@@ -241,7 +241,7 @@ final class PeepholeAnimation {
             final float ty = cy + (ms < 450f ? peepR : holeR) + 46 * d;
             title.setColor(Color.argb(Math.round(255 * textA * globalA), 255, 255, 255));
             c.drawText(label, cx, ty, title);
-            sub.setColor(Color.argb(Math.round(255 * textA * globalA), 56, 189, 248));
+            sub.setColor(Palette.alpha(Palette.COBALT_LIGHT, textA * globalA));
             c.drawText("Spouštím…", cx, ty + 24 * d, sub);
         }
 

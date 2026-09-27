@@ -55,7 +55,7 @@ public final class AppMenu {
         root.addView(title);
         String kind = app.type == AppEntry.TYPE_VR ? "VR hra"
                 : app.type == AppEntry.TYPE_PANEL ? "Systémový panel" : "2D aplikace";
-        TextView sub = Glass.text(c, kind + " · " + app.pkg, 12, 0x80FFFFFF, false);
+        TextView sub = Glass.text(c, kind + " · " + app.pkg, 12, Palette.text3(), false);
         sub.setPadding(Glass.dpi(c, 14), Glass.dpi(c, 2), Glass.dpi(c, 14), Glass.dpi(c, 12));
         sub.setSingleLine(true);
         root.addView(sub);
@@ -92,7 +92,7 @@ public final class AppMenu {
         int pad = Glass.dpi(c, Glass.PAD);
         root.setPadding(pad, pad, pad, pad);
         root.addView(Glass.title(c, "Přejmenovat"));
-        TextView hint = Glass.text(c, "Původní název: " + original, 12.5f, 0x99FFFFFF, false);
+        TextView hint = Glass.text(c, "Původní název: " + original, 12.5f, Palette.text3(), false);
         hint.setPadding(0, Glass.dpi(c, 4), 0, Glass.dpi(c, 12));
         root.addView(hint);
 
@@ -104,7 +104,7 @@ public final class AppMenu {
         edit.setImeOptions(EditorInfo.IME_ACTION_DONE);
         edit.setTextColor(Color.WHITE);
         edit.setHintTextColor(0x66FFFFFF);
-        edit.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Glass.ACCENT));
+        edit.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Palette.COBALT_LIGHT));
         edit.setOnEditorActionListener((v, actionId, ev) -> {
             if (actionId == EditorInfo.IME_ACTION_DONE) {
                 onSave.accept(edit.getText().toString());

@@ -92,19 +92,22 @@ public final class GlassWidgets {
             final float hv = clamp(hover.get(now), 0f, 1f);
             final float w = getWidth(), h = getHeight(), r = h / 2f;
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(mix(0x33FFFFFF, 0xF2FFFFFF, kc));
-            if (hv > 0.01f) paint.setShadowLayer(8 * d * hv, 0, 0, Color.argb(Math.round(90 * hv), 255, 255, 255));
+            // Vypnuto = pruhledna kapsle, zapnuto = perla; hover jen zesvetli (bez zare).
+            paint.setColor(mix(0x26FFFFFF, Palette.PEARL, kc));
             c.drawRoundRect(0, 0, w, h, r, r, paint);
-            paint.clearShadowLayer();
+            if (hv > 0.01f) {
+                paint.setColor(Color.argb(Math.round(0x33 * hv), 255, 255, 255));
+                c.drawRoundRect(0, 0, w, h, r, r, paint);
+            }
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(d);
-            paint.setColor(mix(0x59FFFFFF, 0x00FFFFFF, kc));
+            paint.setColor(mix(0x4DFFFFFF, 0x00FFFFFF, kc));
             c.drawRoundRect(d / 2, d / 2, w - d / 2, h - d / 2, r, r, paint);
-            // Tecka: pruzina lehce prekmitne ("pruzny" pohyb jako v iOS).
+            // Tecka: pruzina lehce prekmitne (pruzny pohyb).
             final float kr = r - 4 * d;
             final float kx = r + (w - 2 * r) * k;
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(mix(0xFFFFFFFF, 0xFF1C212B, kc));
+            paint.setColor(mix(Palette.FOG, Palette.VOID, kc));
             paint.setShadowLayer(3 * d, 0, d, 0x40000000);
             c.drawCircle(kx, r, kr, paint);
             paint.clearShadowLayer();
@@ -222,7 +225,7 @@ public final class GlassWidgets {
             final float w = getWidth(), h = getHeight(), r = h / 2f;
             rect.set(0, 0, w, h);
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(Color.argb(Math.round(0x24 + 0x14 * hv), 255, 255, 255));
+            paint.setColor(Color.argb(Math.round(0x1F + 0x14 * hv), 255, 255, 255));
             c.drawRoundRect(rect, r, r, paint);
             final float f = clamp(shown.get(now), 0f, 1f);
             final float fw = Math.max(f > 0.004f ? h : 0f, w * f);
@@ -231,7 +234,7 @@ public final class GlassWidgets {
                 clip.reset();
                 clip.addRoundRect(rect, r, r, Path.Direction.CW);
                 c.clipPath(clip);
-                paint.setColor(0xF2FFFFFF);
+                paint.setColor(Palette.PEARL);
                 c.drawRoundRect(0, 0, fw, h, r, r, paint);
                 c.restore();
             }
@@ -242,23 +245,25 @@ public final class GlassWidgets {
             final Paint.FontMetrics fm = text.getFontMetrics();
             final float base = h / 2f - (fm.ascent + fm.descent) / 2f;
             final float lx = 18 * d;
-            text.setColor(fw > lx + text.measureText(label) + 6 * d ? 0xFF1C212B : Color.WHITE);
+            text.setColor(fw > lx + text.measureText(label) + 6 * d ? Palette.VOID : Palette.TEXT);
             c.drawText(label, lx, base, text);
             final String v = value + suffix;
             final float vw = text.measureText(v);
-            text.setColor(fw > w - 14 * d ? 0xFF1C212B : 0xCCFFFFFF);
+            text.setColor(fw > w - 14 * d ? Palette.VOID : Palette.text2());
             c.drawText(v, w - 18 * d - vw, base, text);
             if (shown.active(now) || hover.active(now)) postInvalidateOnAnimation();
         }
     }
 
-    /** Ikona v kulatem skle (jako ikony zarizeni ve visionOS/Controlly). */
+    /** Ikona v kulatem skle (jako ikony zarizeni v predlohach od uzivatele). */
     public static final class IconView extends View {
         private final float d;
         private final int icon;
         private final float sizeDp;
         private final int tint;
         private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private android.graphics.Shader fillShader, rimShader;
+        private float shaderFor = -1;
 
         public IconView(Context c, int icon, float sizeDp, int tint) {
             super(c);
@@ -278,12 +283,22 @@ public final class GlassWidgets {
         protected void onDraw(Canvas c) {
             final float s = getWidth(), r = s / 2f;
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(0x2EFFFFFF);
+            // Kulate sklo: vypln nahore svetlejsi, okraj nahore jasny a dole slabsi.
+            if (fillShader == null || shaderFor != s) {
+                shaderFor = s;
+                fillShader = new android.graphics.LinearGradient(0, 0, 0, s, 0x33FFFFFF, 0x14FFFFFF,
+                        android.graphics.Shader.TileMode.CLAMP);
+                rimShader = new android.graphics.LinearGradient(0, 0, s * 0.3f, s,
+                        new int[]{0x80FFFFFF, 0x1AFFFFFF, 0x33FFFFFF}, new float[]{0f, 0.6f, 1f},
+                        android.graphics.Shader.TileMode.CLAMP);
+            }
+            paint.setShader(fillShader);
             c.drawCircle(r, r, r, paint);
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(d);
-            paint.setColor(0x4DFFFFFF);
+            paint.setShader(rimShader);
             c.drawCircle(r, r, r - d / 2, paint);
+            paint.setShader(null);
             Icons.draw(c, icon, r, r, s * 0.46f, tint, 1.8f * d, 1f, paint);
         }
     }

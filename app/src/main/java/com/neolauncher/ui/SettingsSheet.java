@@ -59,14 +59,17 @@ public final class SettingsSheet {
         left.setOrientation(LinearLayout.VERTICAL);
         root.addView(left, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
 
+        // Velky nadpis potrebuje vzduch: nahore vic nez PAD (u rohu R 40 jinak pusobi
+        // namackane), pod podnadpisem SECTION k pilulkam.
         LinearLayout header = new LinearLayout(c);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(Glass.dpi(c, Glass.TITLE_INSET), Glass.dpi(c, Glass.TITLE_TOP - Glass.PAD), 0, 0);
         LinearLayout titles = new LinearLayout(c);
         titles.setOrientation(LinearLayout.VERTICAL);
-        titles.addView(Glass.text(c, "Nastavení", 30, Color.WHITE, true));
-        TextView sub = Glass.text(c, "Vzhled, aplikace i Quest na jednom místě", 13.5f, 0xCCFFFFFF, false);
-        sub.setPadding(0, Glass.dpi(c, 2), 0, 0);
+        titles.addView(Glass.text(c, "Nastavení", 30, Palette.TEXT, true));
+        TextView sub = Glass.text(c, "Vzhled, aplikace i Quest na jednom místě", 13.5f, Palette.text2(), false);
+        sub.setPadding(0, Glass.dpi(c, 4), 0, 0);
         titles.addView(sub);
         header.addView(titles, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         View close = roundButton(c, Icons.CLOSE, v -> onClose.run());
@@ -77,7 +80,7 @@ public final class SettingsSheet {
         pills.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams plp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        plp.topMargin = Glass.dpi(c, Glass.GAP);
+        plp.topMargin = Glass.dpi(c, Glass.SECTION);
         left.addView(pills, plp);
 
         ScrollView scroll = new ScrollView(c);
@@ -330,7 +333,7 @@ public final class SettingsSheet {
                 infoTile(c, Icons.HEADSET, "Lightning Launcher", "Načítání obrázků, rozpoznání her a spouštění "
                         + "vychází z Lightning Launcheru (threethan)."),
                 infoTile(c, Icons.INFO, "Licence", "GPL-3.0 – zdrojový kód je veřejný na GitHubu "
-                        + "(lichicks/neo-launcher)."));
+                        + "(lichicks/neo-launcher). Ikony: Lucide (licence ISC)."));
     }
 
     private static void fillHidden(Ctx x, LinearLayout list) {
@@ -339,7 +342,7 @@ public final class SettingsSheet {
         List<String> hidden = new ArrayList<>(x.prefs.hidden());
         Collections.sort(hidden);
         if (hidden.isEmpty()) {
-            list.addView(Glass.text(c, "Žádné skryté aplikace", 13, 0x99FFFFFF, false));
+            list.addView(Glass.text(c, "Žádné skryté aplikace", 13, Palette.text3(), false));
             return;
         }
         for (String pkg : hidden) {
@@ -393,7 +396,7 @@ public final class SettingsSheet {
         TextView nt = Glass.text(c, "Neo " + version(c), 17, Color.WHITE, true);
         nt.setPadding(0, Glass.dpi(c, 10), 0, 0);
         neo.addView(nt);
-        neo.addView(Glass.text(c, "Launcher pro Meta Quest 3S", 12.5f, 0xB3FFFFFF, false));
+        neo.addView(Glass.text(c, "Launcher pro Meta Quest 3S", 12.5f, Palette.text2(), false));
         TextView upd = Glass.button(c, "Aktualizace", false, v -> x.onCheckUpdates.run());
         LinearLayout.LayoutParams ulp = new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -425,7 +428,7 @@ public final class SettingsSheet {
         sys.addView(Glass.text(c, games + " her · " + apps + " aplikací", 15, Color.WHITE, true));
         if (total > 0) {
             TextView st = Glass.text(c, "Volné místo " + Math.round(free / 1e9) + " z " + Math.round(total / 1e9) + " GB",
-                    12.5f, 0xB3FFFFFF, false);
+                    12.5f, Palette.text2(), false);
             st.setPadding(0, Glass.dpi(c, 4), 0, Glass.dpi(c, 8));
             sys.addView(st);
             final float used = 1f - free / (float) total;
@@ -454,7 +457,7 @@ public final class SettingsSheet {
         b.setGravity(Gravity.CENTER);
         w.addView(b, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
-        TextView s = Glass.text(c, small, 13, 0xCCFFFFFF, false);
+        TextView s = Glass.text(c, small, 13, Palette.text2(), false);
         s.setGravity(Gravity.CENTER);
         w.addView(s, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -476,7 +479,7 @@ public final class SettingsSheet {
             final float h = getHeight(), r = h / 2f;
             paint.setColor(0x33FFFFFF);
             cv.drawRoundRect(0, 0, getWidth(), h, r, r, paint);
-            paint.setColor(value > 0.9f ? 0xFFF97316 : 0xF2FFFFFF);
+            paint.setColor(value > 0.9f ? Palette.AMBER : Palette.PEARL);
             cv.drawRoundRect(0, 0, getWidth() * value, h, r, r, paint);
         }
     }
@@ -511,7 +514,7 @@ public final class SettingsSheet {
         t.setEllipsize(TextUtils.TruncateAt.END);
         box.addView(t);
         if (sub != null) {
-            TextView s = Glass.text(c, sub, 12.5f, 0xB3FFFFFF, false);
+            TextView s = Glass.text(c, sub, 12.5f, Palette.text2(), false);
             s.setPadding(0, Glass.dpi(c, 3), 0, 0);
             s.setMaxLines(3);
             s.setEllipsize(TextUtils.TruncateAt.END);
@@ -565,7 +568,7 @@ public final class SettingsSheet {
         texts.setPadding(Glass.dpi(c, 12), 0, 0, 0);
         TextView tt = Glass.text(c, title, 15.5f, Color.WHITE, true);
         texts.addView(tt);
-        TextView s = Glass.text(c, sub, 12.5f, 0xB3FFFFFF, false);
+        TextView s = Glass.text(c, sub, 12.5f, Palette.text2(), false);
         s.setMaxLines(2);
         s.setEllipsize(TextUtils.TruncateAt.END);
         texts.addView(s);

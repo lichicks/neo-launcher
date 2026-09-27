@@ -30,7 +30,7 @@ public final class UpdateSheet {
 
         root.addView(Glass.title(c, "Nová verze Neo " + r.versionName));
         TextView sub = Glass.text(c, "Nainstalováno: " + currentVersion
-                + (r.prerelease ? " · testovací build" : ""), 12.5f, 0x99FFFFFF, false);
+                + (r.prerelease ? " · testovací build" : ""), 12.5f, Palette.text3(), false);
         sub.setPadding(0, Glass.dpi(c, 4), 0, Glass.dpi(c, Glass.SECTION));
         root.addView(sub);
 
@@ -47,7 +47,7 @@ public final class UpdateSheet {
         }
 
         final TextView status = Glass.text(c, "Po instalaci se launcher zavře – stačí ho znovu otevřít.",
-                12.5f, 0x99FFFFFF, false);
+                12.5f, Palette.text3(), false);
         status.setPadding(0, Glass.dpi(c, Glass.GAP), 0, 0);
         root.addView(status);
 

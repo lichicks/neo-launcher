@@ -30,13 +30,22 @@ final class ModalDepth {
         posted = false;
         final long now = System.nanoTime();
         final float m = Math.max(0f, Math.min(1f, amount.get(now)));
-        // Jen lehke rozmazani - silne "zakalilo" celou scenu (zpetna vazba uzivatele).
-        final float r = 6f * d * m;
-        view.setRenderEffect(r > 0.5f ? RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP) : null);
+        // Rozmazani + zivejsi barvy (sytost): za sklem dialogu pak prosvita barva her,
+        // misto "zakaleneho" sedeho zavoje. Scena se neztmavuje, jen ustoupi.
+        final float r = 10f * d * m;
+        if (r > 0.5f) {
+            final android.graphics.ColorMatrix cm = new android.graphics.ColorMatrix();
+            cm.setSaturation(1f + 0.3f * m);
+            view.setRenderEffect(RenderEffect.createColorFilterEffect(
+                    new android.graphics.ColorMatrixColorFilter(cm),
+                    RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP)));
+        } else {
+            view.setRenderEffect(null);
+        }
         final float s = 1f - 0.035f * m;
         view.setScaleX(s);
         view.setScaleY(s);
-        view.setAlpha(1f - 0.08f * m);
+        view.setAlpha(1f - 0.04f * m);
         if (amount.active(now) && !posted) {
             posted = true;
             view.postOnAnimation(frame);

@@ -6,8 +6,11 @@ name: Build Neo Launcher 2.0
 # GitHub Release - odtud si ho stahuje aktualizator primo v launcheru.
 on:
   workflow_dispatch:
+  # Zmeny jen v dokumentaci nestavi (a hlavne nevytvari novou "aktualizaci").
   push:
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
+    paths-ignore: ['**.md', 'docs/**']
 
 # Zapis do repozitare je potreba jen pro vytvoreni Release.
 permissions:

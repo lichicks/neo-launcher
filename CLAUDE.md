@@ -116,11 +116,12 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
   otevření (max 1× za 6 h) nebo tlačítkem v nastavení zkontroluje
   `api.github.com/repos/lichicks/neo-launcher/releases`, ukáže poznámky
   (zpráva commitu) a po potvrzení nainstaluje. `versionCode = 2000 + run_number`.
-  **Repo je teď soukromé → GitHub bez přihlášení vrací 404 a aktualizace
-  nejdou** (launcher to hlásí). Řešení čeká na rozhodnutí uživatele: zveřejnit
-  repo, nebo APK publikovat do zvláštního veřejného repa
-  `lichicks/neo-launcher-releases` (launcher ho už zkouší jako druhý zdroj;
-  CI by potřebovalo token v secrets).
+  Funguje jen s **veřejným** repem (GitHub bez přihlášení vrací u soukromého
+  404, launcher pak hlásí "repozitář je soukromý"). Uživatel se 2026-09-27
+  rozhodl repo zveřejnit (přepíná sám v GitHub Settings). Záložní varianta:
+  APK do zvláštního veřejného repa `lichicks/neo-launcher-releases`
+  (launcher ho zkouší jako druhý zdroj; CI by potřebovalo token v secrets).
+  Změny jen v `.md`/`docs/` build ani release nespouští.
 - Průhledné okno + `com.oculus.vrshell.supports_blend_effects` (Quest 3/3S
   rozmaže prostředí za panelem)
 - Pevný podpisový klíč `keystore/neo-debug.keystore` → nové buildy jdou
@@ -148,11 +149,15 @@ Addon (varianta *navigator*) je AccessibilityService, která poslouchá
 (= uživatel stiskl Meta tlačítko), otevře launcher. Neví nic o tom, jestli
 běží hra → **ve hře Meta tlačítko otevře launcher přes hru** (to uživateli vadí).
 
-Možnosti (čeká na volbu uživatele):
-1. Addon přesunout do tohoto repa a naučit ho neotevírat launcher, když je
-   v popředí VR hra (sledovat `TYPE_WINDOW_STATE_CHANGED` všech balíčků +
-   typ aplikace jako v `AppRepository`). Experimentální — jde otestovat jen na
-   headsetu.
+**Rozhodnutí uživatele (2026-09-27):** zatím nechat addon, jak je (funguje
+docela v pohodě). **Další krok, až bude uživatel doma u headsetu (~29. 9.):**
+možnost 1 níže.
+
+Možnosti:
+1. **(vybráno na příště)** Addon přesunout do tohoto repa a naučit ho
+   neotevírat launcher, když je v popředí VR hra (sledovat
+   `TYPE_WINDOW_STATE_CHANGED` všech balíčků + typ aplikace jako
+   v `AppRepository`). Experimentální — jde otestovat jen na headsetu.
 2. Dvojí stisk Meta: addon vidí jen otevření Navigatoru, ne samotné tlačítko
    → spolehlivě nejde.
 3. Bez addonu: Neo připnout do docku (od Horizon OS v63 stačí přetáhnout
@@ -192,6 +197,10 @@ zdrojáky proti `android-all.jar` z Maven Central). Neověří resources ani
 manifest a nehlídá API level — to dělá až CI.
 
 ## Instalace na Quest
+
+První instalace jakýmkoliv způsobem sideloadu (adb, SideQuest, Meta Quest
+Developer Hub, nebo stáhnout APK v prohlížeči Questu a otevřít v Souborech —
+vše vyžaduje vývojářský režim). Další verze už přes aktualizace v launcheru.
 
 ```bash
 # na PC uživatele běží starý adb server HTC Sync Manageru na 5037 -> vždy -P 5038

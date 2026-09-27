@@ -154,6 +154,29 @@ public class ShotTest {
         dumpState(v);
         capture(a, v, outDir + "/neo-hover.png");
         dumpState(v);
+
+        // Kliknuti na kartu -> animace spusteni "kukatko", 6x zpomalena
+        // (jako "Meritko animace" ve vyvojarskych volbach), snimky po fazich.
+        java.lang.reflect.Method setScale =
+                android.animation.ValueAnimator.class.getDeclaredMethod("setDurationScale", float.class);
+        setScale.setAccessible(true);
+        setScale.invoke(null, 6f);
+        float tx = (left + cardW * 0.80f) * d, ty = (top + cardH * 0.28f) * d;
+        long t0 = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(t0, t0, MotionEvent.ACTION_DOWN, tx, ty, 0);
+        v.dispatchTouchEvent(down);
+        MotionEvent up = MotionEvent.obtain(t0, t0 + 80, MotionEvent.ACTION_UP, tx, ty, 0);
+        v.dispatchTouchEvent(up);
+        long start = System.currentTimeMillis();
+        long[] at = {700, 1900, 2600, 3300, 4600};
+        for (int i = 0; i < at.length; i++) {
+            long wait = start + at[i] - System.currentTimeMillis();
+            if (wait > 0) Thread.sleep(wait);
+            shadowOf(Looper.getMainLooper()).idle();
+            capture(a, v, outDir + "/neo-launch-" + (i + 1) + ".png");
+            System.out.println("launch frame " + (i + 1) + " at " + (System.currentTimeMillis() - start) + " ms");
+        }
+        setScale.invoke(null, 1f);
     }
 
     static Object f(Object o, String name) throws Exception {

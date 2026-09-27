@@ -1,5 +1,6 @@
 package com.neolauncher.ui;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
@@ -94,6 +95,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     /** Po tak dlouhem podrzeni se karta zvedne a jde tahat. */
     private static final long LONG_PRESS_MS = 450;
     private static final long HOVER_EXIT_GRACE_MS = 90;
+    /** Animace spusteni "kukatko": celkova delka a okamzik, kdy se opravdu spusti aplikace. */
+    private static final long LAUNCH_MS = 1000;
+    private static final float LAUNCH_FIRE_AT = 0.35f;
     /** Pojistka: bez jakekoliv udalosti ukazatele tak dlouho = ukazatel je pryc. */
     private static final long POINTER_STALE_MS = 6000;
 
@@ -162,6 +166,20 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private Card focused;
     private int hoverZone = ZONE_NONE;
     private final Eased blurAmount = new Eased(0, BLUR_MS);
+
+    // --- Animace spusteni ("kukatko") -----------------------------------------------
+    // Stav je odvozeny jen z casu (launchStartNs) - sam skonci, nic neceka na callback.
+    private Card launchCard;
+    private long launchStartNs, launchDurNs;
+    private float launchCx, launchCy, launchZ0;
+    private Shader launchShader;
+    private int launchArtW, launchArtH;
+    private final Path launchHole = new Path();
+    private final Matrix launchMatrix = new Matrix();
+    private final Paint launchArtPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
+    private final Paint rimPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final TextPaint launchTitle = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+    private final TextPaint launchSub = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
     private float blurCx, blurCy;
 
     // --- Dotyk / rolovani / presouvani --------------------------------------------
@@ -292,6 +310,14 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         emptyText.setTextSize(dp(16));
         emptyText.setTextAlign(Paint.Align.CENTER);
         emptyText.setColor(0x99FFFFFF);
+
+        launchTitle.setTypeface(bold);
+        launchTitle.setTextSize(dp(23));
+        launchTitle.setTextAlign(Paint.Align.CENTER);
+        launchSub.setTypeface(semi);
+        launchSub.setTextSize(dp(15));
+        launchSub.setTextAlign(Paint.Align.CENTER);
+        rimPaint.setStyle(Paint.Style.STROKE);
 
         stroke.setStyle(Paint.Style.STROKE);
 
@@ -728,7 +754,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
     @Override
     public boolean onHoverEvent(MotionEvent e) {
-        if (!interactive) return true;
+        if (!interactive || launchCard != null) return true;
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_HOVER_ENTER:
             case MotionEvent.ACTION_HOVER_MOVE:
@@ -754,7 +780,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     public boolean onGenericMotionEvent(MotionEvent e) {
         if (e.getActionMasked() == MotionEvent.ACTION_SCROLL
                 && (e.getSource() & InputDevice.SOURCE_CLASS_POINTER) != 0) {
-            if (!interactive || dragging) return true;
+            if (!interactive || dragging || launchCard != null) return true;
             touchPointer(e.getX(), e.getY());
             float v = e.getAxisValue(MotionEvent.AXIS_VSCROLL);
             if (v != 0f) {
@@ -775,6 +801,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     @Override
     public boolean onTouchEvent(MotionEvent e) {
         if (!interactive) return false;
+        if (launchCard != null) return true; // behem animace spusteni se nic nedeje
         final float x = e.getX(), y = e.getY();
         final long now = System.nanoTime();
         switch (e.getActionMasked()) {
@@ -891,6 +918,11 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         }
         Card k = pressedCard;
         if (k != null && k == focused) {
+            final float animScale = ValueAnimator.getDurationScale();
+            if (prefs.launchAnimation() && animScale > 0f && isHardwareAccelerated()) {
+                startLaunch(k, now, animScale);
+                return;
+            }
             k.flash.snap(1f);
             k.flash.set(0f, now);
             final AppEntry app = k.app;
@@ -899,6 +931,154 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 if (host != null) host.onLaunch(app);
             }, 90);
         }
+    }
+
+    /**
+     * "Kukatko": okoli se zatemni do kruhu kolem karty (jako kdyz das oko ke
+     * dverim), pak se banner hry prudce priblizi a kruh se roztahne pres cele
+     * okno - projdes jim do hry. Aplikace se spusti uz v polovine (system pak
+     * dela svuj prechod), zbytek animace jen dojede a launcher se zase ukaze.
+     * Respektuje systemove zpomaleni/vypnuti animaci (ValueAnimator scale).
+     */
+    private void startLaunch(Card k, long now, float animScale) {
+        launchCard = k;
+        launchStartNs = now;
+        launchDurNs = (long) (LAUNCH_MS * animScale * 1_000_000L);
+        poppedRect(k, now, tmp);
+        launchCx = tmp.centerX();
+        launchCy = tmp.centerY();
+        launchZ0 = visualScale(k, now);
+        if (k.art != null) {
+            launchShader = new BitmapShader(k.art, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+            launchArtW = k.art.getWidth();
+            launchArtH = k.art.getHeight();
+        } else {
+            int[] pair = Placeholders.colorsFor(k.app.pkg);
+            launchShader = new LinearGradient(-cardW / 2f, -cardH / 2f, cardW / 2f, cardH / 2f,
+                    pair[0], pair[1], Shader.TileMode.CLAMP);
+            launchArtW = 0;
+            launchArtH = 0;
+        }
+        final AppEntry app = k.app;
+        handler.postDelayed(() -> {
+            if (host != null) host.onLaunch(app);
+        }, (long) (LAUNCH_MS * LAUNCH_FIRE_AT * animScale));
+        invalidate();
+    }
+
+    private void drawLaunch(Canvas c, long now) {
+        if (launchCard == null) return;
+        final float t = launchDurNs <= 0 ? 1f : (now - launchStartNs) / (float) launchDurNs;
+        if (t >= 1f) {
+            launchCard = null; // konec - odvozeno z casu, zadny callback
+            launchShader = null;
+            return;
+        }
+        final float w = getWidth(), h = getHeight();
+        final float diag = (float) Math.hypot(w, h);
+        final float peepR = cardH * 0.62f;
+        // Na konci pruletu je kruh uprostred okna a pokryva ho cele (i rohy).
+        final float holeEnd = diag * 0.52f;
+
+        float holeR, darkA, artZ, cx, cy, rimA, textA, artA, globalA = 1f;
+        if (t < 0.3f) {
+            // 1) Zatemneni se stahne do kruhu kolem karty.
+            final float p = easeOutCubic(t / 0.3f);
+            holeR = lerp(diag, peepR, p);
+            darkA = 0.9f * p;
+            artZ = launchZ0;
+            cx = launchCx;
+            cy = launchCy;
+            rimA = p;
+            textA = p * p;
+            artA = 0f;
+        } else if (t < 0.65f) {
+            // 2) Prulet kukatkem: kruh se roztahuje, banner se priblizuje ke stredu.
+            final float lin = (t - 0.3f) / 0.35f;
+            final float q = easeInCubic(lin);
+            holeR = lerp(peepR, holeEnd, q);
+            darkA = 0.9f;
+            artZ = launchZ0;
+            cx = lerp(launchCx, w / 2f, q);
+            cy = lerp(launchCy, h / 2f, q);
+            rimA = 1f - q;
+            textA = Math.max(0f, 1f - lin * 3f);
+            artA = 1f;
+        } else {
+            // 3) Banner pres cele okno, pak se prekryv rozplyne zpet do launcheru.
+            final float u = (t - 0.65f) / 0.35f;
+            holeR = holeEnd;
+            darkA = 0.9f;
+            artZ = launchZ0;
+            cx = w / 2f;
+            cy = h / 2f;
+            rimA = 0f;
+            textA = 0f;
+            artA = 1f;
+            globalA = 1f - easeInOutCubic(u);
+        }
+        // Banner musi kruh vzdy cely pokryt (jinak by se okraje obrazku
+        // roztahly do pruhu) - cim vetsi kruh, tim vic se "proleta" dovnitr.
+        artZ = Math.max(artZ, 2.04f * holeR / cardH);
+
+        // Tma kolem kruhu (sude-liche vyplneni = obdelnik s dirou).
+        if (darkA > 0.004f && holeR < diag) {
+            launchHole.reset();
+            launchHole.setFillType(Path.FillType.EVEN_ODD);
+            launchHole.addRect(0, 0, w, h, Path.Direction.CW);
+            launchHole.addCircle(cx, cy, holeR, Path.Direction.CW);
+            fill.setShader(null);
+            fill.setColor(Color.argb(Math.round(255 * darkA * globalA), 3, 5, 9));
+            c.drawPath(launchHole, fill);
+        }
+        // Banner hry v kruhu, priblizeny.
+        if (artA > 0.004f && launchShader != null) {
+            final float aw = cardW * artZ, ah = cardH * artZ;
+            launchMatrix.reset();
+            if (launchArtW > 0) {
+                launchMatrix.setScale(aw / launchArtW, ah / launchArtH);
+                launchMatrix.postTranslate(cx - aw / 2f, cy - ah / 2f);
+            } else {
+                launchMatrix.setScale(artZ, artZ);
+                launchMatrix.postTranslate(cx, cy);
+            }
+            launchShader.setLocalMatrix(launchMatrix);
+            launchArtPaint.setShader(launchShader);
+            launchArtPaint.setAlpha(Math.round(255 * artA * globalA));
+            c.drawCircle(cx, cy, Math.min(holeR, diag), launchArtPaint);
+            launchArtPaint.setShader(null);
+        }
+        // Obruba kukatka: bily okraj s modrou zari (jako v preview).
+        if (rimA > 0.004f) {
+            rimPaint.setStrokeWidth(dp(3));
+            rimPaint.setColor(Color.argb(Math.round(128 * rimA), 255, 255, 255));
+            rimPaint.setShadowLayer(dp(22), 0, 0, Color.argb(Math.round(150 * rimA), 56, 189, 248));
+            c.drawCircle(cx, cy, holeR, rimPaint);
+            rimPaint.clearShadowLayer();
+        }
+        // Nazev hry pod kukatkem (drzi se okraje kruhu).
+        if (textA > 0.004f) {
+            final float ty = cy + (t < 0.3f ? peepR : holeR) + dp(46);
+            launchTitle.setColor(Color.argb(Math.round(255 * textA), 255, 255, 255));
+            c.drawText(launchCard.label, cx, ty, launchTitle);
+            launchSub.setColor(Color.argb(Math.round(255 * textA), 56, 189, 248));
+            c.drawText("Spouštím…", cx, ty + dp(24), launchSub);
+        }
+    }
+
+    private static float easeOutCubic(float x) {
+        float f = 1f - clamp(x, 0f, 1f);
+        return 1f - f * f * f;
+    }
+
+    private static float easeInCubic(float x) {
+        float f = clamp(x, 0f, 1f);
+        return f * f * f;
+    }
+
+    private static float easeInOutCubic(float x) {
+        float f = clamp(x, 0f, 1f);
+        return f < 0.5f ? 4f * f * f * f : 1f - (float) Math.pow(-2f * f + 2f, 3) / 2f;
     }
 
     // =========================================================================
@@ -1113,8 +1293,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         drawEmptyState(canvas);
         drawFocusedCard(canvas, now);
         drawDraggedCard(canvas, now);
+        drawLaunch(canvas, now);
 
-        if (again || dragging || isAnimating(now)) postInvalidateOnAnimation();
+        if (again || dragging || launchCard != null || isAnimating(now)) postInvalidateOnAnimation();
     }
 
     private boolean isAnimating(long now) {

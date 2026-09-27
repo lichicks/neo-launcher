@@ -113,6 +113,13 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
   pod kartou běží modrý ukazatel). Pustit dřív = nic, karta jen dosedne.
 - Menu karty: spustit, přejmenovat, vlastní obrázek, stáhnout obrázek znovu,
   skrýt, info, odinstalovat
+- Animace spuštění "kukátko" (1 s): okolí se stáhne do kruhu kolem karty
+  s bílou obroubou a názvem hry, pak se kruh roztáhne a banner se přiblíží
+  přes celé okno (průlet do hry), nakonec se překryv rozplyne zpět.
+  Aplikace se spouští v 35 % animace. Stav odvozený jen z času, respektuje
+  systémové měřítko animací (0 = bez animace), vypínatelná v nastavení.
+  Omezení: 2D panel nemůže kreslit mimo své okno — "přiblížení k očím" se
+  odehrává v okně (včetně průhledného okraje), panel sám se k hráči nepohne.
 - Nastavení: hloubka ostrosti, krytí skla, sloupce, přesah karet, řazení
   (vlastní/abecedně/naposledy), prodleva menu karty, stahování obrázků
   z internetu (zap/vyp), skryté aplikace, znovu stáhnout obrázky,
@@ -171,7 +178,6 @@ Možnosti:
 
 ## Co zbývá / nápady
 
-- "Peephole" animace spuštění z preview (zatím jen záblesk karty)
 - Zvuková odezva při hoveru a spuštění
 - Vlastní tapeta / pozadí
 - Hledání aplikací
@@ -187,8 +193,8 @@ Možnosti:
 `tools/screenshot/run.sh` spustí skutečný `NeoLauncherView` v Robolectricu
 (emulace Androidu na JVM) s nativní grafikou a HW vykreslováním — RenderNode,
 RenderEffect i AGSL shader jedou přes opravdovou Skia/HWUI. Stáhne opravdové
-bannery her, vyfotí klidový stav a stav s kartou pod "laserem" po odrolování,
-a složí to s ilustračním pozadím. Potřebuje jen JDK, Maven a přístup na Maven
+bannery her, vyfotí klidový stav, stav s kartou pod "laserem" po odrolování
+a 5 fází animace spuštění (6× zpomalené), a složí to s ilustračním pozadím. Potřebuje jen JDK, Maven a přístup na Maven
 Central + GitHub (funguje i v cloudové session). Trvá ~3 min, poprvé stáhne
 ~350 MB. **Používat po každé změně kreslení** — takhle se našla chyba v bodě 6.
 Pozadí a systémové rozmazání prostředí jsou jen ilustrace; skutečný vzhled

@@ -39,6 +39,7 @@ public final class Prefs {
     private static final String K_SHORTCUTS = "allow_shortcuts";
     private static final String K_MENU_HOLD = "menu_hold_ms";
     private static final String K_ONLINE_ART = "online_art";
+    private static final String K_LAUNCH_ANIM = "launch_animation";
     private static final String K_UPDATE_TEST = "update_test_builds";
     private static final String K_UPDATE_LAST_CHECK = "update_last_check";
     private static final String K_UPDATE_DISMISSED = "update_dismissed";
@@ -136,6 +137,16 @@ public final class Prefs {
 
     public void setMenuHoldMs(int ms) {
         sp.edit().putInt(K_MENU_HOLD, ms).apply();
+        changed();
+    }
+
+    /** Animace spusteni "kukatko" (karta se pred spustenim priblizi). */
+    public boolean launchAnimation() {
+        return sp.getBoolean(K_LAUNCH_ANIM, true);
+    }
+
+    public void setLaunchAnimation(boolean b) {
+        sp.edit().putBoolean(K_LAUNCH_ANIM, b).apply();
         changed();
     }
 

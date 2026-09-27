@@ -76,6 +76,10 @@ public final class SettingsSheet {
                 Glass.segmented(c, new String[]{"3", "4", "5", "6"}, colSel,
                         i -> prefs.setColumns(colOptions[i])), false));
 
+        body.addView(Glass.row(c, "Animace spuštění (kukátko)",
+                "Okolí se stáhne do kruhu a hrou jakoby projdeš kukátkem",
+                Glass.toggle(c, prefs.launchAnimation(), prefs::setLaunchAnimation), false));
+
         body.addView(Glass.row(c, "Karty vyskakují z panelu",
                 "Průhledný okraj okolo skla, do kterého se zvětšená karta vejde",
                 Glass.toggle(c, prefs.popoutMargin(), prefs::setPopoutMargin), false));

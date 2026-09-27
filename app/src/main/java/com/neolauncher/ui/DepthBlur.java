@@ -72,7 +72,7 @@ final class DepthBlur {
     private RenderEffect build(float cx, float cy, float inner, float outer, float rNear, float rFar) {
         if (Build.VERSION.SDK_INT >= 33 && !shaderFailed) {
             try {
-                if (shader == null) shader = new RuntimeShader(AGSL);
+                if (shader == null) shader = Agsl.compile(AGSL);
                 RuntimeShader s = (RuntimeShader) shader;
                 s.setFloatUniform("center", cx, cy);
                 s.setFloatUniform("innerR", inner);

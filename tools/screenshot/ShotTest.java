@@ -168,7 +168,7 @@ public class ShotTest {
         MotionEvent up = MotionEvent.obtain(t0, t0 + 80, MotionEvent.ACTION_UP, tx, ty, 0);
         v.dispatchTouchEvent(up);
         long start = System.currentTimeMillis();
-        long[] at = {700, 1900, 2600, 3300, 4600};
+        long[] at = {600, 1900, 2700, 3700, 4700, 6000};
         for (int i = 0; i < at.length; i++) {
             long wait = start + at[i] - System.currentTimeMillis();
             if (wait > 0) Thread.sleep(wait);

@@ -86,6 +86,12 @@ v nastavení ("Karty vyskakují z panelu").
    ukazatele 6 s → reset (kdyby Quest nepostal HOVER_EXIT).
 5. **HOVER_EXIT chodí i těsně před stiskem spouště** → reset hoveru se
    odkládá o 90 ms, jinak by karta při kliknutí blikla.
+7. **AGSL: zápis `content.eval(p)`** (Android 13+). Kompiluje se přes
+   `ui/Agsl.compile()`, který při chybě zkusí starý zápis `sample(content, p)`
+   — ten zná jen starší Skia v Robolectricu. Náhled tak ověří, že shader je
+   jinak platný; Robolectric ale neumí `RenderEffect.createRuntimeShaderEffect`
+   (UnsatisfiedLinkError), takže **vizuál shaderů (hloubka ostrosti, čočka
+   kukátka) je vidět až na headsetu** — v náhledu jede záložní cesta.
 6. **3D náklon karty jen přes `RenderNode.setRotationX/Y`**, ne přes vlastní
    perspektivní matici z `android.graphics.Camera` + `canvas.concat()`. Ta se
    po odrolování vůbec nevykreslila (karta pod laserem zmizela) — odhaleno
@@ -113,10 +119,14 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
   pod kartou běží modrý ukazatel). Pustit dřív = nic, karta jen dosedne.
 - Menu karty: spustit, přejmenovat, vlastní obrázek, stáhnout obrázek znovu,
   skrýt, info, odinstalovat
-- Animace spuštění "kukátko" (1 s): okolí se stáhne do kruhu kolem karty
-  s bílou obroubou a názvem hry, pak se kruh roztáhne a banner se přiblíží
-  přes celé okno (průlet do hry), nakonec se překryv rozplyne zpět.
-  Aplikace se spouští v 35 % animace. Stav odvozený jen z času, respektuje
+- Animace spuštění "kukátko" (1,15 s), fáze: **stisk** (karta se zmenší na
+  90 %, 130 ms) → **kukátko** (pružný návrat karty, tma se stáhne do kruhu,
+  rámeček/název karty zmizí, rybí oko, 320 ms) → **průlet** (kruh se roztáhne,
+  banner se přiblíží přes celé okno, radiální "zoom blur" do stran, 400 ms)
+  → **rozplynutí** zpět do launcheru. Easingy navazují bez skoků. Aplikace
+  se spouští v 48 %. Čočka (rybí oko + zoom blur + měkký okraj + tma) je
+  JEDEN AGSL efekt na vrstvu `launchNode` (`ui/LaunchLens.java`); bez shaderu
+  záložní kreslení (kruhový ořez). Stav odvozený jen z času, respektuje
   systémové měřítko animací (0 = bez animace), vypínatelná v nastavení.
   Omezení: 2D panel nemůže kreslit mimo své okno — "přiblížení k očím" se
   odehrává v okně (včetně průhledného okraje), panel sám se k hráči nepohne.

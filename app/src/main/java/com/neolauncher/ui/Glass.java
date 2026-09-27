@@ -1,7 +1,6 @@
 package com.neolauncher.ui;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
@@ -11,16 +10,15 @@ import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.LinearLayout;
-import android.widget.SeekBar;
-import android.widget.Switch;
 import android.widget.TextView;
 
 import java.util.function.IntConsumer;
 
 /**
- * Stavebnice pro dialogy ve stylu skla z preview (nastaveni, menu aplikace).
- * Vse programove, bez XML layoutu. Tlacitka maji stav "hovered", ktery Quest
- * nastavi, kdyz na ne mirite laserem.
+ * Stavebnice pro dialogy ve stylu skla z visionOS (nastaveni, menu aplikace,
+ * aktualizace): svetlejsi matne sklo s bilym okrajem a svetlou horni hranou,
+ * dlazdice, pilulky (vybrana = bila s tmavym textem). Vse programove, bez XML.
+ * Prvky maji stav "hovered", ktery Quest nastavi, kdyz na ne mirite laserem.
  */
 public final class Glass {
     public static final int ACCENT = 0xFF38BDF8;
@@ -40,13 +38,65 @@ public final class Glass {
         return Math.round(dp(c, v));
     }
 
-    /** Tmave sklo s jemnym svetlym okrajem. */
-    public static GradientDrawable panel(Context c) {
-        GradientDrawable g = new GradientDrawable();
-        g.setColor(0xEE10151F);
-        g.setCornerRadius(dp(c, 24));
-        g.setStroke(dpi(c, 1.5f), 0x33FFFFFF);
-        return g;
+    /** Barvy matneho skla dialogu (nahore svetlejsi) - sdili je i rychle menu. */
+    public static final int GLASS_TOP = 0xD6646872;
+    public static final int GLASS_BOTTOM = 0xCF484C55;
+    public static final int GLASS_STROKE = 0x59FFFFFF;
+    /** Dlazdice uvnitr skla. */
+    public static final int TILE = 0x1FFFFFFF;
+    public static final int TILE_HOVER = 0x33FFFFFF;
+    public static final int TILE_STROKE = 0x33FFFFFF;
+    /** Tmavy text na bilem (vybrana pilulka, hlavni tlacitko). */
+    public static final int INK = 0xFF1C212B;
+
+    /** Matne sklo jako ve visionOS: svetle sede, bily okraj, svetla horni hrana. */
+    public static Drawable panel(Context c) {
+        return panel(c, 30);
+    }
+
+    public static Drawable panel(Context c, float radiusDp) {
+        GradientDrawable base = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{GLASS_TOP, GLASS_BOTTOM});
+        base.setCornerRadius(dp(c, radiusDp));
+        base.setStroke(dpi(c, 1.5f), GLASS_STROKE);
+        GradientDrawable shine = new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                new int[]{0x2EFFFFFF, 0x00FFFFFF, 0x00FFFFFF});
+        shine.setCornerRadius(dp(c, radiusDp));
+        return new android.graphics.drawable.LayerDrawable(new Drawable[]{base, shine});
+    }
+
+    /** Dlazdice (karta nastaveni, widget) - pri miren laserem se rozsviti. */
+    public static Drawable tile(Context c) {
+        StateListDrawable s = new StateListDrawable();
+        s.addState(PRESSED, round(c, 0x40FFFFFF, 24, 0x80FFFFFF));
+        s.addState(HOVERED, round(c, TILE_HOVER, 24, 0x66FFFFFF));
+        s.addState(EMPTY, round(c, TILE, 24, TILE_STROKE));
+        return s;
+    }
+
+    /** Staticka dlazdice bez hoveru (widgety). */
+    public static Drawable widget(Context c) {
+        return round(c, TILE, 24, TILE_STROKE);
+    }
+
+    /** Pilulka (kategorie, volba): vybrana = bila s tmavym textem, jinak obrys. */
+    public static TextView pill(Context c, String label, boolean selected, View.OnClickListener l) {
+        TextView t = text(c, label, 13.5f, Color.WHITE, true);
+        t.setGravity(Gravity.CENTER);
+        t.setPadding(dpi(c, 16), dpi(c, 8), dpi(c, 16), dpi(c, 8));
+        t.setClickable(true);
+        t.setFocusable(true);
+        setPillSelected(c, t, selected);
+        t.setOnClickListener(l);
+        return t;
+    }
+
+    public static void setPillSelected(Context c, TextView t, boolean selected) {
+        t.setSelected(selected);
+        t.setTextColor(selected ? INK : 0xF2FFFFFF);
+        t.setBackground(selected
+                ? states(c, 999, 0xF2FFFFFF, 0xFFFFFFFF, 0xFFE2E8F0, 0, 0)
+                : states(c, 999, 0x00FFFFFF, 0x26FFFFFF, 0x40FFFFFF, 0, 0x59FFFFFF));
     }
 
     private static GradientDrawable round(Context c, int color, float radius, int strokeColor) {
@@ -87,15 +137,15 @@ public final class Glass {
         return t;
     }
 
-    /** Tlacitko-pilulka. accent = modre zvyrazneni (hlavni akce). */
+    /** Tlacitko-pilulka. accent = hlavni akce (bila s tmavym textem jako ve visionOS), jinak obrys. */
     public static TextView button(Context c, String label, boolean accent, View.OnClickListener l) {
-        TextView b = text(c, label, 14, Color.WHITE, true);
+        TextView b = text(c, label, 14, accent ? INK : Color.WHITE, true);
         b.setGravity(Gravity.CENTER);
-        b.setPadding(dpi(c, 16), dpi(c, 9), dpi(c, 16), dpi(c, 9));
+        b.setPadding(dpi(c, 18), dpi(c, 9), dpi(c, 18), dpi(c, 9));
         if (accent) {
-            b.setBackground(states(c, 999, 0x5538BDF8, 0x8038BDF8, 0xA038BDF8, 0, 0x8038BDF8));
+            b.setBackground(states(c, 999, 0xF2FFFFFF, 0xFFFFFFFF, 0xFFE2E8F0, 0, 0));
         } else {
-            b.setBackground(states(c, 999, 0x1AFFFFFF, 0x33FFFFFF, 0x4DFFFFFF, 0, 0x26FFFFFF));
+            b.setBackground(states(c, 999, 0x14FFFFFF, 0x33FFFFFF, 0x4DFFFFFF, 0, 0x66FFFFFF));
         }
         b.setClickable(true);
         b.setFocusable(true);
@@ -108,77 +158,36 @@ public final class Glass {
         TextView b = text(c, label, 15, danger ? 0xFFFCA5A5 : Color.WHITE, false);
         b.setGravity(Gravity.CENTER_VERTICAL);
         b.setPadding(dpi(c, 14), dpi(c, 11), dpi(c, 14), dpi(c, 11));
-        b.setBackground(states(c, 12, 0x00FFFFFF, 0x24FFFFFF, 0x3DFFFFFF, 0, 0));
+        b.setBackground(states(c, 14, 0x00FFFFFF, 0x2EFFFFFF, 0x47FFFFFF, 0, 0));
         b.setClickable(true);
         b.setFocusable(true);
         b.setOnClickListener(l);
         return b;
     }
 
-    /** Prepinac z nekolika moznosti (segmented control). */
+    /** Prepinac z nekolika moznosti - rada pilulek (vybrana je bila). */
     public static LinearLayout segmented(Context c, String[] items, int selected, IntConsumer onSelect) {
         LinearLayout row = new LinearLayout(c);
         row.setOrientation(LinearLayout.HORIZONTAL);
-        int pad = dpi(c, 3);
-        row.setPadding(pad, pad, pad, pad);
-        row.setBackground(round(c, 0x38000000, 999, 0x24FFFFFF));
         final TextView[] views = new TextView[items.length];
         for (int i = 0; i < items.length; i++) {
             final int idx = i;
-            TextView t = text(c, items[i], 13, Color.WHITE, true);
-            t.setGravity(Gravity.CENTER);
-            t.setPadding(dpi(c, 14), dpi(c, 7), dpi(c, 14), dpi(c, 7));
-            t.setBackground(states(c, 999, 0x00FFFFFF, 0x1FFFFFFF, 0x33FFFFFF, 0x33FFFFFF, 0));
-            t.setClickable(true);
-            t.setFocusable(true);
-            t.setSelected(i == selected);
-            t.setAlpha(i == selected ? 1f : 0.75f);
-            t.setOnClickListener(v -> {
-                for (int j = 0; j < views.length; j++) {
-                    views[j].setSelected(j == idx);
-                    views[j].setAlpha(j == idx ? 1f : 0.75f);
-                }
+            TextView t = pill(c, items[i], i == selected, v -> {
+                for (int j = 0; j < views.length; j++) setPillSelected(c, views[j], j == idx);
                 onSelect.accept(idx);
             });
+            t.setPadding(dpi(c, 14), dpi(c, 7), dpi(c, 14), dpi(c, 7));
             views[i] = t;
-            row.addView(t);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+            if (i > 0) lp.leftMargin = dpi(c, 6);
+            row.addView(t, lp);
         }
         return row;
     }
 
-    public static Switch toggle(Context c, boolean on, java.util.function.Consumer<Boolean> onChange) {
-        Switch s = new Switch(c);
-        s.setChecked(on);
-        int[][] st = {{android.R.attr.state_checked}, {}};
-        s.setThumbTintList(new ColorStateList(st, new int[]{ACCENT, 0xFFD4D4D8}));
-        s.setTrackTintList(new ColorStateList(st, new int[]{0x8038BDF8, 0x4DFFFFFF}));
-        s.setOnCheckedChangeListener((b, v) -> onChange.accept(v));
-        return s;
-    }
-
-    public static SeekBar slider(Context c, int min, int max, int value, IntConsumer onChange) {
-        SeekBar s = new SeekBar(c);
-        s.setMin(min);
-        s.setMax(max);
-        s.setProgress(value);
-        s.setProgressTintList(ColorStateList.valueOf(ACCENT));
-        s.setThumbTintList(ColorStateList.valueOf(ACCENT));
-        s.setProgressBackgroundTintList(ColorStateList.valueOf(0x4DFFFFFF));
-        s.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override
-            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
-                if (fromUser) onChange.accept(progress);
-            }
-
-            @Override
-            public void onStartTrackingTouch(SeekBar seekBar) {
-            }
-
-            @Override
-            public void onStopTrackingTouch(SeekBar seekBar) {
-            }
-        });
-        return s;
+    public static GlassWidgets.Toggle toggle(Context c, boolean on, java.util.function.Consumer<Boolean> onChange) {
+        return new GlassWidgets.Toggle(c, on, onChange);
     }
 
     /** Radek nastaveni: nazev + popis vlevo, ovladaci prvek vpravo nebo pod nim. */
@@ -214,7 +223,7 @@ public final class Glass {
 
     public static View divider(Context c) {
         View v = new View(c);
-        v.setBackgroundColor(0x1AFFFFFF);
+        v.setBackgroundColor(0x26FFFFFF);
         v.setLayoutParams(new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
                 Math.max(1, dpi(c, 1))));
         return v;

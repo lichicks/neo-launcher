@@ -311,7 +311,7 @@ public class LauncherActivity extends Activity
         final RectF from = carouselShown ? carousel.settingsRect() : launcher.brandRect();
         overlay.show(SettingsSheet.build(this, prefs, repo, artwork,
                         () -> showApps(true), () -> checkForUpdates(true), overlay::close),
-                null, from, launcher.frameRect(), Glass.dpi(this, 620));
+                null, from, launcher.frameRect(), Glass.dpi(this, 1000));
     }
 
     // --- Rychle menu (jas, hlasitost, funkce Questu) ----------------------------------

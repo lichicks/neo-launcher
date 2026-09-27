@@ -22,6 +22,14 @@ Starý fork (v1.x) se dá pořád postavit ručně přes
 
 ## Zlatý standard vzhledu
 
+**Dialogy (nastavení, rychlé menu, menu karty, aktualizace)** mají od
+2026-09-27 styl skla z visionOS podle dvou předloh od uživatele (smart-home
+dashboardy): světle šedé matné sklo s bílým okrajem a světlou horní hranou,
+uvnitř světlejší dlaždice (radius 24), ikony v kulatém skle, pilulky (vybraná
+= bílá s tmavým textem), přepínač bílý s tmavou tečkou, velké bílé nadpisy.
+Barvy jsou v `Glass` (`GLASS_TOP/BOTTOM`, `TILE`, `INK`). Hlavní panel má
+volbu „Styl skla“: Tmavé (preview, výchozí) / visionOS (světlejší šedé).
+
 **`docs/preview_neo.html`** — interaktivní HTML prototyp. Uživatel ho
 schválil větou "přesně takhle to chci v tom Questu". Když je spor o to,
 jak se má něco chovat, rozhoduje tenhle soubor. Rozměry v kódu (dp) jsou
@@ -60,7 +68,8 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 | `ui/Eased.java` | Animovaná hodnota jako CSS transition (retarget z aktuální hodnoty, bez callbacků) — už jen pro prolínání a hover lišty |
 | `ui/DepthBlur.java` | Radiální rozmazání: AGSL shader (Android 13+), jinak obyčejný blur |
 | `ui/ShadowSprite.java` | Předpočítané rozmazané stíny karet (box-shadow) |
-| `ui/Glass.java`, `OverlayHost.java`, `SettingsSheet.java`, `AppMenu.java`, `UpdateSheet.java` | Dialogy ve stylu skla (normální Android Views). `OverlayHost` je nechá „vyrůst“ na pružině z místa, odkud se otevřely |
+| `ui/Glass.java`, `OverlayHost.java`, `SettingsSheet.java`, `AppMenu.java`, `UpdateSheet.java` | Dialogy ve stylu skla visionOS (normální Android Views). `OverlayHost` je nechá „vyrůst“ na pružině z místa, odkud se otevřely. Nastavení = dashboard s dlaždicemi |
+| `ui/GlassWidgets.java`, `ui/Icons.java`, `ui/Cascade.java` | Přepínač a posuvník ve stylu visionOS, ikony kreslené kódem (jako SF Symbols), postupný nástup dlaždic |
 
 ### Vrstvy kreslení (odspodu)
 1. Sklo panelu (výplň s nastavitelným krytím, okraj, světlá horní hrana)
@@ -184,10 +193,16 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
   (`systemux://quick_settings` — systémové rychlé nastavení na vše ostatní:
   průchod, sdílení…), Soubory, Prohlížeč, Fotoaparát, Neo (nastavení).
   Úložiště dole. Addon Meta tlačítka zůstává beze změny.
-- Nastavení: hloubka ostrosti, krytí skla, sloupce, přesah karet, řazení
-  (vlastní/abecedně/naposledy), prodleva menu karty, stahování obrázků
-  z internetu (zap/vyp), skryté aplikace, znovu stáhnout obrázky,
-  aktualizace, systémové rozmazání pozadí, Meta tlačítko
+- Nastavení jako dashboard (visionOS): nadpis, kategorie pilulkami (Vzhled,
+  Aplikace, Quest, Aktualizace, O Neo), dlaždice s ikonou a přepínačem
+  (klepnutí kamkoliv na dlaždici přepne = velký cíl pro laser) nebo volbami,
+  vpravo widgety (datum, čas, Neo + aktualizace, počet her/aplikací
+  a úložiště) a „Hotovo“. Dlaždice nastoupí kaskádou. Obsah: hloubka
+  ostrosti, styl a krytí skla, sloupce, kukátko, zavření po spuštění, přesah
+  karet, karusel, řazení, prodleva menu karty, obrázky z internetu, stáhnout
+  obrázky znovu, herní čas (povolení), skryté aplikace, rozmazání prostředí,
+  Meta tlačítko, Nastavení Questu, ovládání jasu (povolení), aktualizace
+  a testovací verze, o aplikaci
 - Aktualizace přímo v launcheru: CI po každém pushi vytvoří GitHub Release
   `v2.0.<číslo běhu>` (mimo `main` jako prerelease = testovací). Launcher při
   otevření (max 1× za 6 h) nebo tlačítkem v nastavení zkontroluje
@@ -234,6 +249,9 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
     WRITE_SETTINGS allow`)? Hlasitost? Co otevřou dlaždice?
 12. Pružiny: nepůsobí hover/záložky moc "gumově"? (`HOVER_SPRING` atd.
     nahoře v `NeoLauncherView`, tlumení 1 = bez překmitu)
+13. Nastavení (dashboard) a rychlé menu ve světlém skle: je text dobře
+    čitelný na Questu? Případně ztmavit `Glass.GLASS_TOP/BOTTOM`. Zkusit
+    „Styl skla: visionOS“ pro hlavní panel.
 
 ## Meta tlačítko (addon RedirectServices) — rozbor
 
@@ -279,8 +297,8 @@ Možnosti:
 (emulace Androidu na JVM) s nativní grafikou a HW vykreslováním — RenderNode,
 RenderEffect i AGSL shader jedou přes opravdovou Skia/HWUI. Stáhne opravdové
 bannery her, vyfotí klidový stav, stav s kartou pod "laserem" po odrolování,
-6 fází animace spuštění (6× zpomalené), karusel (klid + pohyb) a rychlé menu,
-a složí to s ilustračním pozadím. Potřebuje jen JDK, Maven a přístup na Maven
+6 fází animace spuštění (6× zpomalené), karusel (klid + pohyb), rychlé menu,
+panel ve stylu visionOS a nastavení, a složí to s ilustračním pozadím. Potřebuje jen JDK, Maven a přístup na Maven
 Central + GitHub (funguje i v cloudové session). Trvá ~3 min, poprvé stáhne
 ~350 MB. **Používat po každé změně kreslení** — takhle se našla chyba v bodě 6.
 Pozadí a systémové rozmazání prostředí jsou jen ilustrace; skutečný vzhled

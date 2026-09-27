@@ -248,6 +248,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final RectF tmp = new RectF();
     private Shader bottomShade;
     private Shader frameHighlight;
+    /** Svetle sklo ve stylu visionOS (volba v nastaveni), cache podle kryti. */
+    private Shader visionGlass;
+    private int visionGlassFor = -1;
     private Shader barShadow;
     private ShadowSprite restShadow, hoverShadow, glowSprite;
     private float spriteForW = -1;
@@ -595,6 +598,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         final float fr = dp(FRAME_RADIUS);
         frameHighlight = new LinearGradient(0, frame.top, 0, frame.top + dp(22),
                 0x40FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
+        visionGlassFor = -1;
         barShadow = new LinearGradient(0, topBarBottom, 0, topBarBottom + dp(18),
                 0x47000000, 0x00000000, Shader.TileMode.CLAMP);
         framePath.reset();
@@ -1271,15 +1275,28 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             fill.clearShadowLayer();
             c.restore();
         }
-        // Pozadi rgba(16, 21, 31, 0.42) z preview (kryti nastavitelne).
-        fill.setShader(null);
-        fill.setColor(Color.argb(alpha, 16, 21, 31));
+        final boolean vision = prefs.glassStyle() == Prefs.GLASS_VISION;
+        if (vision) {
+            // Svetle sede matne sklo jako ve visionOS (nahore svetlejsi).
+            if (visionGlass == null || visionGlassFor != alpha) {
+                visionGlass = new LinearGradient(0, frame.top, 0, frame.bottom,
+                        Color.argb(alpha, 112, 117, 128), Color.argb(alpha, 72, 76, 86), Shader.TileMode.CLAMP);
+                visionGlassFor = alpha;
+            }
+            fill.setShader(visionGlass);
+            fill.setColor(Color.WHITE);
+        } else {
+            // Pozadi rgba(16, 21, 31, 0.42) z preview (kryti nastavitelne).
+            fill.setShader(null);
+            fill.setColor(Color.argb(alpha, 16, 21, 31));
+        }
         c.drawRoundRect(frame, r, r, fill);
-        // Okraj 1.5px rgba(255,255,255,0.16) + svetly horni hrana.
+        fill.setShader(null);
+        // Okraj 1.5px rgba(255,255,255,0.16) (visionOS: vyraznejsi) + svetla horni hrana.
         final float sw = dp(1.5f);
         stroke.setStrokeWidth(sw);
         stroke.setShader(null);
-        stroke.setColor(0x29FFFFFF);
+        stroke.setColor(vision ? 0x52FFFFFF : 0x29FFFFFF);
         tmp.set(frame);
         tmp.inset(sw / 2f, sw / 2f);
         c.drawRoundRect(tmp, r, r, stroke);

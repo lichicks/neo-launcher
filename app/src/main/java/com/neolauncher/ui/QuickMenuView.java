@@ -54,6 +54,8 @@ public final class QuickMenuView extends View {
 
     private static final String[] TILE_LABELS = {"Wi-Fi", "Bluetooth", "Nastavení", "Menu Questu",
             "Soubory", "Prohlížeč", "Fotoaparát", "Neo"};
+    private static final int[] TILE_ICONS = {Icons.WIFI, Icons.BLUETOOTH, Icons.GEAR, Icons.SLIDERS,
+            Icons.FOLDER, Icons.GLOBE, Icons.CAMERA, Icons.NEO};
     private static final float W_DP = 540f;
     private static final float H_DP = 506f;
     private static final float PAD = 24f;
@@ -101,7 +103,7 @@ public final class QuickMenuView extends View {
     private final Path path = new Path();
     private final Path boltPath = new Path();
     private final RectF tmp = new RectF();
-    private Shader highlight;
+    private Shader highlight, glass;
 
     public QuickMenuView(Context c, Actions actions) {
         super(c);
@@ -241,7 +243,8 @@ public final class QuickMenuView extends View {
             final float t = y + row * (dp(TILE_H) + dp(GAP));
             rects[EL_TILE0 + i].set(l, t, l + tw, t + dp(TILE_H));
         }
-        highlight = new LinearGradient(0, 0, 0, dp(40), 0x33FFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
+        highlight = new LinearGradient(0, 0, 0, h * 0.5f, 0x2EFFFFFF, 0x00FFFFFF, Shader.TileMode.CLAMP);
+        glass = new LinearGradient(0, 0, 0, h, Glass.GLASS_TOP, Glass.GLASS_BOTTOM, Shader.TileMode.CLAMP);
     }
 
     // =========================================================================
@@ -261,16 +264,16 @@ public final class QuickMenuView extends View {
         final long now = System.nanoTime();
         final float w = getWidth(), h = getHeight();
         final float r = dp(28);
-        // Sklo panelu (jako zbytek launcheru): tmava vypln, svetly okraj, svetla horni hrana.
-        fill.setShader(null);
-        fill.setColor(0xF010151F);
+        // Matne sklo jako ostatni dialogy (visionOS): svetle sede, bily okraj, svetla horni hrana.
+        fill.setShader(glass);
+        fill.setColor(Color.WHITE);
         c.drawRoundRect(0, 0, w, h, r, r, fill);
         fill.setShader(highlight);
         fill.setColor(Color.WHITE);
         c.drawRoundRect(0, 0, w, h, r, r, fill);
         fill.setShader(null);
         stroke.setStrokeWidth(dp(1.5f));
-        stroke.setColor(0x33FFFFFF);
+        stroke.setColor(Glass.GLASS_STROKE);
         c.drawRoundRect(dp(0.75f), dp(0.75f), w - dp(0.75f), h - dp(0.75f), r, r, stroke);
 
         drawHeader(c, w);
@@ -302,16 +305,23 @@ public final class QuickMenuView extends View {
         // Vpravo: baterie a Wi-Fi jako pilulky (stejne jako stav v horni liste).
         final String pct = batteryLevel >= 0 ? batteryLevel + " %" : "–";
         final int bolts = charging ? (fastCharging ? 2 : 1) : 0;
-        labelText.setColor(batteryColor());
+        // Na svetlem skle bily text; barva nabiti je v tecce pred nim (zelena/modra/oranzova/cervena).
+        labelText.setColor(0xF2FFFFFF);
         final float pw = labelText.measureText(pct);
-        final float bw = dp(14) + pw + (bolts > 0 ? dp(6) + bolts * dp(9) : 0) + dp(14);
+        final float dot = dp(8);
+        final float bw = dp(12) + dot + dp(8) + pw + (bolts > 0 ? dp(6) + bolts * dp(9) : 0) + dp(14);
         final float top = dp(28), ph = dp(32);
         tmp.set(w - pad - bw, top, w - pad, top + ph);
         drawPill(c, tmp);
+        fill.setShader(null);
+        fill.setColor(batteryColor());
+        fill.setShadowLayer(dp(5), 0, 0, batteryColor());
+        c.drawCircle(tmp.left + dp(12) + dot / 2f, tmp.centerY(), dot / 2f, fill);
+        fill.clearShadowLayer();
         final Paint.FontMetrics fm = labelText.getFontMetrics();
         final float base = tmp.centerY() - (fm.ascent + fm.descent) / 2f;
-        c.drawText(pct, tmp.left + dp(14), base, labelText);
-        float x = tmp.left + dp(14) + pw + dp(6);
+        c.drawText(pct, tmp.left + dp(12) + dot + dp(8), base, labelText);
+        float x = tmp.left + dp(12) + dot + dp(8) + pw + dp(6);
         if (bolts > 0) {
             fill.setShader(null);
             fill.setColor(Color.WHITE);
@@ -341,10 +351,10 @@ public final class QuickMenuView extends View {
         fill.setShader(null);
         fill.setColor(0x33000000);
         c.drawRoundRect(r.left, r.top + dp(2), r.right, r.bottom + dp(2), rr, rr, fill);
-        fill.setColor(0x40000000);
+        fill.setColor(0x26FFFFFF);
         c.drawRoundRect(r, rr, rr, fill);
         stroke.setStrokeWidth(dp(1));
-        stroke.setColor(0x2EFFFFFF);
+        stroke.setColor(0x40FFFFFF);
         c.drawRoundRect(r, rr, rr, stroke);
     }
 
@@ -363,7 +373,7 @@ public final class QuickMenuView extends View {
         fill.setShader(null);
         fill.setColor(Color.argb(Math.round(0x33 * a), 0, 0, 0));
         c.drawRoundRect(tmp.left, tmp.top + dp(3), tmp.right, tmp.bottom + dp(3), rr, rr, fill);
-        fill.setColor(Color.argb(Math.round((0x1F + 0x14 * hv) * a), 255, 255, 255));
+        fill.setColor(Color.argb(Math.round((0x26 + 0x14 * hv) * a), 255, 255, 255));
         c.drawRoundRect(tmp, rr, rr, fill);
         // Vypln (bila jako v iOS) - zaoblena, oriznuta stopou.
         final float v = clamp(value, 0f, 1f);
@@ -388,8 +398,7 @@ public final class QuickMenuView extends View {
         final float ix = tmp.left + dp(28), iy = tmp.centerY();
         final boolean onFill = fw > dp(44);
         final int ic = onFill ? Color.argb(alpha, 16, 21, 31) : Color.argb(alpha, 255, 255, 255);
-        if (el == EL_BRIGHT) drawSun(c, ix, iy, ic);
-        else drawSpeaker(c, ix, iy, ic, v);
+        Icons.draw(c, el == EL_BRIGHT ? Icons.SUN : Icons.SPEAKER, ix, iy, dp(20), ic, dp(2), v, icon);
         final Paint.FontMetrics fm = labelText.getFontMetrics();
         final float base = iy - (fm.ascent + fm.descent) / 2f;
         final boolean labelOnFill = fw > dp(56) + labelText.measureText(label);
@@ -420,7 +429,7 @@ public final class QuickMenuView extends View {
         fill.setShader(null);
         fill.setColor(Color.argb(Math.round(0x33 * a), 0, 0, 0));
         c.drawRoundRect(-w2, -h2 + dp(3), w2, h2 + dp(3), rr, rr, fill);
-        fill.setColor(Color.argb(Math.round((0x1A + 0x22 * hc) * a), 255, 255, 255));
+        fill.setColor(Color.argb(Math.round((0x1F + 0x22 * hc) * a), 255, 255, 255));
         if (hc > 0.01f) fill.setShadowLayer(dp(14) * hc, 0, 0, Color.argb(Math.round(110 * hc * a), 56, 189, 248));
         c.drawRoundRect(-w2, -h2, w2, h2, rr, rr, fill);
         fill.clearShadowLayer();
@@ -428,7 +437,7 @@ public final class QuickMenuView extends View {
         stroke.setColor(Color.argb(Math.round((0x24 + 0x50 * hc) * a), 255, 255, 255));
         c.drawRoundRect(-w2, -h2, w2, h2, rr, rr, stroke);
         final int col = Color.argb(Math.round(255 * clamp(a, 0f, 1f)), 255, 255, 255);
-        drawTileIcon(c, i, 0, -dp(10), col);
+        Icons.draw(c, TILE_ICONS[i], 0, -dp(10), dp(26), col, dp(2), 1f, icon);
         tileText.setColor(Color.argb(Math.round(230 * clamp(a, 0f, 1f)), 255, 255, 255));
         c.drawText(TILE_LABELS[i], 0, h2 - dp(14), tileText);
         c.restore();
@@ -473,32 +482,7 @@ public final class QuickMenuView extends View {
         icon.setColor(color);
     }
 
-    private void drawSun(Canvas c, float x, float y, int color) {
-        strokeIcon(color, dp(2));
-        c.drawCircle(x, y, dp(4.5f), icon);
-        for (int i = 0; i < 8; i++) {
-            final double an = i * Math.PI / 4;
-            final float cs = (float) Math.cos(an), sn = (float) Math.sin(an);
-            c.drawLine(x + cs * dp(7.5f), y + sn * dp(7.5f), x + cs * dp(10), y + sn * dp(10), icon);
-        }
-    }
 
-    private void drawSpeaker(Canvas c, float x, float y, int color, float v) {
-        strokeIcon(color, dp(2));
-        icon.setStyle(Paint.Style.FILL);
-        path.reset();
-        path.moveTo(x - dp(9), y - dp(3.5f));
-        path.lineTo(x - dp(5), y - dp(3.5f));
-        path.lineTo(x, y - dp(8));
-        path.lineTo(x, y + dp(8));
-        path.lineTo(x - dp(5), y + dp(3.5f));
-        path.lineTo(x - dp(9), y + dp(3.5f));
-        path.close();
-        c.drawPath(path, icon);
-        icon.setStyle(Paint.Style.STROKE);
-        if (v > 0.01f) c.drawArc(x - dp(1), y - dp(5), x + dp(7), y + dp(5), -50, 100, false, icon);
-        if (v > 0.5f) c.drawArc(x - dp(3), y - dp(9), x + dp(11), y + dp(9), -50, 100, false, icon);
-    }
 
     private void drawWifiIcon(Canvas c, float x, float y, float s, int bars) {
         strokeIcon(0, dp(2));
@@ -512,82 +496,6 @@ public final class QuickMenuView extends View {
         c.drawCircle(x, y - dp(1), dp(1.8f), icon);
     }
 
-    private void drawTileIcon(Canvas c, int i, float x, float y, int color) {
-        strokeIcon(color, dp(2));
-        final float s = dp(12);
-        switch (i) {
-            case T_WIFI:
-                for (int k = 1; k <= 3; k++) {
-                    final float rr = s * k / 3f * 1.3f;
-                    c.drawArc(x - rr, y + dp(6) - rr, x + rr, y + dp(6) + rr, 225, 90, false, icon);
-                }
-                icon.setStyle(Paint.Style.FILL);
-                c.drawCircle(x, y + dp(5), dp(2), icon);
-                break;
-            case T_BLUETOOTH:
-                path.reset();
-                path.moveTo(x - s * 0.5f, y - s * 0.45f);
-                path.lineTo(x + s * 0.5f, y + s * 0.45f);
-                path.lineTo(x, y + s);
-                path.lineTo(x, y - s);
-                path.lineTo(x + s * 0.5f, y - s * 0.45f);
-                path.lineTo(x - s * 0.5f, y + s * 0.45f);
-                c.drawPath(path, icon);
-                break;
-            case T_QUEST_SETTINGS: {
-                c.drawCircle(x, y, s * 0.38f, icon);
-                for (int k = 0; k < 8; k++) {
-                    final double an = k * Math.PI / 4;
-                    final float cs = (float) Math.cos(an), sn = (float) Math.sin(an);
-                    c.drawLine(x + cs * s * 0.62f, y + sn * s * 0.62f, x + cs * s * 0.92f, y + sn * s * 0.92f, icon);
-                }
-                c.drawCircle(x, y, s * 0.72f, icon);
-                break;
-            }
-            case T_QUEST_QUICK:
-                for (int k = -1; k <= 1; k++) c.drawLine(x - s, y + k * s * 0.6f, x + s, y + k * s * 0.6f, icon);
-                icon.setStyle(Paint.Style.FILL);
-                c.drawCircle(x - s * 0.4f, y - s * 0.6f, dp(3), icon);
-                c.drawCircle(x + s * 0.45f, y, dp(3), icon);
-                c.drawCircle(x - s * 0.1f, y + s * 0.6f, dp(3), icon);
-                break;
-            case T_FILES:
-                path.reset();
-                path.moveTo(x - s, y - s * 0.7f);
-                path.lineTo(x - s * 0.25f, y - s * 0.7f);
-                path.lineTo(x, y - s * 0.4f);
-                path.lineTo(x + s, y - s * 0.4f);
-                path.lineTo(x + s, y + s * 0.75f);
-                path.lineTo(x - s, y + s * 0.75f);
-                path.close();
-                c.drawPath(path, icon);
-                break;
-            case T_BROWSER:
-                c.drawCircle(x, y, s * 0.9f, icon);
-                c.drawOval(x - s * 0.4f, y - s * 0.9f, x + s * 0.4f, y + s * 0.9f, icon);
-                c.drawLine(x - s * 0.9f, y, x + s * 0.9f, y, icon);
-                break;
-            case T_CAMERA:
-                c.drawRoundRect(x - s, y - s * 0.55f, x + s, y + s * 0.75f, dp(4), dp(4), icon);
-                c.drawCircle(x, y + s * 0.1f, s * 0.38f, icon);
-                c.drawLine(x - s * 0.35f, y - s * 0.55f, x - s * 0.2f, y - s * 0.8f, icon);
-                c.drawLine(x - s * 0.2f, y - s * 0.8f, x + s * 0.2f, y - s * 0.8f, icon);
-                c.drawLine(x + s * 0.2f, y - s * 0.8f, x + s * 0.35f, y - s * 0.55f, icon);
-                break;
-            default: {
-                // Logo Neo: cerny ctverec s bilou teckou.
-                icon.setStyle(Paint.Style.FILL);
-                icon.setColor(0xFF000000);
-                c.drawRoundRect(x - s, y - s, x + s, y + s, dp(6), dp(6), icon);
-                strokeIcon((color & 0x00FFFFFF) | 0x66000000, dp(1));
-                c.drawRoundRect(x - s, y - s, x + s, y + s, dp(6), dp(6), icon);
-                icon.setStyle(Paint.Style.FILL);
-                icon.setColor(color);
-                c.drawCircle(x, y, s * 0.42f, icon);
-                break;
-            }
-        }
-    }
 
     // =========================================================================
     // Vstup

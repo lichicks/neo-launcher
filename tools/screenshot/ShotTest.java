@@ -243,6 +243,18 @@ public class ShotTest {
         hover(menu, 300 * d, 330 * d);
         pump(500);
         capture(a, root, outDir + "/neo-quickmenu.png");
+
+        // --- Nastaveni jako dashboard (sklo visionOS) + svetly styl panelu ---
+        overlay.close();
+        pump(600);
+        prefs.setGlassStyle(com.neolauncher.data.Prefs.GLASS_VISION);
+        pump(300);
+        capture(a, root, outDir + "/neo-idle-vision.png");
+        android.view.View sheet = com.neolauncher.ui.SettingsSheet.build(a, prefs,
+                new com.neolauncher.data.AppRepository(a, prefs), art, () -> { }, () -> { }, overlay::close);
+        overlay.show(sheet, null, grid.brandRect(), grid.frameRect(), Math.round(1000 * d));
+        pump(1500);
+        capture(a, root, outDir + "/neo-settings.png");
     }
 
     private static void scroll(android.view.View v, float x, float y, int axis, float value) {

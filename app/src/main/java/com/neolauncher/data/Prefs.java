@@ -25,6 +25,10 @@ public final class Prefs {
     public static final int SORT_ALPHA = 1;
     public static final int SORT_RECENT = 2;
 
+    /** Styl skla panelu: tmave z preview_neo.html, nebo svetlejsi jako ve visionOS. */
+    public static final int GLASS_DARK = 0;
+    public static final int GLASS_VISION = 1;
+
     public static final int DOF_OFF = 0;
     public static final int DOF_SOFT = 1;
     public static final int DOF_STRONG = 2;
@@ -33,6 +37,7 @@ public final class Prefs {
     private static final String K_SORT = "sort_mode";
     private static final String K_DOF = "dof_mode";
     private static final String K_GLASS = "glass_alpha";
+    private static final String K_GLASS_STYLE = "glass_style";
     private static final String K_POPOUT = "popout_margin";
     private static final String K_COLUMNS = "columns";
     private static final String K_SYSTEM_BLUR = "system_blur";
@@ -112,6 +117,15 @@ public final class Prefs {
 
     public void setGlassAlpha(int a) {
         sp.edit().putInt(K_GLASS, a).apply();
+        changed();
+    }
+
+    public int glassStyle() {
+        return clamp(sp.getInt(K_GLASS_STYLE, GLASS_DARK), 0, 1);
+    }
+
+    public void setGlassStyle(int s) {
+        sp.edit().putInt(K_GLASS_STYLE, s).apply();
         changed();
     }
 

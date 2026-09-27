@@ -86,6 +86,12 @@ v nastavení ("Karty vyskakují z panelu").
    ukazatele 6 s → reset (kdyby Quest nepostal HOVER_EXIT).
 5. **HOVER_EXIT chodí i těsně před stiskem spouště** → reset hoveru se
    odkládá o 90 ms, jinak by karta při kliknutí blikla.
+6. **3D náklon karty jen přes `RenderNode.setRotationX/Y`**, ne přes vlastní
+   perspektivní matici z `android.graphics.Camera` + `canvas.concat()`. Ta se
+   po odrolování vůbec nevykreslila (karta pod laserem zmizela) — odhaleno
+   Robolectric snímkem 2026-09-27. Nakloněná karta má vlastní `Card.node`;
+   ten smí být v jednom snímku jen v jednom rodiči, proto kopie pod lištou
+   (backdrop) kreslí karty vždy naplocho.
 
 ## Stav — co je hotové (v2.0, NEOTESTOVÁNO na headsetu)
 
@@ -175,6 +181,18 @@ Možnosti:
   kolečka dole (uživatel zvažuje místo záložek)
 - Češtinu přesunout do `strings.xml` (teď natvrdo v kódu — Quest češtinu
   jako systémový jazyk nemá, takže `values-cs` by se stejně nepoužilo)
+
+## Náhled bez headsetu (skutečný snímek kódu)
+
+`tools/screenshot/run.sh` spustí skutečný `NeoLauncherView` v Robolectricu
+(emulace Androidu na JVM) s nativní grafikou a HW vykreslováním — RenderNode,
+RenderEffect i AGSL shader jedou přes opravdovou Skia/HWUI. Stáhne opravdové
+bannery her, vyfotí klidový stav a stav s kartou pod "laserem" po odrolování,
+a složí to s ilustračním pozadím. Potřebuje jen JDK, Maven a přístup na Maven
+Central + GitHub (funguje i v cloudové session). Trvá ~3 min, poprvé stáhne
+~350 MB. **Používat po každé změně kreslení** — takhle se našla chyba v bodě 6.
+Pozadí a systémové rozmazání prostředí jsou jen ilustrace; skutečný vzhled
+průhlednosti na Questu je potřeba ověřit na headsetu.
 
 ## Build
 

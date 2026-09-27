@@ -3,7 +3,6 @@ package com.neolauncher.ui;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.BitmapShader;
-import android.graphics.Camera;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.LinearGradient;
@@ -132,6 +131,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         float artShaderW = -1;
         Shader placeholder;
         float placeholderW = -1;
+        /** Vlastni RenderNode jen pro kartu, ktera je prave naklonena (3D rotace). */
+        RenderNode node;
     }
 
     private final float d; // density
@@ -201,8 +202,6 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private String clockTime = "", clockDate = "";
 
     // --- Kresleni ------------------------------------------------------------------
-    private final Camera camera = new Camera();
-    private final Matrix m3d = new Matrix();
     private final Matrix shaderMatrix = new Matrix();
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint stroke = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -346,6 +345,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         }
         contentNode.discardDisplayList();
         backdropNode.discardDisplayList();
+        for (Card k : cards) if (k.node != null) k.node.discardDisplayList();
     }
 
     public int tab() {
@@ -522,7 +522,6 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         final boolean geometryChanged = oldCols != cols || Math.abs(oldCardW - cardW) > 0.01f;
 
         final float persp = dp(PERSPECTIVE);
-        camera.setLocation(0, 0, -persp / 72f);
         // translateZ(32px) v perspective(900px) karte opticky prida ~3.7 % velikosti.
         hoverScaleEff = HOVER_SCALE * (persp / (persp - dp(HOVER_Z)));
 
@@ -1107,7 +1106,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         } else {
             canvas.save();
             canvas.clipRect(frame.left, topBarBottom, frame.right, frame.bottom);
-            drawCardsInto(canvas, now, frame.top, frame.bottom, 0f);
+            drawCardsInto(canvas, now, frame.top, frame.bottom, 0f, false);
             canvas.restore();
         }
         drawTopBar(canvas, now);
@@ -1160,7 +1159,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         RecordingCanvas rc = contentNode.beginRecording(w, h);
         try {
             rc.translate(-Math.round(frame.left), -Math.round(topBarBottom));
-            drawCardsInto(rc, now, topBarBottom, frame.bottom, dimStrength());
+            drawCardsInto(rc, now, topBarBottom, frame.bottom, dimStrength(), true);
         } finally {
             contentNode.endRecording();
         }
@@ -1197,7 +1196,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         RecordingCanvas rc = backdropNode.beginRecording(w, h);
         try {
             rc.translate(-Math.round(frame.left), -Math.round(frame.top));
-            drawCardsInto(rc, now, frame.top, topBarBottom, 0f);
+            // Kopie pod listou je silne rozmazana - naklon neni videt, kresli se plocha
+            // (a hlavne: RenderNode karty nesmi byt ve dvou rodicich naraz).
+            drawCardsInto(rc, now, frame.top, topBarBottom, 0f, false);
         } finally {
             backdropNode.endRecording();
         }
@@ -1214,7 +1215,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
      * do svisleho rozsahu [top, bottom] obrazovky. Karty, ktere jeste
      * dojizdeji z hoveru, se kresli az nakonec (jsou "nad" ostatnimi).
      */
-    private void drawCardsInto(Canvas c, long now, float top, float bottom, float dim) {
+    private void drawCardsInto(Canvas c, long now, float top, float bottom, float dim,
+                               boolean allow3d) {
         c.save();
         c.translate(0, squishPivot);
         c.scale(1f, squish);
@@ -1233,11 +1235,11 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 late.add(k);
                 continue;
             }
-            drawCard(c, k, now, dimFor(k, now, amt, dim, maxDist));
+            drawCard(c, k, now, dimFor(k, now, amt, dim, maxDist), allow3d);
         }
         if (late != null) {
             late.sort((a, b) -> Float.compare(a.hover.get(now), b.hover.get(now)));
-            for (Card k : late) drawCard(c, k, now, dimFor(k, now, amt, dim, maxDist));
+            for (Card k : late) drawCard(c, k, now, dimFor(k, now, amt, dim, maxDist), allow3d);
         }
         c.restore();
     }
@@ -1257,7 +1259,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         c.translate(0, squishPivot);
         c.scale(1f, squish);
         c.translate(0, -squishPivot);
-        drawCard(c, focused, now, 0f);
+        drawCard(c, focused, now, 0f, true);
         c.restore();
     }
 
@@ -1268,7 +1270,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         final float cy = py - dragDY;
         final float scale = 1f + 0.12f * lift;
         drawCardAt(c, dragCard, now, cx, cy, scale, 0f,
-                dragTilt.get(now), Math.max(lift, 0.6f), 0f);
+                dragTilt.get(now), Math.max(lift, 0.6f), 0f, true);
         if (!dragMoved) {
             // Tenky ukazatel pod kartou: az se naplni, otevre se menu karty.
             final float total = Math.max(1f, menuHoldMs() - LONG_PRESS_MS);
@@ -1284,32 +1286,66 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         }
     }
 
-    private void drawCard(Canvas c, Card k, long now, float dim) {
+    private void drawCard(Canvas c, Card k, long now, float dim, boolean allow3d) {
         final float cx = cardLeft(k, now) + cardW / 2f;
         final float cy = cardTop(k, now) + cardH / 2f;
         final float h = k.hover.get(now);
-        drawCardAt(c, k, now, cx, cy, visualScale(k, now), k.rotX.get(now), k.rotY.get(now), h, dim);
+        drawCardAt(c, k, now, cx, cy, visualScale(k, now), k.rotX.get(now), k.rotY.get(now),
+                h, dim, allow3d);
     }
 
-    /** Jedna karta se stredem v (cx, cy): stiny, obrazek, prechod, ramecek, nazev. */
+    /**
+     * Jedna karta se stredem v (cx, cy). Naklonena karta (rx/ry) jde pres vlastni
+     * RenderNode s rotaci - stejna cesta, jakou Android pouziva pro View.setRotationX/Y.
+     * (Vlastni perspektivni matice pres android.graphics.Camera se v nekterych
+     * stavech vubec nevykreslila - odhaleno v Robolectric snimku.)
+     */
     private void drawCardAt(Canvas c, Card k, long now, float cx, float cy, float scale,
-                            float rx, float ry, float h, float dim) {
+                            float rx, float ry, float h, float dim, boolean allow3d) {
+        if (allow3d && c.isHardwareAccelerated() && (Math.abs(rx) > 0.01f || Math.abs(ry) > 0.01f)) {
+            drawCardNode(c, k, now, cx, cy, scale, rx, ry, h, dim);
+            return;
+        }
+        c.save();
+        c.translate(cx, cy);
+        if (scale != 1f) c.scale(scale, scale);
+        drawCardBody(c, k, now, h, dim);
+        c.restore();
+    }
+
+    private void drawCardNode(Canvas c, Card k, long now, float cx, float cy, float scale,
+                              float rx, float ry, float h, float dim) {
+        if (k.node == null) k.node = new RenderNode("neo-card");
+        // Rezerva kolem karty, aby se nezarizl velky stin pod kartou.
+        final float m = (hoverShadow != null ? hoverShadow.margin : dp(90)) + dp(30);
+        final int nw = (int) Math.ceil(cardW + 2 * m);
+        final int nh = (int) Math.ceil(cardH + 2 * m);
+        final RenderNode n = k.node;
+        RecordingCanvas rc = n.beginRecording(nw, nh);
+        try {
+            rc.translate(nw / 2f, nh / 2f);
+            drawCardBody(rc, k, now, h, dim);
+        } finally {
+            n.endRecording();
+        }
+        n.setPosition(0, 0, nw, nh);
+        n.setClipToBounds(false);
+        n.setTranslationX(cx - nw / 2f);
+        n.setTranslationY(cy - nh / 2f);
+        n.setPivotX(nw / 2f);
+        n.setPivotY(nh / 2f);
+        n.setScaleX(scale);
+        n.setScaleY(scale);
+        n.setRotationX(rx);
+        n.setRotationY(ry);
+        n.setCameraDistance(dp(PERSPECTIVE) / 72f);
+        c.drawRenderNode(n);
+    }
+
+    /** Obsah karty v lokalnich souradnicich se stredem v (0, 0). */
+    private void drawCardBody(Canvas c, Card k, long now, float h, float dim) {
         final float w2 = cardW / 2f, h2 = cardH / 2f;
         final float r = dp(CARD_RADIUS);
-        c.save();
-        if (Math.abs(rx) > 0.01f || Math.abs(ry) > 0.01f) {
-            camera.save();
-            camera.rotateX(rx);
-            camera.rotateY(ry);
-            camera.getMatrix(m3d);
-            camera.restore();
-            m3d.preScale(scale, scale);
-            m3d.postTranslate(cx, cy);
-            c.concat(m3d);
-        } else {
-            c.translate(cx, cy);
-            if (scale != 1f) c.scale(scale, scale);
-        }
 
         // Stiny: klidovy 0 6px 20px rgba(0,0,0,.4) -> hover 0 26px 55px rgba(0,0,0,.85)
         // + bila zare 0 0 32px rgba(255,255,255,.3).
@@ -1380,7 +1416,6 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 r - bw / 2f, r - bw / 2f, stroke);
 
         drawTitlePill(c, k, h, w2, h2);
-        c.restore();
     }
 
     /** Plovouci "pilulka" s nazvem: rgba(10,14,22,.9), radius 999, 11.5px, ellipsis. */

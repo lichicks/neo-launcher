@@ -106,6 +106,7 @@ public final class ArtworkLoader {
     private final Map<String, Long> networkRetryAt = new ConcurrentHashMap<>();
     private final List<Listener> listeners = new CopyOnWriteArrayList<>();
 
+    private volatile boolean onlineEnabled = true;
     private volatile int targetW = 400;
     private volatile int targetH = 250;
     /** Zvysuje se pri zmene velikosti - zahodi vysledky rozpracovanych nacteni. */
@@ -152,6 +153,19 @@ public final class ArtworkLoader {
         fallbacks.clear();
         loading.clear();
         notifyAllChanged();
+    }
+
+    /** Vypnuti stahovani z internetu (nastaveni). Uz stazene obrazky zustanou. */
+    public void setOnlineEnabled(boolean enabled) {
+        if (enabled == onlineEnabled) return;
+        onlineEnabled = enabled;
+        if (enabled) {
+            // Karty s docasnym obrazkem zkusit stahnout znovu.
+            networkRetryAt.clear();
+            for (String pkg : fallbacks) memory.remove(pkg);
+            fallbacks.clear();
+            notifyAllChanged();
+        }
     }
 
     public int targetWidth() {
@@ -318,7 +332,7 @@ public final class ArtworkLoader {
     // --- Stahovani --------------------------------------------------------------
 
     private boolean shouldDownload(AppEntry e) {
-        if (e.isSystemPanel()) return false;
+        if (!onlineEnabled || e.isSystemPanel()) return false;
         if (e.pkg.startsWith("com.android.") || e.pkg.startsWith("com.google.android."))
             return false;
         long now = System.currentTimeMillis();

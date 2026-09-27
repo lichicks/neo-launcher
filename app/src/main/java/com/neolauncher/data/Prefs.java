@@ -37,6 +37,11 @@ public final class Prefs {
     private static final String K_COLUMNS = "columns";
     private static final String K_SYSTEM_BLUR = "system_blur";
     private static final String K_SHORTCUTS = "allow_shortcuts";
+    private static final String K_MENU_HOLD = "menu_hold_ms";
+    private static final String K_ONLINE_ART = "online_art";
+    private static final String K_UPDATE_TEST = "update_test_builds";
+    private static final String K_UPDATE_LAST_CHECK = "update_last_check";
+    private static final String K_UPDATE_DISMISSED = "update_dismissed";
     private static final String K_HIDDEN = "hidden";
     private static final String K_ORDER = "order_";
     private static final String K_LABEL = "label_";
@@ -122,6 +127,54 @@ public final class Prefs {
     public void setColumns(int c) {
         sp.edit().putInt(K_COLUMNS, c).apply();
         changed();
+    }
+
+    /** Jak dlouho drzet kartu bez pohybu, nez se otevre jeji menu (ms). */
+    public int menuHoldMs() {
+        return clamp(sp.getInt(K_MENU_HOLD, 1000), 600, 2500);
+    }
+
+    public void setMenuHoldMs(int ms) {
+        sp.edit().putInt(K_MENU_HOLD, ms).apply();
+        changed();
+    }
+
+    /** Stahovat bannery her z online repozitaru (jako Lightning Launcher). */
+    public boolean onlineArt() {
+        return sp.getBoolean(K_ONLINE_ART, true);
+    }
+
+    public void setOnlineArt(boolean b) {
+        sp.edit().putBoolean(K_ONLINE_ART, b).apply();
+        changed();
+    }
+
+    // --- Aktualizace --------------------------------------------------------
+
+    /** Nabizet i testovaci buildy (z vyvojovych vetvi), ne jen z main. */
+    public boolean updateTestBuilds() {
+        return sp.getBoolean(K_UPDATE_TEST, true);
+    }
+
+    public void setUpdateTestBuilds(boolean b) {
+        sp.edit().putBoolean(K_UPDATE_TEST, b).apply();
+    }
+
+    public long lastUpdateCheck() {
+        return sp.getLong(K_UPDATE_LAST_CHECK, 0L);
+    }
+
+    public void setLastUpdateCheck(long t) {
+        sp.edit().putLong(K_UPDATE_LAST_CHECK, t).apply();
+    }
+
+    /** versionCode aktualizace, kterou uzivatel odlozil ("Pozdeji"). */
+    public long dismissedUpdate() {
+        return sp.getLong(K_UPDATE_DISMISSED, 0L);
+    }
+
+    public void setDismissedUpdate(long versionCode) {
+        sp.edit().putLong(K_UPDATE_DISMISSED, versionCode).apply();
     }
 
     // --- Quest --------------------------------------------------------------

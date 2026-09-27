@@ -49,11 +49,12 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 | `data/Platform.java` | Quest? Verze Horizon OS, podpora blend efektů / chain launch |
 | `art/ArtworkLoader.java` | Bannery: vlastní → cache na disku → TV banner → náhradní (ikona na rozmazaném pozadí) + stažení online. Bitmapy jsou předem oříznuté na přesnou velikost karty |
 | `launch/AppLauncher.java` | Spouštění (vrshell broadcast na v71+, panely, 2D), info o aplikaci, odinstalace |
+| `update/Updater.java`, `InstallReceiver.java` | Aktualizace z GitHub Releases: najde nejnovější build, stáhne, nainstaluje přes PackageInstaller |
 | `ui/NeoLauncherView.java` | Sklo, horní lišta (logo, záložky, hodiny, baterie), mřížka, hover pop-out, hloubka ostrosti, gumové rolování, přesouvání |
 | `ui/Eased.java` | Animovaná hodnota jako CSS transition (retarget z aktuální hodnoty, bez callbacků) |
 | `ui/DepthBlur.java` | Radiální rozmazání: AGSL shader (Android 13+), jinak obyčejný blur |
 | `ui/ShadowSprite.java` | Předpočítané rozmazané stíny karet (box-shadow) |
-| `ui/Glass.java`, `OverlayHost.java`, `SettingsSheet.java`, `AppMenu.java` | Dialogy ve stylu skla (normální Android Views) |
+| `ui/Glass.java`, `OverlayHost.java`, `SettingsSheet.java`, `AppMenu.java`, `UpdateSheet.java` | Dialogy ve stylu skla (normální Android Views) |
 
 ### Vrstvy kreslení (odspodu)
 1. Sklo panelu (výplň s nastavitelným krytím, okraj, světlá horní hrana)
@@ -101,13 +102,25 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
 - Horní lišta: logo Neo (klik = nastavení), záložky Hry / Aplikace / Vše,
   hodiny + datum, baterie (barvy dle %, 1 blesk = nabíjení, 2 = rychlé > 7.5 W)
 - Přesouvání: podržet kartu 450 ms → zvedne se → táhnout (auto-rolování
-  u okraje) → pustit. Pořadí se ukládá per záložka. Podržet a pustit bez
-  pohybu = menu karty.
+  u okraje) → pustit. Pořadí se ukládá per záložka.
+- Menu karty: držet kartu **bez pohybu 1 s** (nastavitelné 0,7 / 1 / 1,5 s,
+  pod kartou běží modrý ukazatel). Pustit dřív = nic, karta jen dosedne.
 - Menu karty: spustit, přejmenovat, vlastní obrázek, stáhnout obrázek znovu,
   skrýt, info, odinstalovat
 - Nastavení: hloubka ostrosti, krytí skla, sloupce, přesah karet, řazení
-  (vlastní/abecedně/naposledy), skryté aplikace, znovu stáhnout obrázky,
-  systémové rozmazání pozadí, Meta tlačítko
+  (vlastní/abecedně/naposledy), prodleva menu karty, stahování obrázků
+  z internetu (zap/vyp), skryté aplikace, znovu stáhnout obrázky,
+  aktualizace, systémové rozmazání pozadí, Meta tlačítko
+- Aktualizace přímo v launcheru: CI po každém pushi vytvoří GitHub Release
+  `v2.0.<číslo běhu>` (mimo `main` jako prerelease = testovací). Launcher při
+  otevření (max 1× za 6 h) nebo tlačítkem v nastavení zkontroluje
+  `api.github.com/repos/lichicks/neo-launcher/releases`, ukáže poznámky
+  (zpráva commitu) a po potvrzení nainstaluje. `versionCode = 2000 + run_number`.
+  **Repo je teď soukromé → GitHub bez přihlášení vrací 404 a aktualizace
+  nejdou** (launcher to hlásí). Řešení čeká na rozhodnutí uživatele: zveřejnit
+  repo, nebo APK publikovat do zvláštního veřejného repa
+  `lichicks/neo-launcher-releases` (launcher ho už zkouší jako druhý zdroj;
+  CI by potřebovalo token v secrets).
 - Průhledné okno + `com.oculus.vrshell.supports_blend_effects` (Quest 3/3S
   rozmaže prostředí za panelem)
 - Pevný podpisový klíč `keystore/neo-debug.keystore` → nové buildy jdou
@@ -128,6 +141,23 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
 6. Spuštění VR hry i 2D aplikace, Nastavení Questu (`systemux://settings`).
 7. Meta tlačítko přes addon (musí být nainstalovaný z legacy workflow).
 
+## Meta tlačítko (addon RedirectServices) — rozbor
+
+Addon (varianta *navigator*) je AccessibilityService, která poslouchá
+`com.oculus.systemux` a když se objeví okno s textem "Navigator"/"Navigátor"
+(= uživatel stiskl Meta tlačítko), otevře launcher. Neví nic o tom, jestli
+běží hra → **ve hře Meta tlačítko otevře launcher přes hru** (to uživateli vadí).
+
+Možnosti (čeká na volbu uživatele):
+1. Addon přesunout do tohoto repa a naučit ho neotevírat launcher, když je
+   v popředí VR hra (sledovat `TYPE_WINDOW_STATE_CHANGED` všech balíčků +
+   typ aplikace jako v `AppRepository`). Experimentální — jde otestovat jen na
+   headsetu.
+2. Dvojí stisk Meta: addon vidí jen otevření Navigatoru, ne samotné tlačítko
+   → spolehlivě nejde.
+3. Bez addonu: Neo připnout do docku (od Horizon OS v63 stačí přetáhnout
+   ikonu) — jeden klik, Meta tlačítko zůstane systémové.
+
 ## Co zbývá / nápady
 
 - "Peephole" animace spuštění z preview (zatím jen záblesk karty)
@@ -135,7 +165,9 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
 - Vlastní tapeta / pozadí
 - Hledání aplikací
 - Paralaxa celé mřížky podle ukazatele (víc 3D)
-- Addon RedirectServices přenést do tohoto repa (teď jen v legacy workflow)
+- Addon RedirectServices přenést do tohoto repa (viz rozbor výše)
+- Rozložení jako v Lightning Launcheru: hry velké karty, aplikace malá
+  kolečka dole (uživatel zvažuje místo záložek)
 - Češtinu přesunout do `strings.xml` (teď natvrdo v kódu — Quest češtinu
   jako systémový jazyk nemá, takže `values-cs` by se stejně nepoužilo)
 

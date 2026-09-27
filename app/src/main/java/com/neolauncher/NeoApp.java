@@ -21,6 +21,8 @@ public class NeoApp extends Application {
         prefs = new Prefs(this);
         apps = new AppRepository(this, prefs);
         artwork = new ArtworkLoader(this);
+        artwork.setOnlineEnabled(prefs.onlineArt());
+        prefs.addListener(() -> artwork.setOnlineEnabled(prefs.onlineArt()));
     }
 
     public static NeoApp get() {

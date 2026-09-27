@@ -2,11 +2,16 @@ name: Build Neo Launcher 2.0
 
 # Stavi novy Neo Launcher ze slozky app/. Spousti se pri kazdem pushi
 # (na jakoukoliv vetev) a rucne pres "Run workflow". Hotove APK je ke
-# stazeni v sekci Artifacts u konkretniho behu.
+# stazeni v sekci Artifacts u konkretniho behu a zaroven se zverejni jako
+# GitHub Release - odtud si ho stahuje aktualizator primo v launcheru.
 on:
   workflow_dispatch:
   push:
   pull_request:
+
+# Zapis do repozitare je potreba jen pro vytvoreni Release.
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -28,6 +33,8 @@ jobs:
             "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
       - name: Sestavit APK
+        env:
+          NEO_BUILD_NUMBER: ${{ github.run_number }}
         run: |
           chmod +x ./gradlew
           ./gradlew assembleDebug --stacktrace --no-daemon
@@ -35,7 +42,7 @@ jobs:
       - name: Pojmenovat APK
         run: |
           mkdir -p out
-          cp app/build/outputs/apk/debug/app-debug.apk "out/NeoLauncher-2.0-${GITHUB_SHA::7}.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "out/NeoLauncher-2.0.${GITHUB_RUN_NUMBER}.apk"
 
       - name: Nahrat APK
         uses: actions/upload-artifact@v4
@@ -43,6 +50,31 @@ jobs:
           name: NeoLauncher-APK
           path: out/*.apk
           if-no-files-found: error
+
+      # Kazdy build = Release "v2.0.<cislo behu>". Buildy mimo vetev main jsou
+      # oznacene jako testovaci (prerelease). Poznamky = zprava commitu.
+      - name: Zverejnit jako Release (aktualizace z launcheru)
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VER="2.0.${GITHUB_RUN_NUMBER}"
+          CODE=$((2000 + GITHUB_RUN_NUMBER))
+          # Opakovany beh stejneho buildu (Re-run) - release uz existuje.
+          if gh release view "v${VER}" > /dev/null 2>&1; then
+            echo "Release v${VER} uz existuje, preskakuji."
+            exit 0
+          fi
+          PRE=""
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then PRE="--prerelease"; fi
+          {
+            echo "versionCode: ${CODE}"
+            echo "vetev: ${GITHUB_REF_NAME}"
+            echo
+            git log -1 --pretty=%B | grep -v -e '^Co-Authored-By:' -e '^Claude-Session:' | head -c 4000
+          } > notes.md
+          gh release create "v${VER}" "out/NeoLauncher-${VER}.apk" \
+            --title "Neo ${VER}" --notes-file notes.md --target "${GITHUB_SHA}" ${PRE}
 
       - name: Nahrat logy pri chybe
         if: failure()

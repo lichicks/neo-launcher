@@ -92,6 +92,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private static final long HOVER_MS = 380;
     private static final long BLUR_MS = 350;
     private static final long REORDER_MS = 260;
+    /** Po tak dlouhem podrzeni se karta zvedne a jde tahat. */
     private static final long LONG_PRESS_MS = 450;
     private static final long HOVER_EXIT_GRACE_MS = 90;
     /** Pojistka: bez jakekoliv udalosti ukazatele tak dlouho = ukazatel je pryc. */
@@ -251,6 +252,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         }
     };
     private final Runnable longPressRunnable = this::onLongPress;
+    /** Karta zvednuta a porad drzena bez pohybu -> po prodleve z nastaveni otevrit menu. */
+    private final Runnable menuHoldRunnable = this::onMenuHold;
+    private long liftNs;
 
     public NeoLauncherView(Context c) {
         super(c);
@@ -428,7 +432,11 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     /** Pri otevrenem nastaveni/menu: karty nereaguji a cely launcher se rozmaze. */
     public void setInteractive(boolean b) {
         interactive = b;
-        if (!b) resetHoverState();
+        if (!b) {
+            // Rozpracovane gesto uz nedobehne (UP pujde do prazdna) - uklidit hned.
+            cancelTouch();
+            resetHoverState();
+        }
         invalidate();
     }
 
@@ -798,7 +806,10 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 touchPointer(x, y);
                 if (velocity != null) velocity.addMovement(e);
                 if (dragging) {
-                    if (Math.hypot(x - liftX, y - liftY) > touchSlop) dragMoved = true;
+                    if (!dragMoved && Math.hypot(x - liftX, y - liftY) > touchSlop) {
+                        dragMoved = true;
+                        handler.removeCallbacks(menuHoldRunnable);
+                    }
                     dragTo(x, y, now);
                     invalidate();
                     return true;
@@ -825,6 +836,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             }
             case MotionEvent.ACTION_UP: {
                 handler.removeCallbacks(longPressRunnable);
+                handler.removeCallbacks(menuHoldRunnable);
                 if (velocity != null) velocity.addMovement(e);
                 if (dragging) {
                     endDrag(now, false);
@@ -858,6 +870,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private void cancelTouch() {
         final long now = System.nanoTime();
         handler.removeCallbacks(longPressRunnable);
+        handler.removeCallbacks(menuHoldRunnable);
         if (dragging) endDrag(now, true);
         if (pressedCard != null) pressedCard.press.set(0f, now);
         pressedCard = null;
@@ -923,7 +936,27 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         focused = null;
         blurAmount.set(0f, now);
         performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        liftNs = now;
+        handler.removeCallbacks(menuHoldRunnable);
+        handler.postDelayed(menuHoldRunnable, Math.max(100, menuHoldMs() - LONG_PRESS_MS));
         kickScroll();
+        invalidate();
+    }
+
+    private long menuHoldMs() {
+        return prefs != null ? prefs.menuHoldMs() : 1000;
+    }
+
+    /** Karta drzena bez pohybu celou prodlevu -> menu karty. */
+    private void onMenuHold() {
+        if (!dragging || dragCard == null || dragMoved || dragOrderChanged) return;
+        final long now = System.nanoTime();
+        final Card k = dragCard;
+        endDrag(now, true);
+        if (host != null) {
+            poppedRect(k, now, tmp);
+            host.onAppMenu(k.app, new RectF(tmp));
+        }
         invalidate();
     }
 
@@ -992,12 +1025,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         dragCard = null;
         dragLift.set(0f, now);
         if (cancelled) return;
-        if (!dragMoved && !dragOrderChanged) {
-            if (host != null) {
-                poppedRect(k, now, tmp);
-                host.onAppMenu(k.app, new RectF(tmp));
-            }
-        } else if (dragOrderChanged && host != null) {
+        // Pusteni bez pohybu pred uplynutim prodlevy menu = nic (karta jen dosedne).
+        if (dragOrderChanged && host != null) {
             List<String> order = new ArrayList<>(cards.size());
             for (Card c : cards) order.add(c.app.pkg);
             host.onOrderChanged(tab, order);
@@ -1237,8 +1266,22 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         final float lift = dragLift.get(now);
         final float cx = px - dragDX;
         final float cy = py - dragDY;
-        drawCardAt(c, dragCard, now, cx, cy, 1f + 0.12f * lift, 0f,
+        final float scale = 1f + 0.12f * lift;
+        drawCardAt(c, dragCard, now, cx, cy, scale, 0f,
                 dragTilt.get(now), Math.max(lift, 0.6f), 0f);
+        if (!dragMoved) {
+            // Tenky ukazatel pod kartou: az se naplni, otevre se menu karty.
+            final float total = Math.max(1f, menuHoldMs() - LONG_PRESS_MS);
+            final float p = clamp((now - liftNs) / 1e6f / total, 0f, 1f);
+            final float w = cardW * 0.42f * scale;
+            final float top = cy + cardH * scale / 2f + dp(10);
+            final float bh = dp(4);
+            fill.setShader(null);
+            fill.setColor(0x40FFFFFF);
+            c.drawRoundRect(cx - w / 2f, top, cx + w / 2f, top + bh, bh / 2f, bh / 2f, fill);
+            fill.setColor(Glass.ACCENT);
+            c.drawRoundRect(cx - w / 2f, top, cx - w / 2f + w * p, top + bh, bh / 2f, bh / 2f, fill);
+        }
     }
 
     private void drawCard(Canvas c, Card k, long now, float dim) {

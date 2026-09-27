@@ -10,8 +10,11 @@ android {
         applicationId 'com.neolauncher.v1'
         minSdkVersion 31
         targetSdkVersion 34
-        versionCode 2000
-        versionName '2.0.0'
+        // Cislo buildu z GitHub Actions (github.run_number) - kazdy build ma
+        // vyssi versionCode, takze ho aktualizator v launcheru pozna jako novejsi.
+        def buildNumber = (System.getenv('NEO_BUILD_NUMBER') ?: '0') as int
+        versionCode 2000 + buildNumber
+        versionName "2.0.${buildNumber}"
     }
 
     signingConfigs {

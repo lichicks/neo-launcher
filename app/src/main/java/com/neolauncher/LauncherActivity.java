@@ -12,9 +12,11 @@ import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.view.View;
 import android.view.ViewGroup;
 import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.neolauncher.art.ArtworkLoader;
@@ -22,12 +24,15 @@ import com.neolauncher.data.AppEntry;
 import com.neolauncher.data.AppRepository;
 import com.neolauncher.data.Prefs;
 import com.neolauncher.launch.AppLauncher;
+import com.neolauncher.update.Updater;
 import com.neolauncher.ui.AppMenu;
 import com.neolauncher.ui.Glass;
 import com.neolauncher.ui.NeoLauncherView;
 import com.neolauncher.ui.OverlayHost;
 import com.neolauncher.ui.SettingsSheet;
+import com.neolauncher.ui.UpdateSheet;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -36,6 +41,8 @@ public class LauncherActivity extends Activity
         implements NeoLauncherView.Host, AppRepository.Listener, OverlayHost.Listener {
 
     private static final int REQ_PICK_IMAGE = 41;
+    /** Automaticka kontrola aktualizaci nejvys jednou za 6 hodin. */
+    private static final long UPDATE_CHECK_INTERVAL_MS = 6L * 60 * 60 * 1000;
     private static volatile boolean sForeground;
 
     private Prefs prefs;
@@ -107,6 +114,7 @@ public class LauncherActivity extends Activity
             repo.refreshAsync();
         }
         if (prefs.sortMode() == Prefs.SORT_RECENT) showApps(true);
+        checkForUpdates(false);
     }
 
     @Override
@@ -157,7 +165,7 @@ public class LauncherActivity extends Activity
     @Override
     public void onOpenSettings() {
         overlay.show(SettingsSheet.build(this, prefs, repo, artwork,
-                        () -> showApps(true), overlay::close),
+                        () -> showApps(true), () -> checkForUpdates(true), overlay::close),
                 null, launcher.frameRect(), Glass.dpi(this, 620));
     }
 
@@ -261,6 +269,80 @@ public class LauncherActivity extends Activity
             prefs.setSortMode(Prefs.SORT_MANUAL);
             Toast.makeText(this, "Řazení přepnuto na vlastní pořadí", Toast.LENGTH_SHORT).show();
         }
+    }
+
+    // --- Aktualizace z GitHubu ----------------------------------------------------
+
+    private void checkForUpdates(boolean manual) {
+        final long now = System.currentTimeMillis();
+        if (!manual && now - prefs.lastUpdateCheck() < UPDATE_CHECK_INTERVAL_MS) return;
+        prefs.setLastUpdateCheck(now);
+        if (manual) Toast.makeText(this, "Hledám aktualizace…", Toast.LENGTH_SHORT).show();
+        Updater.check(this, prefs.updateTestBuilds(), (status, release) -> {
+            if (isFinishing() || isDestroyed()) return;
+            switch (status) {
+                case AVAILABLE:
+                    if (manual || release.versionCode != prefs.dismissedUpdate()) showUpdate(release);
+                    break;
+                case UP_TO_DATE:
+                    if (manual) toast("Máš nejnovější verzi");
+                    break;
+                case NOT_PUBLIC:
+                    if (manual) toast("Aktualizace nejsou dostupné – repozitář na GitHubu je soukromý");
+                    break;
+                default:
+                    if (manual) toast("GitHub není dostupný – zkus to později");
+                    break;
+            }
+        });
+    }
+
+    private void showUpdate(Updater.Release release) {
+        String current = "?";
+        try {
+            current = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception ignored) {
+        }
+        overlay.show(UpdateSheet.build(this, current, release, new UpdateSheet.Actions() {
+            @Override
+            public void update(TextView status, View buttons) {
+                buttons.setVisibility(View.GONE);
+                status.setText("Stahuji…");
+                Updater.download(LauncherActivity.this, release, new Updater.DownloadCallback() {
+                    @Override
+                    public void onProgress(int percent) {
+                        status.setText("Stahuji… " + percent + " %");
+                    }
+
+                    @Override
+                    public void onDone(File apk) {
+                        status.setText("Instaluji – potvrď prosím systémový dialog.");
+                        try {
+                            Updater.install(LauncherActivity.this, apk);
+                        } catch (Exception e) {
+                            status.setText("Instalace se nepodařila spustit.");
+                            buttons.setVisibility(View.VISIBLE);
+                        }
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        status.setText(message);
+                        buttons.setVisibility(View.VISIBLE);
+                    }
+                });
+            }
+
+            @Override
+            public void later() {
+                prefs.setDismissedUpdate(release.versionCode);
+                overlay.close();
+            }
+        }), null, launcher.frameRect(), Glass.dpi(this, 520));
+    }
+
+    private void toast(String msg) {
+        Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
     }
 
     // --- OverlayHost.Listener ---------------------------------------------------

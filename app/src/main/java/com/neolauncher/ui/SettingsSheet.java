@@ -25,7 +25,7 @@ public final class SettingsSheet {
     private SettingsSheet() {}
 
     public static View build(Context c, Prefs prefs, AppRepository repo, ArtworkLoader art,
-                             Runnable onAppsChanged, Runnable onClose) {
+                             Runnable onAppsChanged, Runnable onCheckUpdates, Runnable onClose) {
         LinearLayout root = new LinearLayout(c);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackground(Glass.panel(c));
@@ -90,6 +90,19 @@ public final class SettingsSheet {
                             onAppsChanged.run();
                         }), true));
 
+        final int[] holdOptions = {700, 1000, 1500};
+        int holdSel = 1;
+        for (int i = 0; i < holdOptions.length; i++) if (holdOptions[i] == prefs.menuHoldMs()) holdSel = i;
+        body.addView(Glass.row(c, "Podržení pro menu karty",
+                "Jak dlouho držet kartu bez pohybu, než se otevře její menu",
+                Glass.segmented(c, new String[]{"0,7 s", "1 s", "1,5 s"}, holdSel,
+                        i -> prefs.setMenuHoldMs(holdOptions[i])), false));
+
+        body.addView(Glass.row(c, "Stahovat obrázky her z internetu",
+                "Stejné zdroje jako Lightning Launcher: QuestLauncherImages a MetaMetadata "
+                        + "(threethan), záložně veticia/binaries",
+                Glass.toggle(c, prefs.onlineArt(), prefs::setOnlineArt), false));
+
         body.addView(Glass.row(c, "Obrázky her",
                 "Smaže stažené bannery a stáhne je znovu",
                 Glass.button(c, "Stáhnout znovu", false, v -> {
@@ -114,14 +127,24 @@ public final class SettingsSheet {
                 "Povolí addon Shortcut/Redirect z Lightning Launcheru",
                 Glass.toggle(c, prefs.allowShortcuts(), prefs::setAllowShortcuts), false));
 
-        // --- O aplikaci ---
-        body.addView(Glass.section(c, "O aplikaci"));
         String version = "?";
         try {
             PackageInfo pi = c.getPackageManager().getPackageInfo(c.getPackageName(), 0);
             version = pi.versionName;
         } catch (Exception ignored) {
         }
+
+        // --- Aktualizace ---
+        body.addView(Glass.section(c, "Aktualizace"));
+        body.addView(Glass.row(c, "Neo " + version,
+                "Nové verze se stahují z GitHubu (zkontroluje se i samo při otevření)",
+                Glass.button(c, "Zkontrolovat", false, v -> onCheckUpdates.run()), false));
+        body.addView(Glass.row(c, "Nabízet testovací verze",
+                "I buildy z vývojových větví – během ladění doporučeno",
+                Glass.toggle(c, prefs.updateTestBuilds(), prefs::setUpdateTestBuilds), false));
+
+        // --- O aplikaci ---
+        body.addView(Glass.section(c, "O aplikaci"));
         TextView about = Glass.text(c, "Neo Launcher " + version
                 + " · vlastní launcher pro Meta Quest 3S\n"
                 + "Načítání obrázků a spouštění her vychází z Lightning Launcheru (threethan, GPL-3.0).",

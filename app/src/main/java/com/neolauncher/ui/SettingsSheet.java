@@ -336,7 +336,10 @@ public final class SettingsSheet {
                             }
                         }),
                 infoTile(c, Icons.SLIDERS, "Rychlé menu", "Klepni na hodiny v horní liště – jas, hlasitost, Wi-Fi a funkce Questu"),
-                null);
+                toggleTile(c, Icons.POWER, "Po zapnutí Questu otevřít Neo",
+                        metaOn ? "Po startu headsetu se rovnou ukáže Neo"
+                                : "Potřebuje službu „Neo – Meta tlačítko“ (výše)",
+                        prefs.openOnBoot(), prefs::setOpenOnBoot));
     }
 
     private static void pageUpdates(Ctx x, LinearLayout page) {

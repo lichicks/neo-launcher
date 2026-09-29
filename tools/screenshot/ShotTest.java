@@ -251,6 +251,45 @@ public class ShotTest {
         grid.setBattery(14, false, false); // slaba baterie - cervena zare
         pump(1500);
         capture(a, root, outDir + "/warmup.png"); // Robolectric kresli jen pri snimku - az pak zna polohu hodin
+        // Ziva bublina v ornamentu (instalace APK s krouzkem prubehu).
+        grid.showLive(com.neolauncher.ui.Icons.PACKAGE_PLUS, "Instaluji Beat Saber · 64 %",
+                com.neolauncher.ui.Palette.COBALT_LIGHT, 0.64f, 0);
+        pump(1100);
+        capture(a, root, outDir + "/neo-live.png");
+        grid.clearLive();
+        pump(900);
+        // Presouvani: podrzet kartu (sloupec 1, rada 0), zvednout a tahnout doprava dolu -
+        // ostatni karty se trasou, uhnou a ukaze se "jamka", kam karta dopadne.
+        {
+            float cw = (Float) f(grid, "cardW"), ch = (Float) f(grid, "cardH"), g = (Float) f(grid, "gap");
+            float sx = (Float) f(grid, "gridLeft") + (cw + g) + cw * 0.5f;
+            float sy = (Float) f(grid, "gridTop") + (Float) f(grid, "scrollCur") + ch * 0.5f;
+            hover(grid, sx, sy);
+            pump(400);
+            long dt = SystemClock.uptimeMillis();
+            MotionEvent dn = MotionEvent.obtain(dt, dt, MotionEvent.ACTION_DOWN, sx, sy, 0);
+            grid.dispatchTouchEvent(dn);
+            dn.recycle();
+            java.lang.reflect.Method lp = NeoLauncherView.class.getDeclaredMethod("onLongPress");
+            lp.setAccessible(true);
+            lp.invoke(grid);
+            pump(200);
+            for (int i = 1; i <= 24; i++) {
+                float k = i / 24f;
+                MotionEvent mv = MotionEvent.obtain(dt, SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE,
+                        sx + (cw + g) * 1.15f * k, sy + (ch + g) * 0.72f * k, 0);
+                grid.dispatchTouchEvent(mv);
+                mv.recycle();
+                capture(a, root, outDir + "/warmup.png");
+                Thread.sleep(16);
+            }
+            pump(260);
+            capture(a, root, outDir + "/neo-drag.png");
+            MotionEvent cn = MotionEvent.obtain(dt, SystemClock.uptimeMillis(), MotionEvent.ACTION_CANCEL, sx, sy, 0);
+            grid.dispatchTouchEvent(cn);
+            cn.recycle();
+            pump(1200);
+        }
         com.neolauncher.ui.QuickMenuView menu = new com.neolauncher.ui.QuickMenuView(a,
                 new com.neolauncher.ui.QuickMenuView.Actions() {
                     @Override public void openTarget(int t) { }

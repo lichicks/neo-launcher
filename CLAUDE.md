@@ -115,6 +115,7 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 | `data/UsageInfo.java` | Herní čas a poslední spuštění z UsageStats (jako plugin Playtime v LL) |
 | `ui/Eased.java` | Animovaná hodnota jako CSS transition (retarget z aktuální hodnoty, bez callbacků) — už jen pro prolínání a hover lišty |
 | `ui/DepthBlur.java` | Radiální rozmazání: AGSL shader (Android 13+), jinak obyčejný blur |
+| `ui/LiquidGlass.java` | Tekuté sklo horní bubliny: AGSL lom u okraje + rozklad barev, řetězený za blur |
 | `ui/ShadowSprite.java` | Předpočítané rozmazané stíny karet (box-shadow) |
 | `ui/Glass.java`, `OverlayHost.java`, `SettingsSheet.java`, `AppMenu.java`, `UpdateSheet.java` | Dialogy ve stylu skla visionOS (normální Android Views). `OverlayHost` je nechá „vyrůst“ na pružině z místa, odkud se otevřely. Nastavení = dashboard s dlaždicemi |
 | `ui/GlassWidgets.java`, `ui/Cascade.java` | Přepínač, posuvník a ikona v kulatém skle, postupný nástup dlaždic |
@@ -141,13 +142,18 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
   vpravo 24 / dole 30 dp průhledný okraj pro „vyskočení“ karty (vypínatelné).
 
 ### Vrstvy kreslení (odspodu)
-1. Sklo panelu (výplň s nastavitelným krytím, okraj, světlá horní hrana)
+1. Sklo panelu (výplň s nastavitelným krytím, okraj, světlá horní hrana,
+   světlo laseru na hraně `drawRimLight`) — **bez** tvaru ornamentu (`ornHole`,
+   clipOut), pod ornamentem je jen jeho sklo
 2. `contentNode` (RenderNode): všechny karty kromě hovernuté, oříznuté
-   panelem se zaoblenými rohy. **Jeden** `RenderEffect` hloubky ostrosti na
-   celou vrstvu.
-3. `backdropNode`: kopie karet, které zajely pod ornament, rozmazaná 24 dp =
-   matné sklo ornamentu (jen část uvnitř panelu)
-4. Levá lišta a ornament (sklo, stín, obsah)
+   panelem se zaoblenými rohy (a bez `ornHole`). **Jeden** `RenderEffect`
+   hloubky ostrosti na celou vrstvu.
+3. `backdropNode`: kopie panelu a karet pod ornamentem, rozmazaná 14 dp +
+   **tekuté sklo** (`ui/LiquidGlass.java`, AGSL lom u okraje bubliny
+   + rozklad barev, řetězený za blur; bez shaderu jen blur)
+4. Levá lišta a ornament (sklo, stín jen vně tvaru, obsah). Ornament má
+   průhlednější styl `GlassSurface.LIQUID_*`. Do 2026-09-29 kreslil stín
+   neprůhledné tělo, takže matné sklo pod ním nebylo vůbec vidět.
 5. Hovernutá karta — mimo ořez, může přesahovat panel
 6. Tažená karta
 
@@ -214,6 +220,31 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
   o 7 %), název a štítky proti němu, přes kartu měkký odlesk v místě laseru.
   Pomalá pružina `PAR_RESPONSE` 0,9 s. Když by to v brýlích „houpalo“, zmenšit
   `PAR_GRID_*`.
+
+**Přidáno 2026-09-29 večer (NEOVĚŘENO na headsetu):**
+- **Po zapnutí Questu otevřít Neo** (`Prefs.openOnBoot`, výchozí zapnuto,
+  Nastavení → Quest): `MetaButtonService` se po startu připojí do
+  `BOOT_WINDOW_MS` (10 min od zapnutí) → při první události domova/systemux
+  po 2,5 s otevře Neo; když mezitím běží jiná aplikace, nic. Záložně po 25 s.
+- **Živá bublina** (`NeoLauncherView.showLive(icon, text, color, progress, ms)`,
+  `clearLive()`): stav v ornamentu (čas, baterie) se na pružině roztáhne
+  a prolne na ikonu s kroužkem průběhu (`LIVE_SPINNER` = točí se,
+  `LIVE_ICON_ONLY` = jen ikona) a text. Stav jen z času (`liveUntilNs`),
+  průběh bez další zprávy zmizí po 2 min. Zdroje v `LauncherActivity`
+  (`showLive`/`notice`): instalace APK (`ApkInstaller.Listener`, výsledek přes
+  `InstallReceiver.setListener`), stahování aktualizace Nea, záloha/obnova,
+  nabíjení (`announceBattery`: začátek + `computeChargeTimeRemaining`,
+  100 %, slabá baterie 20/10 %) a dřívější Toasty (oblíbené, skrytí,
+  obrázek, řazení). V karuselu a když Neo není vidět → obyčejný Toast.
+- **Tekuté sklo ornamentu** (`LiquidGlass`, `LIQUID_BAND` 16 / `LIQUID_STRENGTH`
+  11 dp): vidět jen když pod bublinu zajedou karty (odrolovat). V náhledu
+  (Robolectric) jen blur, lom je vidět až na headsetu (logcat `NeoLiquidGlass`).
+- **Světlo laseru na hraně skla** (`drawRimLight`, `RIM_*`): radiální přechod
+  jako tah okraje panelu (+ měkká záře dovnitř), ornamentu a lišty.
+- **Přesouvání karet**: live přeskládání už bylo; nově ostatní karty třesení
+  (`WIGGLE_*`, začne až po pohybu, aby nerušilo podržení pro menu), zmenšení
+  o 3,5 %, uhnutí od tažené karty (gauss, 12 dp) a skleněná „jamka“ na cílovém
+  místě (`drawDropSlot`, pružiny `ghostX/Y`).
 
 - Mřížka 4 sloupce (nastavitelné 3–6), karty 1.6:1, radius 16, title pill
 - Hover: zvětšení 1.18 × perspektiva (translateZ 32 px v perspective 900 px),
@@ -349,6 +380,12 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
    karty a řazení „Velikost“ (po povolení herního času), záloha → obnova,
    paralaxa (nepůsobí v brýlích nepříjemně?), nástup karet při otevření.
 
+0c. **Nové 29. 9. večer:** otevře se Neo po zapnutí Questu (`NeoMeta` v logcatu)?
+   Živá bublina při nabíjení / instalaci APK. Tekuté sklo: odrolovat, aby
+   karty zajely pod horní bublinu – lomí se u okraje (`NeoLiquidGlass`)?
+   Není ornament teď moc průhledný (styl `LIQUID_*`)? Světlo laseru na hraně
+   skla, třesení karet při přesouvání (nepůsobí v brýlích nepříjemně?).
+
 1. Hover: najet na kartu, pak **přímo** na sousední (to byl bug 1b). Zvětšení +
    náklon musí fungovat vždy.
 2. Směr náklonu: strana pod kurzorem by se měla "zamáčknout" dozadu. Když je to
@@ -422,8 +459,6 @@ jednou v Nastavení → Quest → „Meta tlačítko otevře Neo“ → Zapnout
 
 - Zvuková odezva při hoveru a spuštění
 - Vlastní tapeta / pozadí
-- Hledání aplikací
-- Paralaxa celé mřížky podle ukazatele (víc 3D)
 - **Lišta běžící aplikace (rozhodnuto 2026-09-27; staví na
   `MetaButtonService`, která už ví, co je v popředí):** dole na panelu pilulka ve stylu ornamentu (napůl zanořená
   do spodní hrany, `frame.bottom`), když na pozadí běží hra/aplikace:

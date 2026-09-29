@@ -40,6 +40,7 @@ import java.util.Set;
  * <li>Kdyz uz je Neo otevrene: Meta = opravdove menu Questu (k nastaveni Questu se da vzdy dostat).</li>
  * <li>Ve VR hre: menu Questu (Pokracovat / Ukoncit), ne Neo pres hru (volba).</li>
  * <li>Po skonceni hry se otevre Neo (volba).</li>
+ * <li>Po zapnuti Questu se otevre Neo (volba) - sluzbu system pripoji hned po startu.</li>
  * </ul>
  * Vse jen heuristika z udalosti oken - loguje se pod tagem "NeoMeta"
  * (adb -P 5038 logcat -s NeoMeta), at jde na headsetu doladit.
@@ -66,6 +67,12 @@ public class MetaButtonService extends AccessibilityService {
     /** Hra musi byt v popredi aspon takhle dlouho, aby se "po hre" otevrelo Neo. */
     private static final long MIN_GAME_MS = 4000;
     private static final long AFTER_GAME_DELAY_MS = 700;
+    /** Sluzba pripojena do takove doby od zapnuti = start Questu (ne zapnuti sluzby / aktualizace Nea). */
+    private static final long BOOT_WINDOW_MS = 10 * 60 * 1000L;
+    /** Po prvnim domovskem okne chvili pockat, az se prostredi Questu nacte. */
+    private static final long BOOT_DELAY_MS = 2500;
+    /** Kdyby po startu zadne domovske okno neprislo, otevrit Neo i tak. */
+    private static final long BOOT_FALLBACK_MS = 25_000;
 
     private static volatile long suppressUntil;
     private static volatile boolean connected;
@@ -77,6 +84,8 @@ public class MetaButtonService extends AccessibilityService {
     private long fgSince;
     private long lastLaunch;
     private Runnable pendingAfterGame;
+    private boolean bootPending;
+    private final Runnable bootLaunch = this::onBootLaunch;
 
     /** Neo samo otevira system Questu (Nastaveni, Menu Questu...) - chvili to nebrat jako Meta tlacitko. */
     public static void suppress(long ms) {
@@ -105,11 +114,19 @@ public class MetaButtonService extends AccessibilityService {
         super.onServiceConnected();
         connected = true;
         Log.i(TAG, "Sluzba Meta tlacitka bezi");
+        final Prefs prefs = prefs();
+        if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS && (prefs == null || prefs.openOnBoot())) {
+            // Quest se prave zapnul -> az se ukaze domov, otevrit Neo.
+            bootPending = true;
+            handler.postDelayed(bootLaunch, BOOT_FALLBACK_MS);
+            Log.i(TAG, "Start Questu, po nacteni domova otevru Neo");
+        }
     }
 
     @Override
     public boolean onUnbind(Intent intent) {
         connected = false;
+        handler.removeCallbacksAndMessages(null);
         return super.onUnbind(intent);
     }
 
@@ -124,12 +141,47 @@ public class MetaButtonService extends AccessibilityService {
         if (p == null) return;
         final String pkg = p.toString();
         final long now = SystemClock.uptimeMillis();
+        if (bootPending) onBootEvent(pkg);
         if (SYSTEMUX.equals(pkg)) {
             onSystemUx(e, now);
         } else if (HOME.contains(pkg)) {
             onHome(now);
         } else if (!isTransient(pkg)) {
             onForeground(pkg, now);
+        }
+    }
+
+    // --- Start Questu -----------------------------------------------------------
+
+    private void onBootEvent(String pkg) {
+        if (HOME.contains(pkg) || SYSTEMUX.equals(pkg)) {
+            // Domov je nacteny -> za chvilku Neo.
+            bootPending = false;
+            handler.removeCallbacks(bootLaunch);
+            handler.postDelayed(bootLaunch, BOOT_DELAY_MS);
+        } else if (pkg.equals(getPackageName()) || isLaunchable(pkg)) {
+            // Uzivatel uz neco spustil (nebo je Neo otevrene) - nerusit.
+            // Systemove veci po startu (Guardian, zamykaci obrazovka...) se nepocitaji.
+            bootPending = false;
+            handler.removeCallbacks(bootLaunch);
+            Log.i(TAG, "Po startu uz bezi " + pkg + ", Neo neotviram");
+        }
+    }
+
+    private void onBootLaunch() {
+        bootPending = false;
+        final Prefs prefs = prefs();
+        if (prefs != null && !prefs.openOnBoot()) return;
+        if (LauncherActivity.isVisible() || (fgPkg != null && isLaunchable(fgPkg))) return;
+        launchNeo("po zapnuti Questu");
+    }
+
+    /** Aplikace, kterou jde spustit (hra, aplikace) - ne systemovy prekryv Questu. */
+    private boolean isLaunchable(String pkg) {
+        try {
+            return getPackageManager().getLaunchIntentForPackage(pkg) != null;
+        } catch (Exception e) {
+            return false;
         }
     }
 

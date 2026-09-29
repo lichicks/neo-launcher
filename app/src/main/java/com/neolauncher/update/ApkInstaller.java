@@ -16,7 +16,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.function.Consumer;
 
 /**
  * Instalace APK primo z Nea (sideload bez PC): uzivatel vybere soubor stazeny
@@ -34,6 +33,17 @@ public final class ApkInstaller {
 
     private ApkInstaller() {}
 
+    /** Prubeh instalace (vse na hlavnim vlakne) - Neo ho ukazuje v zive bubline. */
+    public interface Listener {
+        /** Kopirovani APK do instalacni relace, 0..1 (nebo -1, kdyz velikost neni znama). */
+        void onProgress(float p);
+
+        /** Predano systemu - Quest se zepta na potvrzeni, vysledek prijde do InstallReceiver. */
+        void onCommitted();
+
+        void onError(String message);
+    }
+
     /** Vyber souboru (systemovy vyber dokumentu). APK nemivaji vzdy spravny typ, proto i obecne soubory. */
     public static Intent pickIntent() {
         final Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
@@ -44,11 +54,8 @@ public final class ApkInstaller {
         return i;
     }
 
-    /**
-     * Zkopiruje APK do instalacni relace a odesle ke schvaleni.
-     * @param onError text chyby pro uzivatele (na hlavnim vlakne), nebo null = predano systemu
-     */
-    public static void install(Context c, Uri uri, Consumer<String> onError) {
+    /** Zkopiruje APK do instalacni relace a odesle ke schvaleni. */
+    public static void install(Context c, Uri uri, Listener listener) {
         final Context app = c.getApplicationContext();
         EXEC.execute(() -> {
             String error = null;
@@ -70,8 +77,19 @@ public final class ApkInstaller {
                          OutputStream os = session.openWrite("app.apk", 0, size > 0 ? size : -1)) {
                         if (is == null) throw new java.io.FileNotFoundException(String.valueOf(uri));
                         final byte[] buf = new byte[256 * 1024];
+                        long done = 0;
+                        int lastPct = -1;
                         int n;
-                        while ((n = is.read(buf)) > 0) os.write(buf, 0, n);
+                        while ((n = is.read(buf)) > 0) {
+                            os.write(buf, 0, n);
+                            done += n;
+                            final int pct = size > 0 ? (int) (done * 100 / size) : -1;
+                            if (pct != lastPct && listener != null) {
+                                lastPct = pct;
+                                final float p = pct >= 0 ? Math.min(1f, pct / 100f) : -1f;
+                                MAIN.post(() -> listener.onProgress(p));
+                            }
+                        }
                         session.fsync(os);
                     }
                     final Intent result = new Intent(app, InstallReceiver.class).putExtra(EXTRA_KIND, KIND_APK);
@@ -80,6 +98,7 @@ public final class ApkInstaller {
                     session.commit(p.getIntentSender());
                     session.close();
                     session = null;
+                    if (listener != null) MAIN.post(listener::onCommitted);
                 }
             } catch (Exception e) {
                 Log.w(TAG, "Instalace APK selhala", e);
@@ -99,7 +118,7 @@ public final class ApkInstaller {
                 }
             }
             final String err = error;
-            if (err != null && onError != null) MAIN.post(() -> onError.accept(err));
+            if (err != null && listener != null) MAIN.post(() -> listener.onError(err));
         });
     }
 

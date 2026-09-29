@@ -68,6 +68,10 @@ ICONS = [
     ("ARCHIVE", "archive"),
     ("ARCHIVE_RESTORE", "archive-restore"),
     ("DEPTH", "move-3d"),
+    ("POWER", "power"),
+    ("CHECK", "circle-check"),
+    ("ALERT", "circle-alert"),
+    ("BATTERY_CHARGING", "battery-charging"),
 ]
 
 

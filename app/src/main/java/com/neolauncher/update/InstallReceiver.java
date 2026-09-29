@@ -22,6 +22,37 @@ public class InstallReceiver extends BroadcastReceiver {
 
     private static final String TAG = "NeoUpdater";
 
+    /** Neo ukaze vysledek samo (ziva bublina v horni liste). */
+    public interface Listener {
+        /**
+         * @param apk    cizi APK (true) nebo aktualizace Nea
+         * @param status PackageInstaller.STATUS_*
+         * @return true = ukazano v Neu, hlasku (Toast) uz neni potreba
+         */
+        boolean onInstallStatus(boolean apk, int status, String label, String message);
+    }
+
+    private static volatile Listener listener;
+
+    public static void setListener(Listener l) {
+        listener = l;
+    }
+
+    public static void clearListener(Listener l) {
+        if (listener == l) listener = null;
+    }
+
+    private static boolean notifyListener(boolean apk, int status, String label, String message) {
+        final Listener l = listener;
+        if (l == null) return false;
+        try {
+            return l.onInstallStatus(apk, status, label, message);
+        } catch (Exception e) {
+            Log.w(TAG, "Zobrazeni vysledku instalace selhalo", e);
+            return false;
+        }
+    }
+
     @Override
     public void onReceive(Context context, Intent intent) {
         int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS,
@@ -36,6 +67,7 @@ public class InstallReceiver extends BroadcastReceiver {
                     confirm.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     try {
                         context.startActivity(confirm);
+                        notifyListener(apk, status, null, null);
                     } catch (Exception e) {
                         Log.w(TAG, "Potvrzovaci dialog instalace nejde otevrit", e);
                         Toast.makeText(context, "Instalaci nejde potvrdit", Toast.LENGTH_LONG).show();
@@ -46,13 +78,16 @@ public class InstallReceiver extends BroadcastReceiver {
             case PackageInstaller.STATUS_SUCCESS:
                 // Po aktualizaci sebe sama nas system ukonci - neni co delat.
                 if (apk) {
-                    Toast.makeText(context, "Nainstalováno: " + label(context,
-                            intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME)), Toast.LENGTH_LONG).show();
+                    final String label = label(context, intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME));
+                    if (!notifyListener(true, status, label, null)) {
+                        Toast.makeText(context, "Nainstalováno: " + label, Toast.LENGTH_LONG).show();
+                    }
                 }
                 break;
             default: {
                 String msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
                 Log.w(TAG, "Instalace selhala: " + status + " " + msg);
+                if (notifyListener(apk, status, null, msg)) break;
                 if (status != PackageInstaller.STATUS_FAILURE_ABORTED) {
                     Toast.makeText(context, (apk ? "Aplikace se nenainstalovala" : "Aktualizace se nenainstalovala")
                             + (msg != null ? ": " + msg : ""), Toast.LENGTH_LONG).show();

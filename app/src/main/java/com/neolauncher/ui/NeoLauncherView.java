@@ -103,6 +103,10 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private static final float PAR_IMG_ZOOM = 0.07f, PAR_IMG_SHIFT = 0.032f;
     private static final float PAR_FRONT_X = 5f, PAR_FRONT_Y = 3.5f;
     private static final float PAR_RESPONSE = 0.9f;
+    /** Svetly okraj skla u laseru: dosah svetla (dp), rychlost dojezdu (s), tloustka hrany (dp). */
+    private static final float RIM_RADIUS = 230f;
+    private static final float RIM_RESPONSE = 0.24f;
+    private static final float RIM_WIDTH = 1.6f;
     /** Nastup karet pri otevreni: delka, zpozdeni okraju proti stredu, rozestup a priblizeni na zacatku. */
     private static final float INTRO_MS = 560f;
     private static final float INTRO_STAGGER_MS = 170f;
@@ -118,6 +122,16 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     /** Mezi casem, baterii a ikonou. */
     private static final float ORN_STATUS_GAP = 12f;
     private static final float ORN_ICON = 17f;
+    /** Ziva bublina v ornamentu: krouzek s ikonou (dp) a mezera k textu. */
+    private static final float LIVE_RING = 26f;
+    private static final float LIVE_GAP = 10f;
+    /** Prubeh bez dalsi zpravy nejdele takhle dlouho. */
+    private static final long LIVE_MAX_MS = 120_000L;
+    /** Delsi text se zkrati trojteckou. */
+    private static final float LIVE_TEXT_MAX = 280f;
+    /** Tekute sklo ornamentu: sirka lomiveho okraje a posun obrazu na hrane (dp). */
+    private static final float LIQUID_BAND = 16f;
+    private static final float LIQUID_STRENGTH = 11f;
     private static final float FRAME_TOP = 36f;
     /** Mrizka zacina pod ornamentem (i zvetsena karta v prvni rade ho nezakryje). */
     private static final float GRID_TOP = 50f;
@@ -150,6 +164,16 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private static final float[] TILT_SPRING = {0.38f, 0.85f};
     private static final float[] REORDER_SPRING = {0.40f, 0.82f};
     private static final long BLUR_MS = 350;
+    /**
+     * Presouvani: ostatni karty se lehce trasou (jako ikony pri upravach plochy),
+     * o chlup se zmensi a uhnou tazene karte. Uhel (st.), frekvence (Hz),
+     * zmenseni, o kolik uhnou (dp) a dosah (nasobek sirky karty).
+     */
+    private static final float WIGGLE_DEG = 0.9f;
+    private static final float WIGGLE_HZ = 2.6f;
+    private static final float WIGGLE_SHRINK = 0.035f;
+    private static final float WIGGLE_PUSH = 12f;
+    private static final float WIGGLE_REACH = 0.9f;
     /** Po tak dlouhem podrzeni se karta zvedne a jde tahat. */
     private static final long LONG_PRESS_MS = 450;
     private static final long HOVER_EXIT_GRACE_MS = 90;
@@ -270,6 +294,13 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final Spring dragTilt = new Spring(0, 0.30f, 0.75f, 0.02f);
     private float lastDragX;
     private long lastDragStepNs;
+    /** Trasani ostatnich karet (0..1) - zacne az kartou pohnes, po pusteni dobehne. */
+    private final Spring wiggle = new Spring(0, 0.35f, 1f, 0.002f);
+    /** Stred tazene karty (obrazovka) - drzi se i po pusteni, at karty plynule dosednou. */
+    private float dragCx, dragCy;
+    /** Misto, kam karta dopadne (sklenena "jamka"), jede za zmenou poradi. */
+    private final Spring ghostX = new Spring(0, REORDER_SPRING, 0.3f);
+    private final Spring ghostY = new Spring(0, REORDER_SPRING, 0.3f);
 
     // --- Horni lista ---------------------------------------------------------------
     private final Spring tabPos = new Spring(0, 0.42f, 0.78f, 0.001f);
@@ -294,10 +325,18 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     /** Paralaxa: poloha laseru v panelu (-1..1), na pomale pruzine. */
     private final Spring parX = new Spring(0, PAR_RESPONSE, 1f, 0.001f);
     private final Spring parY = new Spring(0, PAR_RESPONSE, 1f, 0.001f);
+    /** Svetly okraj skla u laseru: poloha (px) a sila. */
+    private final Spring rimX = new Spring(0, RIM_RESPONSE, 1f, 0.3f);
+    private final Spring rimY = new Spring(0, RIM_RESPONSE, 1f, 0.3f);
+    private final Spring rimAmt = new Spring(0, 0.45f, 1f, 0.002f);
+    private Shader rimShader;
+    private final Matrix rimMatrix = new Matrix();
     /** Odlesk na karte pod laserem (radialni prechod, posouva se matici). */
     private Shader glareShader;
     private final Matrix glareMatrix = new Matrix();
     private final Path chromePath = new Path();
+    /** Tvar ornamentu (vcetne paralaxy) - pod nim se panel a ostre karty nekresli, jen sklo. */
+    private final Path ornHole = new Path();
     private float ornDividerX;
     private final RectF tabsRect = new RectF();
     private final RectF[] tabRects = {new RectF(), new RectF(), new RectF()};
@@ -310,6 +349,24 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private static final long LOW_BATTERY_PULSE_NS = 8_000_000_000L;
     private long clockMinute = -1;
     private String clockTime = "";
+
+    // --- Ziva bublina (instalace, nabijeni, aktualizace...) ---------------------------
+    /** Pro showLive: bez krouzku (jen ikona) / tocici se krouzek. */
+    public static final float LIVE_ICON_ONLY = Float.NaN;
+    public static final float LIVE_SPINNER = -1f;
+    private String liveText;
+    private int liveIcon;
+    private int liveColor;
+    private float liveProgress = LIVE_ICON_ONLY;
+    /** Do kdy je bublina rozbalena (0 = dokud neprijde dalsi / clearLive). Stav jen z casu. */
+    private long liveUntilNs;
+    private float liveTextW;
+    /** Rozbaleni bubliny - lehce prekmitne, jako by se nafoukla. */
+    private final Spring liveAmt = new Spring(0, 0.5f, 0.74f, 0.001f);
+    private final Spring liveProg = new Spring(0, 0.45f, 1f, 0.001f);
+    /** Sirka textu na pruzine (zmena textu = plynule roztazeni, ne skok). */
+    private final Spring liveWidth = new Spring(0, 0.4f, 0.9f, 0.3f);
+    private final Runnable liveExpire = this::invalidate;
 
     // --- Kresleni ------------------------------------------------------------------
     private final Matrix shaderMatrix = new Matrix();
@@ -351,6 +408,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final RenderNode backdropNode = new RenderNode("neo-ornament-backdrop");
     private final DepthBlur depthBlur = new DepthBlur();
     private RenderEffect backdropEffect;
+    /** Lom svetla u okraje horni bubliny (tekute sklo), retezeny za rozmazanim. */
+    private final LiquidGlass liquidGlass = new LiquidGlass();
     private ModalDepth modalDepth;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -542,6 +601,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         if (dragging && (dragCard == null || !cardByPkg.containsKey(dragCard.app.pkg))) {
             dragging = false;
             dragCard = null;
+            dragLift.set(0f, now);
+            wiggle.set(0f, now);
         }
         updateScrollBounds();
         tryRestoreScroll();
@@ -587,6 +648,49 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     public void onClockTick() {
         clockMinute = -1;
         invalidate();
+    }
+
+    /**
+     * Ziva bublina: cas a baterie v horni liste se na chvili promeni v ikonu
+     * (s krouzkem prubehu) a kratky text - instalace, nabijeni, aktualizace.
+     *
+     * @param progress 0..1 = krouzek prubehu, {@link #LIVE_SPINNER} = toci se,
+     *                 {@link #LIVE_ICON_ONLY} = jen ikona v barve
+     * @param ms       jak dlouho zustane rozbalena (0 = dokud neprijde dalsi / clearLive, nejdele 2 min)
+     */
+    public void showLive(int icon, String text, int color, float progress, long ms) {
+        final long now = System.nanoTime();
+        final boolean wasOn = liveOn(now);
+        liveIcon = icon;
+        liveText = TextUtils.ellipsize(text, clockText, dp(LIVE_TEXT_MAX), TextUtils.TruncateAt.END).toString();
+        liveColor = color;
+        liveTextW = clockText.measureText(liveText);
+        if (!wasOn && liveAmt.get(now) < 0.05f) liveWidth.snap(liveTextW);
+        else liveWidth.set(liveTextW, now);
+        if (progress >= 0f) {
+            if (!wasOn || !(liveProgress >= 0f)) liveProg.snap(0f);
+            liveProg.set(clamp(progress, 0f, 1f), now);
+        }
+        liveProgress = progress;
+        // Pojistka: prubeh bez dalsi zpravy (napr. nepotvrzena instalace) sam zmizi.
+        if (ms <= 0) ms = LIVE_MAX_MS;
+        liveUntilNs = now + ms * 1_000_000L;
+        liveAmt.set(1f, now);
+        handler.removeCallbacks(liveExpire);
+        handler.postDelayed(liveExpire, ms + 30);
+        invalidate();
+    }
+
+    /** Bublina se zase smrskne na cas a baterii. */
+    public void clearLive() {
+        liveUntilNs = 1L; // v minulosti
+        liveAmt.set(0f, System.nanoTime());
+        handler.removeCallbacks(liveExpire);
+        invalidate();
+    }
+
+    private boolean liveOn(long now) {
+        return liveText != null && (liveUntilNs == 0L || now < liveUntilNs);
     }
 
     /** Pri otevrenem nastaveni/menu: karty nereaguji a cely launcher se rozmaze. */
@@ -757,11 +861,11 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         contentNode.setOutline(o);
         contentNode.setClipToOutline(true);
 
-        // Kopie karet pod ornamentem, silne rozmazana = "matne sklo" (poloha se urci pri kresleni).
-        final float sigma = dp(24);
+        // Kopie karet pod ornamentem, rozmazana = "matne sklo" (poloha se urci pri kresleni,
+        // u okraje se k rozmazani pridava lom - LiquidGlass).
+        final float sigma = dp(14);
         final float radius = (sigma - 0.5f) / 0.57735f;
         backdropEffect = RenderEffect.createBlurEffect(radius, radius, Shader.TileMode.CLAMP);
-        backdropNode.setRenderEffect(backdropEffect);
 
         final long now = System.nanoTime();
         // Jen pri zmene mrizky - jinak by zmena nastaveni zarizla rozbehnute animace.
@@ -895,6 +999,19 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         }
         if (Math.abs(tx - parX.target()) > 0.01f) parX.set(tx, now);
         if (Math.abs(ty - parY.target()) > 0.01f) parY.set(ty, now);
+
+        // Svetly okraj skla jede za laserem (objevi se rovnou u nej, nepriletava).
+        final boolean rimOn = pointerIn && interactive;
+        if (rimOn) {
+            if (rimAmt.get(now) < 0.02f) {
+                rimX.snap(px);
+                rimY.snap(py);
+            } else {
+                if (Math.abs(px - rimX.target()) > 0.5f) rimX.set(px, now);
+                if (Math.abs(py - rimY.target()) > 0.5f) rimY.set(py, now);
+            }
+        }
+        rimAmt.set(rimOn ? 1f : 0f, now);
 
         if (target != focused) {
             if (focused != null) {
@@ -1055,6 +1172,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                     if (!dragMoved && Math.hypot(x - liftX, y - liftY) > touchSlop) {
                         dragMoved = true;
                         handler.removeCallbacks(menuHoldRunnable);
+                        wiggle.set(1f, now);
                     }
                     dragTo(x, y, now);
                     invalidate();
@@ -1246,6 +1364,10 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         final float cy = scrolledToScreenY(cardTop(dragCard, now) + cardH / 2f);
         dragDX = px - cx;
         dragDY = py - cy;
+        dragCx = cx;
+        dragCy = cy;
+        ghostX.snap(slotX(dragCard.index));
+        ghostY.snap(slotY(dragCard.index));
         dragCard.press.snap(0f);
         dragLift.snap(0f);
         dragLift.set(1f, now);
@@ -1306,6 +1428,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                     k.y.set(slotY(i), now);
                 }
             }
+            ghostX.set(slotX(slot), now);
+            ghostY.set(slotY(slot), now);
             dragOrderChanged = true;
         }
         // Lehky naklon podle rychlosti tazeni do strany - pusobi fyzicky.
@@ -1348,6 +1472,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         dragging = false;
         dragCard = null;
         dragLift.set(0f, now);
+        wiggle.set(0f, now);
         if (cancelled) return;
         // Pusteni bez pohybu pred uplynutim prodlevy menu = nic (karta jen dosedne).
         if (dragOrderChanged && host != null) {
@@ -1425,10 +1550,21 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         if (again) updateFocus(now);
 
         layoutChrome(now);
-        drawGlass(canvas);
+        final boolean hw = canvas.isHardwareAccelerated();
+        // Pod ornamentem jen jeho sklo: panel a karty tam kresli rozmazane backdrop (s lomem).
+        if (hw) {
+            updateOrnHole(now);
+            canvas.save();
+            canvas.clipOutPath(ornHole);
+        }
+        drawGlass(canvas, now);
+        if (hw) canvas.restore();
         drawGameLight(canvas, now);
-        if (canvas.isHardwareAccelerated()) {
+        if (hw) {
+            canvas.save();
+            canvas.clipOutPath(ornHole);
             drawContentLayer(canvas, now);
+            canvas.restore();
             // Matne sklo ornamentu jede s ornamentem (paralaxa).
             final boolean parB = parallaxOn();
             if (parB) {
@@ -1463,8 +1599,12 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private boolean isAnimating(long now) {
         if (blurAmount.active(now) || tabPos.active(now) || contentFade.active(now) || introActive(now)
                 || parX.active(now) || parY.active(now)
+                || rimX.active(now) || rimY.active(now) || rimAmt.active(now)
+                || liveAmt.active(now) || liveProg.active(now) || liveWidth.active(now)
+                || (liveProgress == LIVE_SPINNER && liveOn(now))
                 || brandHover.active(now) || brandTap.active(now) || batteryHover.active(now)
-                || dragLift.active(now) || railExpand.active(now)
+                || dragLift.active(now) || railExpand.active(now) || wiggle.active(now)
+                || ghostX.active(now) || ghostY.active(now)
                 || (isLowBattery() && now - lowBatterySinceNs < LOW_BATTERY_PULSE_NS)
                 || dragTilt.active(now)) return true;
         for (Eased e : tabHover) if (e.active(now)) return true;
@@ -1477,7 +1617,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         return false;
     }
 
-    private void drawGlass(Canvas c) {
+    private void drawGlass(Canvas c, long now) {
         final float r = dp(FRAME_RADIUS);
         final float alpha = prefs.glassAlpha() / 100f;
         if (prefs.popoutMargin()) {
@@ -1504,6 +1644,44 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             panelStyleLight = light;
         }
         panelGlass.draw(c, frame, r, panelStyle, getResources().getDisplayMetrics().density);
+        drawRimLight(c, now, frame, r, true);
+    }
+
+    /**
+     * Svetlo laseru na hrane skla: kde je laser blizko okraje, hrana se rozsviti
+     * (jako kdyz sklo chyta svetlo). Jeden radialni prechod posouvany matici,
+     * u panelu navic mekka zare na vnitrni strane hrany.
+     */
+    private void drawRimLight(Canvas c, long now, RectF r, float radius, boolean innerGlow) {
+        final float a = clamp(rimAmt.get(now), 0f, 1f);
+        if (a < 0.01f) return;
+        if (rimShader == null) {
+            rimShader = new RadialGradient(0, 0, 1f, new int[]{0xFFFFFFFF, 0x59FFFFFF, 0x00FFFFFF},
+                    new float[]{0f, 0.42f, 1f}, Shader.TileMode.CLAMP);
+        }
+        final float rad = dp(RIM_RADIUS);
+        rimMatrix.setScale(rad, rad);
+        rimMatrix.postTranslate(rimX.get(now), rimY.get(now));
+        rimShader.setLocalMatrix(rimMatrix);
+        stroke.setShader(rimShader);
+        stroke.setColor(Color.WHITE);
+        if (innerGlow) {
+            chromePath.reset();
+            chromePath.addRoundRect(r, radius, radius, Path.Direction.CW);
+            c.save();
+            c.clipPath(chromePath);
+            stroke.setAlpha(Math.round(56 * a));
+            stroke.setStrokeWidth(dp(12));
+            c.drawRoundRect(r, radius, radius, stroke);
+            c.restore();
+        }
+        final float w = dp(RIM_WIDTH);
+        stroke.setAlpha(Math.round((innerGlow ? 215 : 170) * a));
+        stroke.setStrokeWidth(w);
+        c.drawRoundRect(r.left + w / 2f, r.top + w / 2f, r.right - w / 2f, r.bottom - w / 2f,
+                radius - w / 2f, radius - w / 2f, stroke);
+        stroke.setShader(null);
+        stroke.setAlpha(255);
     }
 
     /**
@@ -1569,21 +1747,23 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         canvas.drawRenderNode(contentNode);
     }
 
-    /** Matne sklo ornamentu: rozmazana kopie karet, ktere pod nej zajely (spodni pulka je nad panelem). */
+    private void updateOrnHole(long now) {
+        final boolean par = parallaxOn();
+        final float ox = par ? -parX.get(now) * dp(PAR_CHROME_X) : 0f;
+        final float oy = par ? -parY.get(now) * dp(PAR_CHROME_Y) : 0f;
+        final float r = ornRect.height() / 2f;
+        ornHole.reset();
+        ornHole.addRoundRect(ornRect.left + ox, ornRect.top + oy, ornRect.right + ox, ornRect.bottom + oy,
+                r, r, Path.Direction.CW);
+    }
+
+    /**
+     * Matne sklo ornamentu: rozmazana kopie panelu a karet pod nim (spodni pulka
+     * je nad panelem), u okraje navic lom svetla (LiquidGlass).
+     */
     private void drawOrnamentBackdrop(Canvas canvas, long now) {
         final float bottom = Math.min(ornRect.bottom, frame.bottom);
         if (bottom <= frame.top) return;
-        boolean any = false;
-        for (Card k : cards) {
-            if (k == focused || k == launchCard || (dragging && k == dragCard)) continue;
-            float t = scrolledToScreenY(cardTop(k, now));
-            float b = scrolledToScreenY(cardTop(k, now) + cardH);
-            if (b > frame.top && t < bottom) {
-                any = true;
-                break;
-            }
-        }
-        if (!any) return;
         final int l = Math.round(ornRect.left), t = Math.round(ornRect.top);
         final int w = Math.round(ornRect.width()), h = Math.round(ornRect.height());
         backdropNode.setPosition(l, t, l + w, t + h);
@@ -1597,11 +1777,14 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             // Jen cast uvnitr panelu (nad panelem je prostredi). Karty naplocho -
             // RenderNode nakloneni karty nesmi byt ve dvou rodicich naraz.
             rc.clipRect(frame.left, frame.top, frame.right, frame.bottom);
+            if (panelStyle != null) {
+                panelGlass.draw(rc, frame, dp(FRAME_RADIUS), panelStyle, getResources().getDisplayMetrics().density);
+            }
             drawCardsInto(rc, now, frame.top, bottom, 0f, false);
         } finally {
             backdropNode.endRecording();
         }
-        backdropNode.setAlpha(contentFade.get(now));
+        backdropNode.setRenderEffect(liquidGlass.effect(backdropEffect, w, h, dp(LIQUID_BAND), dp(LIQUID_STRENGTH)));
         canvas.drawRenderNode(backdropNode);
     }
 
@@ -1620,6 +1803,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         c.translate(0, squishPivot);
         c.scale(1f, squish);
         c.translate(0, -squishPivot);
+        drawDropSlot(c, now);
         final float amt = blurAmount.get(now);
         final float maxDist = dp(850);
         List<Card> late = null;
@@ -1668,6 +1852,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         final float lift = dragLift.get(now);
         final float cx = px - dragDX;
         final float cy = py - dragDY;
+        dragCx = cx;
+        dragCy = cy;
         final float scale = 1f + 0.12f * lift;
         drawCardAt(c, dragCard, now, cx, cy, scale, 0f,
                 dragTilt.get(now), clamp(lift, 0.6f, 1f), 0f, true);
@@ -1707,8 +1893,45 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         }
         // Pruzina muze lehce prekmitnout - na meritko ano, na pruhlednosti ne.
         final float h = clamp(k.hover.get(now), 0f, 1f);
+        final float wg = clamp(wiggle.get(now), 0f, 1f);
+        if (wg > 0.001f && k != dragCard) {
+            // Presouvani: karta se trese (kazda v jine fazi), zmensi a uhne tazene karte.
+            final float phase = (k.app.pkg.hashCode() & 1023) / 1023f * 6.2832f;
+            final float rz = (float) Math.sin(now / 1e9 * 6.2832 * WIGGLE_HZ + phase) * WIGGLE_DEG * wg;
+            scale *= 1f - WIGGLE_SHRINK * wg;
+            final float vx = cx - dragCx, vy = cy - screenToScrolledY(dragCy);
+            final float dist = (float) Math.hypot(vx, vy);
+            if (dist > 1f) {
+                final float f = dist / (cardW * WIGGLE_REACH);
+                final float push = dp(WIGGLE_PUSH) * wg * (float) Math.exp(-f * f);
+                cx += vx / dist * push;
+                cy += vy / dist * push;
+            }
+            c.save();
+            c.rotate(rz, cx, cy);
+            drawCardAt(c, k, now, cx, cy, scale, k.rotX.get(now), k.rotY.get(now), h, dim, allow3d);
+            c.restore();
+            return;
+        }
         drawCardAt(c, k, now, cx, cy, scale, k.rotX.get(now), k.rotY.get(now),
                 h, dim, allow3d);
+    }
+
+    /** Sklenena "jamka" na miste, kam tazena karta dopadne. */
+    private void drawDropSlot(Canvas c, long now) {
+        if (!dragging || dragCard == null) return;
+        final float a = clamp(dragLift.get(now), 0f, 1f);
+        if (a < 0.01f) return;
+        final float l = gridLeft + ghostX.get(now) + parallaxX(now);
+        final float t = gridTop + ghostY.get(now) + scrollCur + parallaxY(now);
+        final float r = dp(CARD_RADIUS);
+        final float in = dp(3);
+        fill.setShader(null);
+        fill.setColor(Color.argb(Math.round(20 * a), 255, 255, 255));
+        c.drawRoundRect(l + in, t + in, l + cardW - in, t + cardH - in, r - in, r - in, fill);
+        stroke.setStrokeWidth(dp(1.5f));
+        stroke.setColor(Color.argb(Math.round(90 * a), 255, 255, 255));
+        c.drawRoundRect(l + in, t + in, l + cardW - in, t + cardH - in, r - in, r - in, stroke);
     }
 
     /**
@@ -1980,8 +2203,15 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             tabsW += widths[i];
         }
         // Na konci ikonka posuvniku = napoveda, ze klepnuti otevre rychle menu.
-        final float statusW = padX + clockText.measureText(clockTime) + dp(ORN_STATUS_GAP)
+        float statusW = padX + clockText.measureText(clockTime) + dp(ORN_STATUS_GAP)
                 + batteryWidth() + dp(ORN_STATUS_GAP) + dp(ORN_ICON) + padX;
+        // Ziva bublina: stav se na pruzine roztahne na sirku ikony a textu.
+        liveAmt.set(liveOn(now) ? 1f : 0f, now);
+        final float la = Math.max(0f, liveAmt.get(now));
+        if (liveText != null && la > 0.0005f) {
+            final float liveW = padX + dp(LIVE_RING) + dp(LIVE_GAP) + liveWidth.get(now) + padX;
+            statusW = Math.max(dp(40), lerp(statusW, liveW, la));
+        }
         final float w = inner + tabsW + 2 * dp(ORN_DIVIDER) + statusW + inner;
         ornRect.set(frame.centerX() - w / 2f, midY - dp(ORN_H) / 2f, frame.centerX() + w / 2f, midY + dp(ORN_H) / 2f);
         float x = ornRect.left + inner;
@@ -2017,23 +2247,35 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 + (bolts > 0 ? dp(5) + bolts * dp(8.5f) + (bolts - 1) * dp(1.5f) : 0) + dp(10);
     }
 
-    /** Sklo plovouciho prvku (ornament, lista) - stejny recept jako panel, ale krycejsi, s mekkym stinem. */
-    private void drawChromeGlass(Canvas c, GlassSurface g, RectF r, float radius) {
+    /**
+     * Sklo plovouciho prvku (ornament, lista) - stejny recept jako panel, s mekkym stinem.
+     * Stin jen VNE tvaru (clipOut), at sklo zustane pruhledne. Ornament (liquid) je
+     * pruhlednejsi - pod nim je rozmazany a lomeny obsah.
+     */
+    private void drawChromeGlass(Canvas c, GlassSurface g, RectF r, float radius, boolean liquid) {
         final boolean light = prefs.glassStyle() == Prefs.GLASS_VISION;
+        chromePath.reset();
+        chromePath.addRoundRect(r, radius, radius, Path.Direction.CW);
+        c.save();
+        c.clipOutPath(chromePath);
         fill.setShader(null);
-        fill.setColor(light ? 0xFF6B7380 : Palette.VOID);
+        fill.setColor(Palette.VOID);
         fill.setShadowLayer(dp(18), 0, dp(6), 0x73000000);
         c.drawRoundRect(r.left + dp(2), r.top + dp(2), r.right - dp(2), r.bottom - dp(2), radius, radius, fill);
         fill.clearShadowLayer();
-        g.draw(c, r, radius, light ? GlassSurface.CHROME_LIGHT : GlassSurface.CHROME_DARK,
-                getResources().getDisplayMetrics().density);
+        c.restore();
+        final GlassSurface.Style st = liquid
+                ? (light ? GlassSurface.LIQUID_LIGHT : GlassSurface.LIQUID_DARK)
+                : (light ? GlassSurface.CHROME_LIGHT : GlassSurface.CHROME_DARK);
+        g.draw(c, r, radius, st, getResources().getDisplayMetrics().density);
     }
 
     /** Horni "ornament": zalozky s posuvnym indikatorem, oddelovac, hodiny a baterie. */
     private void drawOrnament(Canvas c, long now) {
         final float midY = ornRect.centerY();
         final float itemH = tabRects[0].height();
-        drawChromeGlass(c, ornGlass, ornRect, ornRect.height() / 2f);
+        drawChromeGlass(c, ornGlass, ornRect, ornRect.height() / 2f, true);
+        drawRimLight(c, now, ornRect, ornRect.height() / 2f, false);
 
         // Indikator vybrane zalozky jede na pruzine (muze lehce prejet a vratit se).
         final float pos = clamp(tabPos.get(now), -0.3f, TAB_NAMES.length - 0.7f);
@@ -2069,13 +2311,64 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         }
         final Paint.FontMetrics cfm = clockText.getFontMetrics();
         final float cbase = midY - (cfm.ascent + cfm.descent) / 2f;
-        float x = statusRect.left + dp(ORN_PAD_X);
+        // Ziva bublina: normalni stav rychle zmizi, novy obsah naskoci o chlup pozdeji.
+        final float la = clamp(liveAmt.get(now), 0f, 1f);
+        final float normalA = liveText == null ? 1f : clamp(1f - la * 1.7f, 0f, 1f);
+        final float liveA = liveText == null ? 0f : clamp((la - 0.35f) / 0.65f, 0f, 1f);
+        final boolean morphing = normalA < 1f;
+        if (morphing) {
+            c.save();
+            c.clipRect(statusRect);
+        }
+        if (normalA > 0.004f) {
+            if (normalA < 0.999f) c.saveLayerAlpha(statusRect, Math.round(255 * normalA));
+            float x = statusRect.left + dp(ORN_PAD_X);
+            clockText.setColor(Palette.TEXT);
+            c.drawText(clockTime, x, cbase, clockText);
+            x += clockText.measureText(clockTime) + dp(ORN_STATUS_GAP);
+            drawBattery(c, x, midY);
+            Icons.draw(c, Icons.SLIDERS, batteryRect.right + dp(ORN_STATUS_GAP) + dp(ORN_ICON) / 2f, midY,
+                    dp(ORN_ICON), Color.argb(Math.round(lerp(0xB3, 0xFF, sh)), 255, 255, 255), dp(1.7f), 1f, fill);
+            if (normalA < 0.999f) c.restore();
+        }
+        if (liveA > 0.004f) drawLive(c, now, midY, cbase, liveA);
+        if (morphing) c.restore();
+    }
+
+    /** Obsah zive bubliny: krouzek prubehu (nebo ikona) a text, naskoci s lehkym zvetsenim. */
+    private void drawLive(Canvas c, long now, float midY, float base, float a) {
+        final float ringR = dp(LIVE_RING) / 2f;
+        final float cx = statusRect.left + dp(ORN_PAD_X) + ringR;
+        final float s = 0.86f + 0.14f * a;
+        c.save();
+        c.scale(s, s, statusRect.centerX(), midY);
+        final int col = Palette.alpha(liveColor, a);
+        if (Float.isNaN(liveProgress)) {
+            Icons.draw(c, liveIcon, cx, midY, dp(20), col, dp(1.8f), 1f, fill);
+        } else {
+            final float sw = dp(2.5f);
+            final float rr = ringR - sw / 2f;
+            stroke.setShader(null);
+            stroke.setStrokeWidth(sw);
+            stroke.setStrokeCap(Paint.Cap.ROUND);
+            stroke.setColor(Color.argb(Math.round(56 * a), 255, 255, 255));
+            c.drawCircle(cx, midY, rr, stroke);
+            stroke.setColor(col);
+            tmp.set(cx - rr, midY - rr, cx + rr, midY + rr);
+            if (liveProgress == LIVE_SPINNER) {
+                final float turn = (now / 1_000_000L % 900L) / 900f * 360f;
+                c.drawArc(tmp, turn - 90f, 100f, false, stroke);
+            } else {
+                final float p = clamp(liveProg.get(now), 0f, 1f);
+                if (p > 0.004f) c.drawArc(tmp, -90f, 360f * p, false, stroke);
+            }
+            stroke.setStrokeCap(Paint.Cap.BUTT);
+            Icons.draw(c, liveIcon, cx, midY, dp(13), Palette.alpha(Palette.TEXT, a), dp(1.6f), 1f, fill);
+        }
+        clockText.setColor(Palette.alpha(Palette.TEXT, a));
+        c.drawText(liveText, cx + ringR + dp(LIVE_GAP), base, clockText);
         clockText.setColor(Palette.TEXT);
-        c.drawText(clockTime, x, cbase, clockText);
-        x += clockText.measureText(clockTime) + dp(ORN_STATUS_GAP);
-        drawBattery(c, x, midY);
-        Icons.draw(c, Icons.SLIDERS, batteryRect.right + dp(ORN_STATUS_GAP) + dp(ORN_ICON) / 2f, midY, dp(ORN_ICON),
-                Color.argb(Math.round(lerp(0xB3, 0xFF, sh)), 255, 255, 255), dp(1.7f), 1f, fill);
+        c.restore();
     }
 
     /** Pilulka baterie: procenta v barve nabiti, bile blesky pri nabijeni. */
@@ -2131,7 +2424,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private void drawRail(Canvas c, long now) {
         final float e = clamp(railExpand.get(now), 0f, 1f);
         final float rr = dp(RAIL_W) / 2f;
-        drawChromeGlass(c, railGlass, railRect, rr);
+        drawChromeGlass(c, railGlass, railRect, rr, false);
+        drawRimLight(c, now, railRect, rr, false);
         final float ic = dp(RAIL_ITEM) / 2f; // polomer kolecka ikony
         final float iconX = railRect.left + dp(6) + ic;
         c.save();

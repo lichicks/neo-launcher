@@ -48,6 +48,7 @@ public final class Prefs {
     private static final String K_SHORTCUTS = "allow_shortcuts";
     private static final String K_META_GAME_MENU = "meta_game_menu";
     private static final String K_META_AFTER_GAME = "meta_after_game";
+    private static final String K_OPEN_ON_BOOT = "open_on_boot";
     private static final String K_MENU_HOLD = "menu_hold_ms";
     private static final String K_ONLINE_ART = "online_art";
     private static final String K_LAUNCH_ANIM = "launch_animation";
@@ -291,6 +292,16 @@ public final class Prefs {
 
     public void setMetaAfterGame(boolean b) {
         sp.edit().putBoolean(K_META_AFTER_GAME, b).apply();
+        changed();
+    }
+
+    /** Po zapnuti Questu otevrit Neo (sluzba Meta tlacitka). */
+    public boolean openOnBoot() {
+        return sp.getBoolean(K_OPEN_ON_BOOT, true);
+    }
+
+    public void setOpenOnBoot(boolean b) {
+        sp.edit().putBoolean(K_OPEN_ON_BOOT, b).apply();
         changed();
     }
 

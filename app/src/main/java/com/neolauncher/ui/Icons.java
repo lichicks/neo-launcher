@@ -61,6 +61,10 @@ public final class Icons {
     public static final int ARCHIVE = IconPaths.ARCHIVE;
     public static final int ARCHIVE_RESTORE = IconPaths.ARCHIVE_RESTORE;
     public static final int DEPTH = IconPaths.DEPTH;
+    public static final int POWER = IconPaths.POWER;
+    public static final int CHECK = IconPaths.CHECK;
+    public static final int ALERT = IconPaths.ALERT;
+    public static final int BATTERY_CHARGING = IconPaths.BATTERY_CHARGING;
 
     /** Cesty v prostoru 24x24, rozparsovane pri prvnim pouziti. */
     private static final Path[] CACHE = new Path[IconPaths.DATA.length];

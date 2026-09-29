@@ -54,6 +54,9 @@ final class GlassSurface {
     /* Plovouci prvky nad obsahem (ornament, lista) - krycejsi, at jsou citelne nad kartami. */
     static final Style CHROME_DARK = new Style(0xDE171B24, 0xE60A0C11, 0x1C, 0x99FFFFFF, 0x1AFFFFFF, 0x3DFFFFFF, 1f);
     static final Style CHROME_LIGHT = new Style(0xD28A93A0, 0xDC6B7380, 0x2E, 0xB3FFFFFF, 0x2EFFFFFF, 0x52FFFFFF, 1f);
+    /* Horni bublina (ornament): pruhlednejsi - pod ni je rozmazany a u okraje lomeny obsah (LiquidGlass). */
+    static final Style LIQUID_DARK = new Style(0xA8171B24, 0xB80A0C11, 0x1C, 0xB3FFFFFF, 0x1FFFFFFF, 0x4DFFFFFF, 1f);
+    static final Style LIQUID_LIGHT = new Style(0xB88A93A0, 0xC46B7380, 0x2E, 0xC7FFFFFF, 0x33FFFFFF, 0x5CFFFFFF, 1f);
     /* Dlazdice uvnitr skla (svetlejsi vrstva). */
     static final Style TILE = new Style(0x1AFFFFFF, 0x0AFFFFFF, 0, 0x47FFFFFF, 0x12FFFFFF, 0x1FFFFFFF, 1f);
     static final Style TILE_HOVER = new Style(0x33FFFFFF, 0x1AFFFFFF, 0, 0x8CFFFFFF, 0x2EFFFFFF, 0x40FFFFFF, 1f);

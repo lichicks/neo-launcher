@@ -12,6 +12,7 @@ import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.content.pm.PackageInstaller;
 import android.view.KeyEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -29,10 +30,13 @@ import com.neolauncher.data.Prefs;
 import com.neolauncher.data.UsageInfo;
 import com.neolauncher.launch.AppLauncher;
 import com.neolauncher.update.ApkInstaller;
+import com.neolauncher.update.InstallReceiver;
 import com.neolauncher.update.Updater;
 import com.neolauncher.ui.AppMenu;
 import com.neolauncher.ui.CarouselView;
 import com.neolauncher.ui.Glass;
+import com.neolauncher.ui.Icons;
+import com.neolauncher.ui.Palette;
 import com.neolauncher.ui.NeoLauncherView;
 import com.neolauncher.ui.OverlayHost;
 import com.neolauncher.ui.QuickMenuView;
@@ -130,6 +134,7 @@ public class LauncherActivity extends Activity
 
         repo.addListener(this);
         prefs.addListener(this);
+        InstallReceiver.setListener(installListener);
         applyMode(false);
         repo.loadCache();
         if (!repo.apps().isEmpty()) showApps(false);
@@ -197,6 +202,7 @@ public class LauncherActivity extends Activity
         super.onDestroy();
         repo.removeListener(this);
         prefs.removeListener(this);
+        InstallReceiver.clearListener(installListener);
     }
 
     @Override
@@ -634,8 +640,8 @@ public class LauncherActivity extends Activity
                         overlay.close();
                         prefs.setFavorite(app.pkg, !fav);
                         showApps(true);
-                        Toast.makeText(LauncherActivity.this, fav ? "Odebráno z oblíbených"
-                                : "Přidáno do oblíbených – drží se nahoře", Toast.LENGTH_SHORT).show();
+                        notice(Icons.STAR, fav ? "Odebráno z oblíbených" : "Přidáno do oblíbených – drží se nahoře",
+                                Palette.AMBER, 2800);
                     }
 
                     @Override
@@ -666,8 +672,7 @@ public class LauncherActivity extends Activity
                     public void reloadImage() {
                         overlay.close();
                         artwork.reload(app);
-                        Toast.makeText(LauncherActivity.this, "Obrázek se stahuje znovu",
-                                Toast.LENGTH_SHORT).show();
+                        notice(Icons.REFRESH, "Obrázek se stahuje znovu", Palette.PEARL, 2500);
                     }
 
                     @Override
@@ -675,9 +680,7 @@ public class LauncherActivity extends Activity
                         overlay.close();
                         prefs.setHidden(app.pkg, true);
                         showApps(true);
-                        Toast.makeText(LauncherActivity.this,
-                                "Skryto. Zpět jde v Nastavení → Skryté aplikace",
-                                Toast.LENGTH_LONG).show();
+                        notice(Icons.EYE_OFF, "Skryto · zpět v Nastavení → Skryté aplikace", Palette.PEARL, 4000);
                     }
 
                     @Override
@@ -727,7 +730,7 @@ public class LauncherActivity extends Activity
         prefs.setManualOrder(tab, pkgs);
         if (prefs.sortMode() != Prefs.SORT_MANUAL) {
             prefs.setSortMode(Prefs.SORT_MANUAL);
-            Toast.makeText(this, "Řazení přepnuto na vlastní pořadí", Toast.LENGTH_SHORT).show();
+            notice(Icons.SORT, "Řazení přepnuto na vlastní pořadí", Palette.PEARL, 3000);
         }
     }
 
@@ -772,11 +775,13 @@ public class LauncherActivity extends Activity
                     @Override
                     public void onProgress(int percent) {
                         status.setText("Stahuji… " + percent + " %");
+                        showLive(Icons.DOWNLOAD, "Stahuji Neo · " + percent + " %", percent / 100f, 0);
                     }
 
                     @Override
                     public void onDone(File apk) {
                         status.setText("Instaluji – potvrď prosím systémový dialog.");
+                        showLive(Icons.DOWNLOAD, "Potvrď instalaci Nea", NeoLauncherView.LIVE_SPINNER, 0);
                         try {
                             Updater.install(LauncherActivity.this, apk);
                         } catch (Exception e) {
@@ -789,6 +794,7 @@ public class LauncherActivity extends Activity
                     public void onError(String message) {
                         status.setText(message);
                         buttons.setVisibility(View.VISIBLE);
+                        launcher.clearLive();
                     }
                 });
             }
@@ -804,6 +810,49 @@ public class LauncherActivity extends Activity
     private void toast(String msg) {
         Toast.makeText(this, msg, Toast.LENGTH_LONG).show();
     }
+
+    // --- Ziva bublina v horni liste ------------------------------------------------
+
+    /**
+     * Prubeh (instalace, stahovani...) v zive bubline horni listy.
+     * @return false, kdyz ji ted neni videt (karusel, Neo neni na ocich)
+     */
+    private boolean showLive(int icon, String text, float progress, long ms) {
+        return showLive(icon, text, Palette.COBALT_LIGHT, progress, ms);
+    }
+
+    private boolean showLive(int icon, String text, int color, float progress, long ms) {
+        if (carouselShown) return false;
+        launcher.showLive(icon, text, color, progress, ms);
+        return sVisible;
+    }
+
+    /** Kratke oznameni: v bubline, a kdyz neni videt, obycejna hlaska. */
+    private void notice(int icon, String text, int color, long ms) {
+        if (!showLive(icon, text, color, NeoLauncherView.LIVE_ICON_ONLY, ms)) {
+            Toast.makeText(this, text, ms > 3000 ? Toast.LENGTH_LONG : Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /** Vysledek instalace (APK vybrane v Neu i aktualizace Nea) do bubliny. */
+    private final InstallReceiver.Listener installListener = (apk, status, label, message) -> {
+        switch (status) {
+            case PackageInstaller.STATUS_PENDING_USER_ACTION:
+                showLive(apk ? Icons.PACKAGE_PLUS : Icons.DOWNLOAD, apk ? "Potvrď instalaci" : "Potvrď instalaci Nea",
+                        NeoLauncherView.LIVE_SPINNER, 0);
+                return true;
+            case PackageInstaller.STATUS_SUCCESS:
+                return showLive(Icons.CHECK, "Nainstalováno: " + label, Palette.COBALT_LIGHT,
+                        NeoLauncherView.LIVE_ICON_ONLY, 4500);
+            case PackageInstaller.STATUS_FAILURE_ABORTED:
+                // Uzivatel instalaci zrusil - jen schovat bublinu.
+                launcher.clearLive();
+                return true;
+            default:
+                return showLive(Icons.ALERT, apk ? "Aplikace se nenainstalovala" : "Aktualizace se nenainstalovala",
+                        Palette.MAGENTA, NeoLauncherView.LIVE_ICON_ONLY, 5000);
+        }
+    };
 
     // --- OverlayHost.Listener ---------------------------------------------------
 
@@ -835,8 +884,26 @@ public class LauncherActivity extends Activity
         final Uri picked = resultCode == RESULT_OK && data != null ? data.getData() : null;
         if (requestCode == REQ_PICK_APK) {
             if (picked == null) return;
-            Toast.makeText(this, "Připravuji instalaci…", Toast.LENGTH_SHORT).show();
-            ApkInstaller.install(this, picked, err -> Toast.makeText(this, err, Toast.LENGTH_LONG).show());
+            if (!showLive(Icons.PACKAGE_PLUS, "Připravuji instalaci…", 0f, 0)) {
+                Toast.makeText(this, "Připravuji instalaci…", Toast.LENGTH_SHORT).show();
+            }
+            ApkInstaller.install(this, picked, new ApkInstaller.Listener() {
+                @Override
+                public void onProgress(float p) {
+                    showLive(Icons.PACKAGE_PLUS, p >= 0f ? "Připravuji instalaci · " + Math.round(p * 100) + " %"
+                            : "Připravuji instalaci…", p >= 0f ? p : NeoLauncherView.LIVE_SPINNER, 0);
+                }
+
+                @Override
+                public void onCommitted() {
+                    showLive(Icons.PACKAGE_PLUS, "Potvrď instalaci", NeoLauncherView.LIVE_SPINNER, 0);
+                }
+
+                @Override
+                public void onError(String message) {
+                    notice(Icons.ALERT, message, Palette.MAGENTA, 5000);
+                }
+            });
             return;
         }
         if (requestCode == REQ_EXPORT || requestCode == REQ_IMPORT) {
@@ -850,8 +917,7 @@ public class LauncherActivity extends Activity
         AppEntry e = repo.find(pkg);
         if (e == null) return;
         Uri uri = data.getData();
-        artwork.setCustomImage(e, uri, () -> Toast.makeText(this, "Obrázek nastaven",
-                Toast.LENGTH_SHORT).show());
+        artwork.setCustomImage(e, uri, () -> notice(Icons.CHECK, "Obrázek nastaven", Palette.COBALT_LIGHT, 2500));
     }
 
     // --- Zaloha nastaveni ---------------------------------------------------------
@@ -871,13 +937,17 @@ public class LauncherActivity extends Activity
 
     private void onBackupFile(boolean export, Uri uri) {
         if (export) {
-            Backup.export(this, uri, err -> Toast.makeText(this,
-                    err != null ? err : "Záloha uložena", Toast.LENGTH_LONG).show());
+            showLive(Icons.ARCHIVE, "Ukládám zálohu…", NeoLauncherView.LIVE_SPINNER, 0);
+            Backup.export(this, uri, err -> {
+                if (err != null) notice(Icons.ALERT, err, Palette.MAGENTA, 5000);
+                else notice(Icons.CHECK, "Záloha uložena", Palette.COBALT_LIGHT, 3500);
+            });
             return;
         }
+        showLive(Icons.ARCHIVE_RESTORE, "Obnovuji zálohu…", NeoLauncherView.LIVE_SPINNER, 0);
         Backup.restore(this, uri, err -> {
             if (err != null) {
-                Toast.makeText(this, err, Toast.LENGTH_LONG).show();
+                notice(Icons.ALERT, err, Palette.MAGENTA, 5000);
                 return;
             }
             // Vse znovu nacist: nastaveni, obrazky, poradi.
@@ -885,7 +955,7 @@ public class LauncherActivity extends Activity
             artwork.clearMemory();
             overlay.close();
             showApps(true);
-            Toast.makeText(this, "Nastavení obnoveno ze zálohy", Toast.LENGTH_LONG).show();
+            notice(Icons.CHECK, "Nastavení obnoveno ze zálohy", Palette.COBALT_LIGHT, 3500);
         });
     }
 
@@ -961,6 +1031,7 @@ public class LauncherActivity extends Activity
         boolean charging = plugged != 0 && (status == BatteryManager.BATTERY_STATUS_CHARGING
                 || status == BatteryManager.BATTERY_STATUS_FULL);
         final boolean fast = charging && isFastCharging(i);
+        announceBattery(pct, charging, fast);
         batteryPct = pct;
         batteryCharging = charging;
         batteryFast = fast;
@@ -968,6 +1039,35 @@ public class LauncherActivity extends Activity
         carousel.setBattery(pct, charging, fast);
         if (overlay.panel() instanceof QuickMenuView) {
             ((QuickMenuView) overlay.panel()).setBattery(pct, charging, fast);
+        }
+    }
+
+    /** Zmena nabijeni do zive bubliny: zacalo nabijeni, nabito, slaba baterie. */
+    private void announceBattery(int pct, boolean charging, boolean fast) {
+        final int prev = batteryPct;
+        if (prev < 0 || pct < 0) return; // prvni hodnota po startu - nic se nezmenilo
+        if (charging && !batteryCharging) {
+            String t = (fast ? "Rychle nabíjí · " : "Nabíjí se · ") + pct + " %";
+            final String full = chargeTimeText();
+            if (full != null) t += " · plně za " + full;
+            showLive(Icons.BATTERY_CHARGING, t, Palette.PEARL, NeoLauncherView.LIVE_ICON_ONLY, 4000);
+        } else if (charging && pct >= 100 && prev < 100) {
+            showLive(Icons.CHECK, "Nabito na 100 %", Palette.COBALT_LIGHT, NeoLauncherView.LIVE_ICON_ONLY, 4000);
+        } else if (!charging && ((pct <= 20 && prev > 20) || (pct <= 10 && prev > 10))) {
+            showLive(Icons.ALERT, "Slabá baterie · " + pct + " %", Palette.MAGENTA, NeoLauncherView.LIVE_ICON_ONLY, 5000);
+        }
+    }
+
+    /** Odhad systemu, za jak dlouho bude nabito ("1 h 5 min"), nebo null. */
+    private String chargeTimeText() {
+        try {
+            final BatteryManager bm = getSystemService(BatteryManager.class);
+            final long ms = bm != null ? bm.computeChargeTimeRemaining() : -1;
+            if (ms < 60_000L) return null;
+            final long min = (ms + 59_999L) / 60_000L;
+            return min >= 60 ? (min / 60) + " h " + (min % 60) + " min" : min + " min";
+        } catch (Exception e) {
+            return null;
         }
     }
 

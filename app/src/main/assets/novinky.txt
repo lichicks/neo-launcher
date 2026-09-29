@@ -1,3 +1,10 @@
+# Živá bublina, tekuté sklo a přesouvání karet
+• Po zapnutí Questu se rovnou otevře Neo (Nastavení → Quest, potřebuje zapnutou službu Meta tlačítka)
+• Horní bublina ožila: když se něco děje, čas a baterie se v ní na chvíli promění – instalace APK s kroužkem průběhu, stahování nové verze Nea, záloha, začátek nabíjení (i odhad, za jak dlouho bude nabito), nabito na 100 % nebo slabá baterie. Místo vyskakovacích hlášek teď oznámení ukazuje právě bublina
+• Horní bublina je z tekutého skla: karty, které pod ni zajedou, se u jejího okraje lomí jako ve skutečném skle a jemně se rozloží barvy
+• Okraj skla chytá světlo laseru – kde je laser blízko hrany panelu, horní bubliny nebo levé lišty, hrana se rozsvítí
+• Přesouvání karet: když kartu zvedneš a táhneš, ostatní se jemně třesou, trochu ustoupí z cesty a na místě, kam karta dopadne, je vidět skleněná jamka
+
 # Instalace APK, velikost her, záloha a paralaxa
 • Nastavení → Aplikace → Nainstalovat APK: vybereš soubor stažený třeba v prohlížeči Questu a nainstaluješ ho bez PC
 • Když podržíš kartu, v menu je vidět, kolik hra zabírá. V Nastavení → Aplikace přibylo řazení „Velikost“ (největší první). Obojí potřebuje stejné povolení jako herní čas

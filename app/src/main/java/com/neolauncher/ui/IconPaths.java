@@ -64,6 +64,10 @@ final class IconPaths {
     static final int ARCHIVE = 47;
     static final int ARCHIVE_RESTORE = 48;
     static final int DEPTH = 49;
+    static final int POWER = 50;
+    static final int CHECK = 51;
+    static final int ALERT = 52;
+    static final int BATTERY_CHARGING = 53;
 
     static final String[] DATA = {
             "M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41", // SUN = sun
@@ -116,5 +120,9 @@ final class IconPaths {
             "M3 3h18a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-18a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1zM4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4", // ARCHIVE = archive
             "M3 3h18a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-18a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1zM4 8v11a2 2 0 0 0 2 2h2M20 8v11a2 2 0 0 1-2 2h-2M9 15l3 -3 3 3M12 12v9", // ARCHIVE_RESTORE = archive-restore
             "M5 3v16h16M5 19l6 -6M2 6l3 -3 3 3M18 16l3 3 -3 3", // DEPTH = move-3d
+            "M12 2v10M18.4 6.6a9 9 0 1 1-12.77.04", // POWER = power
+            "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0M16 9l-5.5 5.5L8 12", // CHECK = circle-check
+            "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0M12 8L12 12M12 16L12.01 16", // ALERT = circle-alert
+            "M11 7l-3 5h4l-3 5M14.856 6H16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.935M22 14v-4M5.14 18H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2.936", // BATTERY_CHARGING = battery-charging
     };
 }

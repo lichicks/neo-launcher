@@ -1,6 +1,6 @@
 # Neo Launcher – předávací dokument (jak navázat)
 
-> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **29. 9. 2026, verze v2.0.44**),
+> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **29. 9. 2026, verze v2.0.48**),
 > a jak na to navázat v novém chatu – i s málo kredity. Podrobný technický
 > kontext je v [`CLAUDE.md`](../CLAUDE.md) v kořeni repozitáře.
 
@@ -71,7 +71,7 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
 
 ## 3. Stav
 
-- Poslední verze: **v2.0.44** (testovací buildy z větve `claude/funny-ramanujan-xp8ba6`
+- Poslední verze: **v2.0.48** (testovací buildy z větve `claude/funny-ramanujan-xp8ba6`
   PR #1 do `main` je otevřený). APK: GitHub → Releases → nejnovější `NeoLauncher-2.0.xx.apk`.
 - **29. 9. první test na Questu: „funguje až podivuhodně super“.** Opraveno podle testu:
   Meta tlačítko (vestavěná služba, viz níže), karusel (pryč „Spuštěno 0×“ a datum
@@ -84,6 +84,10 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
 - **Nové (29. 9., zatím neověřené na headsetu):** instalace APK z Nea (Nastavení → Aplikace),
   velikost her v menu karty + řazení „Velikost“, záloha a obnova nastavení (Nastavení → O Neo),
   paralaxa (karty se posouvají za laserem, lišty proti němu, na kartě odlesk; jde vypnout).
+- **Nové (29. 9. večer, neověřené):** Neo se otevře po zapnutí Questu; živá bublina
+  v horní liště (instalace, stahování aktualizace, záloha, nabíjení s odhadem, slabá baterie –
+  nahradila vyskakovací hlášky); tekuté sklo horní bubliny (lom u okraje, AGSL); hrana skla
+  se rozsvítí u laseru; při přesouvání se karty třesou, uhnou a ukáže se cílová „jamka“.
 - První instalace: sideload (adb / SideQuest / stáhnout APK v prohlížeči Questu),
   další verze už přes aktualizace v launcheru. Na PC běží starý adb na portu 5037 →
   vždy `adb -P 5038 install -r NeoLauncher-2.0.xx.apk`.
@@ -129,7 +133,15 @@ Zvuky/haptika a počasí možná později.
    (Android 14 obyčejné aplikaci nedovolí zavřít jinou) – čte systémové menu Questu
    a zmáčkne jeho „Ukončit“. Uživatel nechtěl jednodušší verzi s odhadem.
 
-**Nápady, které uživatel zatím nevybral:** info bublina při delším najetí, štítek
+**Nové nápady (29. 9. večer, uživatel zatím nevybral):** odhad výdrže baterie
+(CHARGE_COUNTER / CURRENT_NOW), úsporný režim při slabé baterii (vypne efekty, ztlumí jas),
+varování před přehřátím (PowerManager thermal status) v bublině, kontrola baterie před
+spuštěním velké hry, „Uvolnit místo“ (velké hry nehrané 30+ dní), kvalita Wi-Fi pro
+streamování z PC (pásmo, rychlost linky, ping), ADB přes Wi-Fi jedním klepnutím,
+dvojí stisk Meta = předchozí aplikace, Uspat / Snímek obrazovky v rychlém menu
+(globální akce služby přístupnosti), velká karta „Pokračovat“ s poslední hrou nahoře.
+
+**Starší nápady, které uživatel zatím nevybral:** info bublina při delším najetí, štítek
 AKTUALIZOVÁNO, režim pro návštěvu, „Nevím, co hrát“, motivy (víc palet), sklo podle denní
 doby, oživené obrázky; ovládání joystickem jako na konzoli;
 tlačítko „…“ na kartě místo držení; vlastní pozadí; varování při plném úložišti.

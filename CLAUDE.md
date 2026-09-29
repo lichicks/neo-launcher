@@ -123,6 +123,7 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 | `ui/Icons.java`, `ui/IconPaths.java`, `ui/SvgPath.java` | Ikony Lucide: vygenerované SVG cesty + parser (viz „Barvy, sklo a ikony“) |
 | `MetaButtonService.java` | Meta tlačítko otevře Neo (služba přístupnosti, viz níže) |
 | `data/AppSizes.java`, `data/Backup.java`, `update/ApkInstaller.java` | Velikost her, záloha nastavení (zip), instalace APK |
+| `data/BatteryEstimate.java` | Odhad výdrže baterie (učí se z hraní, záložně okamžitý odběr) |
 
 ### Rozložení okna (od 2026-09-27, podle předloh z visionOS od uživatele)
 - **Skleněný panel** jen s mřížkou karet (všechny rohy zaoblené).
@@ -241,6 +242,39 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
   (Robolectric) jen blur, lom je vidět až na headsetu (logcat `NeoLiquidGlass`).
 - **Světlo laseru na hraně skla** (`drawRimLight`, `RIM_*`): radiální přechod
   jako tah okraje panelu (+ měkká záře dovnitř), ornamentu a lišty.
+- **3× Meta + lišta běžící aplikace** (`Prefs.metaTriple`, výchozí zapnuto):
+  `MetaButtonService.onMenuOpened` počítá „otevření menu Questu“ = dávky
+  událostí systemux (události do `BURST_MS` 350 ms = jedno otevření); dvě
+  otevření do `TRIPLE_WINDOW_MS` 1,6 s = otevřít–zavřít–otevřít = 3× Meta.
+  Ve hře/aplikaci → `runningPkg` = aplikace v popředí + otevře Neo; v Neu
+  (běží-li něco) → intent `EXTRA_RESUME` = zpět do aplikace. Neo ukáže dole
+  na panelu lištu (`NeoLauncherView.setRunningApp`, `drawRunBar`, tekuté sklo
+  jako ornament, `runBackdropNode`): náhled, název, „Běží na pozadí“,
+  Pokračovat (perlové) / Ukončit / ✕. `runningPkg` se maže, když se aplikace
+  vrátí do popředí nebo se spustí jiná VR hra. **Ukončit** =
+  `MetaButtonService.forceStop`: otevře `ACTION_APPLICATION_DETAILS_SETTINGS`,
+  pollingem (150 ms, max 8 s) najde tlačítko podle textu (`FORCE_STOP_LABELS`),
+  klepne, potvrdí `android:id/button1`, BACK a otevře Neo s `EXTRA_STOPPED`
+  (bublina „Ukončeno“). Bez služby: otevře informace o aplikaci + hláška.
+  Riziko: jedno otevření menu může poslat události rozložené přes > 350 ms →
+  falešné 3× (otevře jen Neo, nic neukončí). Ladit podle `NeoMeta`.
+- **Rychlé menu v2**: dlaždice ve 3 sloupcích (ikona nad názvem): Wi-Fi,
+  Bluetooth, **Streamovat** (`systemux://sharing` = sdílení Questu: cast,
+  nahrávání, snímek; zná ho i LL), Nastavení (Questu), Menu Questu, Soubory,
+  Prohlížeč, **Uspat** (`GLOBAL_ACTION_LOCK_SCREEN`), **Vypnout**
+  (`GLOBAL_ACTION_POWER_DIALOG` = systémová nabídka vypnout/restartovat;
+  přímo vypnout ani restartovat obyčejná aplikace nesmí). Uspat/Vypnout jdou
+  jen přes `MetaButtonService` (statické `sleep()` / `powerMenu()`).
+  Fotoaparát vypadl (nahrávání je ve Sdílení).
+- **Odhad výdrže** (`data/BatteryEstimate`): při odchodu z Nea (`onStop`) si
+  uloží baterii a čas, při návratu spočítá %/h za dobu provozu (uptime, ≥ 10 min,
+  ≥ 3 %, bez nabíjení) → klouzavý průměr = spotřeba při hraní. Dokud není,
+  okamžitý odběr `CURRENT_NOW` / `CHARGE_COUNTER`. V rychlém menu vpravo na
+  řádku s datem („vydrží asi 1 h 50 min“ / „nabito za 40 min“) a v bublině
+  slabé baterie.
+- **Oprava:** `Icons.draw` nechával sdílený `Paint` ve stylu STROKE → další
+  výplně stejným Paintem (hover v liště, stíny, jamka…) byly jen obrys. Teď
+  vrací FILL. Levá lišta má zase krycí tělo (`drawChromeGlass(..., liquid=false)`).
 - **Přesouvání karet**: live přeskládání už bylo; nově ostatní karty třesení
   (`WIGGLE_*`, začne až po pohybu, aby nerušilo podržení pro menu), zmenšení
   o 3,5 %, uhnutí od tažené karty (gauss, 12 dp) a skleněná „jamka“ na cílovém
@@ -380,6 +414,12 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
    karty a řazení „Velikost“ (po povolení herního času), záloha → obnova,
    paralaxa (nepůsobí v brýlích nepříjemně?), nástup karet při otevření.
 
+0d. **3× Meta ve hře** → otevře se Neo s lištou dole? Pokračovat vrátí do hry?
+   Ukončit hru opravdu zavře (Informace o aplikaci → Vynutit ukončení,
+   `NeoMeta`)? Neotevírá se Neo při jednom stisku Meta ve hře (falešné 3×)?
+   Rychlé menu: Streamovat otevře sdílení Questu? Uspat uspí? Vypnout ukáže
+   nabídku vypnutí/restartu? Odhad výdrže po první hře (≥ 10 min).
+
 0c. **Nové 29. 9. večer:** otevře se Neo po zapnutí Questu (`NeoMeta` v logcatu)?
    Živá bublina při nabíjení / instalaci APK. Tekuté sklo: odrolovat, aby
    karty zajely pod horní bublinu – lomí se u okraje (`NeoLiquidGlass`)?
@@ -459,18 +499,9 @@ jednou v Nastavení → Quest → „Meta tlačítko otevře Neo“ → Zapnout
 
 - Zvuková odezva při hoveru a spuštění
 - Vlastní tapeta / pozadí
-- **Lišta běžící aplikace (rozhodnuto 2026-09-27; staví na
-  `MetaButtonService`, která už ví, co je v popředí):** dole na panelu pilulka ve stylu ornamentu (napůl zanořená
-  do spodní hrany, `frame.bottom`), když na pozadí běží hra/aplikace:
-  náhled + skutečný název (Quest u sideloadů píše „Neznámá aplikace“, my
-  máme label z Androidu), tlačítka **Pokračovat** (znovu spustit = návrat
-  do běžící hry) a **Ukončit**. Obyčejná aplikace to na Androidu 14 neumí
-  (`killBackgroundProcesses` smí jen vlastní procesy, běžící cizí procesy
-  nejsou vidět, UsageStats řekne jen „naposledy na obrazovce“) → detekci
-  a ukončení dělá addon (služba přístupnosti): čte systémové menu Questu
-  (lišta s běžící aplikací) a klepne na jeho „Ukončit“; záložně Informace
-  o aplikaci → „Vynutit ukončení“. Uživatel NEchtěl jednodušší verzi
-  s odhadem ze statistik dřív (mohla by ukázat už zavřenou hru).
+- Lišta běžící aplikace je hotová (3× Meta, viz výše). Ukazuje se jen po
+  3× Meta / Meta ze hry – uživatel NEchtěl odhad ze statistik (mohla by ukázat
+  už zavřenou hru). Případně rozšířit: ukázat ji i po otevření Nea jinak.
 - Rozložení jako v Lightning Launcheru: hry velké karty, aplikace malá
   kolečka dole (uživatel zvažuje místo záložek)
 - Karusel: podle zpětné vazby z headsetu buď vylepšit (paralaxa, zvuk,

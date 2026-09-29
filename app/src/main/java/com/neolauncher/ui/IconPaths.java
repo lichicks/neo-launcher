@@ -68,6 +68,8 @@ final class IconPaths {
     static final int CHECK = 51;
     static final int ALERT = 52;
     static final int BATTERY_CHARGING = 53;
+    static final int CAST = 54;
+    static final int MOON = 55;
 
     static final String[] DATA = {
             "M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41", // SUN = sun
@@ -124,5 +126,7 @@ final class IconPaths {
             "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0M16 9l-5.5 5.5L8 12", // CHECK = circle-check
             "M2 12a10 10 0 1 0 20 0a10 10 0 1 0 -20 0M12 8L12 12M12 16L12.01 16", // ALERT = circle-alert
             "M11 7l-3 5h4l-3 5M14.856 6H16a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.935M22 14v-4M5.14 18H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h2.936", // BATTERY_CHARGING = battery-charging
+            "M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6M2 12a9 9 0 0 1 8 8M2 16a5 5 0 0 1 4 4M2 20L2.01 20", // CAST = cast
+            "M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401", // MOON = moon
     };
 }

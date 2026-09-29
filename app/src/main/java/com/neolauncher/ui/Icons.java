@@ -65,6 +65,8 @@ public final class Icons {
     public static final int CHECK = IconPaths.CHECK;
     public static final int ALERT = IconPaths.ALERT;
     public static final int BATTERY_CHARGING = IconPaths.BATTERY_CHARGING;
+    public static final int CAST = IconPaths.CAST;
+    public static final int MOON = IconPaths.MOON;
 
     /** Cesty v prostoru 24x24, rozparsovane pri prvnim pouziti. */
     private static final Path[] CACHE = new Path[IconPaths.DATA.length];
@@ -113,6 +115,9 @@ public final class Icons {
         c.scale(k, k);
         c.drawPath(path(id), p);
         c.restore();
+        // Sdileny Paint vratit do vyplne - jinak by se dalsi plochy (pilulky, stiny)
+        // kreslily jen jako obrys.
+        p.setStyle(Paint.Style.FILL);
     }
 
     /** Vyplnena ikona (napr. hvezda oblibene na karte). */

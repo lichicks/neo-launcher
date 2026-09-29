@@ -315,6 +315,12 @@ public final class SettingsSheet {
                         prefs.metaGameMenu(), prefs::setMetaGameMenu),
                 toggleTile(c, Icons.EXIT, "Po hře otevřít Neo", "Když hru ukončíš, rovnou se ukáže Neo",
                         prefs.metaAfterGame(), prefs::setMetaAfterGame));
+        grid(c, page,
+                toggleTile(c, Icons.LAYERS, "3× Meta = zpět do Nea",
+                        "Ve hře třikrát rychle zmáčkni Meta: otevře se Neo a dole Pokračovat / Ukončit",
+                        prefs.metaTriple(), prefs::setMetaTriple),
+                infoTile(c, Icons.POWER, "Uspat a vypnout", "V rychlém menu (hodiny v horní liště) – taky přes službu Meta tlačítka"),
+                null);
         boolean canWrite;
         try {
             canWrite = Settings.System.canWrite(c);

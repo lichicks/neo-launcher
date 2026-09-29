@@ -41,12 +41,18 @@ public final class QuickMenuView extends View {
 
     public static final int T_WIFI = 0;
     public static final int T_BLUETOOTH = 1;
-    public static final int T_QUEST_SETTINGS = 2;
-    public static final int T_QUEST_QUICK = 3;
-    public static final int T_FILES = 4;
-    public static final int T_BROWSER = 5;
-    public static final int T_CAMERA = 6;
-    public static final int T_NEO = 7;
+    /** Sdileni Questu: streamovani (Chromecast...), nahravani, snimek. */
+    public static final int T_CAST = 2;
+    public static final int T_QUEST_SETTINGS = 3;
+    public static final int T_QUEST_QUICK = 4;
+    public static final int T_FILES = 5;
+    public static final int T_BROWSER = 6;
+    /** Uspat headset / nabidka vypnuti a restartu (pres sluzbu Meta tlacitka). */
+    public static final int T_SLEEP = 7;
+    public static final int T_POWER = 8;
+    public static final int T_NEO = 9;
+    /** Dlazdice ve trech sloupcich (ikona nahore, nazev pod ni). */
+    private static final int TILE_COLS = 3;
 
     public interface Actions {
         void openTarget(int target);
@@ -57,10 +63,10 @@ public final class QuickMenuView extends View {
         void requestBrightnessAccess();
     }
 
-    private static final String[] TILE_LABELS = {"Wi-Fi", "Bluetooth", "Nastavení", "Menu Questu",
-            "Soubory", "Prohlížeč", "Fotoaparát", "Neo"};
-    private static final int[] TILE_ICONS = {Icons.WIFI, Icons.BLUETOOTH, Icons.GEAR, Icons.SLIDERS,
-            Icons.FOLDER, Icons.GLOBE, Icons.CAMERA, Icons.NEO};
+    private static final String[] TILE_LABELS = {"Wi-Fi", "Bluetooth", "Streamovat", "Nastavení",
+            "Menu Questu", "Soubory", "Prohlížeč", "Uspat", "Vypnout", "Neo"};
+    private static final int[] TILE_ICONS = {Icons.WIFI, Icons.BLUETOOTH, Icons.CAST, Icons.HEADSET,
+            Icons.SLIDERS, Icons.FOLDER, Icons.GLOBE, Icons.MOON, Icons.POWER, Icons.NEO};
     private static final float W_DP = 400f;
     private static final float H_DP = 598f;
     /** Karta "Naposledy hrano": vyska a tlacitko uvnitr. */
@@ -76,7 +82,7 @@ public final class QuickMenuView extends View {
     private static final float PILL_H = 32f;
     private static final float PILL_PAD = 12f;
     /** Dlazdice rostou do volneho mista, ale jen v rozumnych mezich. */
-    private static final float TILE_MIN = 40f;
+    private static final float TILE_MIN = 52f;
     private static final float TILE_MAX = 72f;
     /** Postupny nastup prvku (kaskada), ms mezi prvky. */
     private static final float STAGGER_MS = 28f;
@@ -99,6 +105,7 @@ public final class QuickMenuView extends View {
     private boolean brightOk;
     private int volMax = 15;
     private int batteryLevel = -1;
+    private String batteryInfo;
     private boolean charging, fastCharging;
     private boolean wifiOn;
     private int wifiBars;
@@ -211,6 +218,12 @@ public final class QuickMenuView extends View {
         invalidate();
     }
 
+    /** Odhad vydrze / nabiti (vpravo na radku s datem), null = nic. */
+    public void setBatteryInfo(String text) {
+        batteryInfo = text;
+        invalidate();
+    }
+
     public void setBattery(int level, boolean isCharging, boolean isFast) {
         batteryLevel = level;
         charging = isCharging;
@@ -306,11 +319,11 @@ public final class QuickMenuView extends View {
         // Posledni "dlazdice" (Neo) = tlacitko "Nastaveni Nea" pres celou sirku dole.
         final float btnTop = h - pad - dp(Glass.BUTTON_H);
         rects[EL_TILE0 + T_NEO].set(pad, btnTop, w - pad, h - pad);
-        final int rows = (T_NEO + 1) / 2;
+        final int rows = (T_NEO + TILE_COLS - 1) / TILE_COLS;
         final float th = clamp((btnTop - gap - y - (rows - 1) * gap) / rows, dp(TILE_MIN), dp(TILE_MAX));
-        final float tw = (w - 2 * pad - gap) / 2f;
+        final float tw = (w - 2 * pad - (TILE_COLS - 1) * gap) / TILE_COLS;
         for (int i = 0; i < T_NEO; i++) {
-            final int col = i % 2, row = i / 2;
+            final int col = i % TILE_COLS, row = i / TILE_COLS;
             final float l = pad + col * (tw + gap);
             final float t = y + row * (th + gap);
             rects[EL_TILE0 + i].set(l, t, l + tw, t + th);
@@ -364,6 +377,19 @@ public final class QuickMenuView extends View {
         c.drawText(time, pad, timeBase, timeText);
         dateText.setColor(Palette.text2());
         c.drawText(date, pad, dateBase, dateText);
+        // Na stejnem radku vpravo: odhad vydrze baterie (nebo za jak dlouho bude nabito).
+        if (batteryInfo != null) {
+            final float dw = dateText.measureText(date);
+            final float max = w - 2 * pad - dw - dp(Glass.GAP);
+            if (max > dp(40)) {
+                final CharSequence info = android.text.TextUtils.ellipsize(batteryInfo, smallText, max,
+                        android.text.TextUtils.TruncateAt.END);
+                smallText.setColor(Palette.text2());
+                smallText.setTextAlign(Paint.Align.RIGHT);
+                c.drawText(info, 0, info.length(), w - pad, dateBase, smallText);
+                smallText.setTextAlign(Paint.Align.LEFT);
+            }
+        }
 
         // Vpravo nahore v jedne rade: Wi-Fi a baterie jako sklenene pilulky, svisle na stredu cislic hodin.
         final String pct = batteryLevel >= 0 ? batteryLevel + " %" : "–";
@@ -546,16 +572,16 @@ public final class QuickMenuView extends View {
             // Svetlo pod laserem: souradnice View prepocitane do lokalnich (stred dlazdice).
             drawHoverLight(c, el, -w2, -h2, w2, h2, rr, hc * ac,
                     (pointerX - r.centerX()) / s, (pointerY - r.centerY() - (1f - a) * dp(14)) / s);
-            // Vodorovna dlazdice: ikona vlevo (stejny okraj jako u posuvniku), nazev vedle.
+            // Dlazdice ve trech sloupcich: ikona nahore, nazev pod ni (cely blok na stredu).
             final int col = Palette.alpha(Palette.TEXT, ac);
-            final float ix = -w2 + dp(24);
-            Icons.draw(c, TILE_ICONS[i], ix, 0, dp(22), col, dp(1.8f), 1f, icon);
-            tileText.setTextAlign(Paint.Align.LEFT);
-            tileText.setColor(Palette.alpha(Palette.TEXT, 0.94f * ac));
             final Paint.FontMetrics fm = tileText.getFontMetrics();
-            // Presnejsi nazev (odliseni od nastaveni Nea).
-            c.drawText(i == T_QUEST_SETTINGS ? "Nastavení Questu" : TILE_LABELS[i],
-                    ix + dp(11) + dp(10), -(fm.ascent + fm.descent) / 2f, tileText);
+            final float iconS = dp(22), gapY = dp(6), textH = fm.descent - fm.ascent;
+            final float top = -(iconS + gapY + textH) / 2f;
+            Icons.draw(c, TILE_ICONS[i], 0, top + iconS / 2f, iconS, col, dp(1.8f), 1f, icon);
+            tileText.setTextAlign(Paint.Align.CENTER);
+            tileText.setColor(Palette.alpha(Palette.TEXT, 0.94f * ac));
+            c.drawText(TILE_LABELS[i], 0, top + iconS + gapY - fm.ascent, tileText);
+            tileText.setTextAlign(Paint.Align.LEFT);
         }
         c.restore();
     }

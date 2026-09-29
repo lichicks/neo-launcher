@@ -24,6 +24,7 @@ import android.widget.Toast;
 import com.neolauncher.art.ArtworkLoader;
 import com.neolauncher.data.AppEntry;
 import com.neolauncher.data.AppSizes;
+import com.neolauncher.data.BatteryEstimate;
 import com.neolauncher.data.Backup;
 import com.neolauncher.data.AppRepository;
 import com.neolauncher.data.Prefs;
@@ -74,6 +75,7 @@ public class LauncherActivity extends Activity
     private UsageInfo usage;
     /** Zabrane misto her (menu karty, razeni podle velikosti). */
     private AppSizes sizes;
+    private BatteryEstimate battery;
     private int batteryPct = -1;
     private boolean batteryCharging, batteryFast;
     private OverlayHost overlay;
@@ -113,6 +115,7 @@ public class LauncherActivity extends Activity
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         usage = new UsageInfo(this);
         sizes = new AppSizes(this);
+        battery = new BatteryEstimate(this);
         repo.setSignals(signals);
         launcher.setSignals(signals);
         carousel = new CarouselView(this);
@@ -140,6 +143,77 @@ public class LauncherActivity extends Activity
         if (!repo.apps().isEmpty()) showApps(false);
         repo.refreshAsync();
         lastRefreshMs = System.currentTimeMillis();
+        handleServiceIntent(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleServiceIntent(intent);
+    }
+
+    /** Neo otevrela sluzba Meta tlacitka: po ukonceni aplikace, nebo 3x Meta v Neu = zpet do hry. */
+    private void handleServiceIntent(Intent i) {
+        if (i == null) return;
+        final String stopped = i.getStringExtra(MetaButtonService.EXTRA_STOPPED);
+        if (stopped != null) {
+            i.removeExtra(MetaButtonService.EXTRA_STOPPED);
+            launcher.clearLive();
+            final String label = appLabel(stopped);
+            launcher.post(() -> notice(Icons.CHECK, "Ukončeno: " + label, Palette.COBALT_LIGHT, 3500));
+        }
+        if (i.getBooleanExtra(MetaButtonService.EXTRA_RESUME, false)) {
+            i.removeExtra(MetaButtonService.EXTRA_RESUME);
+            onRunningAction(NeoLauncherView.RUN_RESUME);
+        }
+    }
+
+    /** Nazev aplikace (prejmenovani z Nea, jinak z Androidu). */
+    private String appLabel(String pkg) {
+        final AppEntry e = repo.find(pkg);
+        if (e != null) return prefs.labelFor(e);
+        try {
+            return String.valueOf(getPackageManager().getApplicationLabel(
+                    getPackageManager().getApplicationInfo(pkg, 0)));
+        } catch (Exception ex) {
+            return pkg;
+        }
+    }
+
+    /** Lista bezici aplikace podle sluzby Meta tlacitka (3x Meta ze hry). */
+    private void syncRunningApp() {
+        final String pkg = MetaButtonService.runningApp();
+        if (pkg == null || pkg.equals(getPackageName())) {
+            launcher.setRunningApp(null, null);
+            return;
+        }
+        AppEntry e = repo.find(pkg);
+        final String label = appLabel(pkg);
+        if (e == null) e = new AppEntry(pkg, label, AppEntry.TYPE_2D, false);
+        launcher.setRunningApp(e, label);
+    }
+
+    @Override
+    public void onRunningAction(int action) {
+        final String pkg = MetaButtonService.runningApp();
+        MetaButtonService.clearRunning();
+        launcher.setRunningApp(null, null);
+        if (pkg == null || action == NeoLauncherView.RUN_HIDE) return;
+        final String label = appLabel(pkg);
+        if (action == NeoLauncherView.RUN_RESUME) {
+            AppEntry e = repo.find(pkg);
+            if (e == null) e = new AppEntry(pkg, label, AppEntry.TYPE_2D, false);
+            launchFromMenu(e);
+            return;
+        }
+        // Ukoncit: sluzba klepne v Informacich o aplikaci na Vynutit ukonceni a vrati se sem.
+        if (MetaButtonService.forceStop(pkg, label)) {
+            showLive(Icons.POWER, "Ukončuji " + label + "…", NeoLauncherView.LIVE_SPINNER, 0);
+        } else {
+            AppLauncher.openAppInfo(this, pkg);
+            Toast.makeText(this, "Klepni na „Vynutit ukončení“", Toast.LENGTH_LONG).show();
+        }
     }
 
     /** Po onStart prehrat nastup karet (jednou pri kazdem ukazani launcheru). */
@@ -149,6 +223,8 @@ public class LauncherActivity extends Activity
     protected void onStart() {
         super.onStart();
         registerReceivers();
+        // Navrat (napr. ze hry): kolik baterie ubylo = skutecna spotreba pro odhad vydrze.
+        battery.onReturn(batteryPct, batteryCharging);
         sVisible = true;
         // Launcher se prave ukazal (otevreni, navrat ze hry) -> v onResume nastup karet.
         introPending = true;
@@ -158,6 +234,7 @@ public class LauncherActivity extends Activity
     protected void onStop() {
         super.onStop();
         sVisible = false;
+        battery.onLeave(batteryPct, batteryCharging);
         unregisterReceivers();
     }
 
@@ -172,6 +249,7 @@ public class LauncherActivity extends Activity
         }
         launcher.onClockTick();
         carousel.onClockTick();
+        syncRunningApp();
         // Pri navratu do launcheru (napr. po odinstalaci ve Store) prekontrolovat aplikace.
         long now = System.currentTimeMillis();
         if (now - lastRefreshMs > 1500) {
@@ -458,6 +536,7 @@ public class LauncherActivity extends Activity
             }
         });
         menu.setBattery(batteryPct, batteryCharging, batteryFast);
+        menu.setBatteryInfo(batteryInfoText());
         final AppEntry last = lastPlayed();
         if (last != null) {
             final long t = signals.lastUsed(last.pkg);
@@ -577,15 +656,29 @@ public class LauncherActivity extends Activity
             case QuickMenuView.T_BROWSER:
                 ok = openPackage("com.oculus.browser", "Prohlížeč");
                 break;
-            case QuickMenuView.T_CAMERA:
-                ok = openPackage("com.oculus.metacam", "Fotoaparát");
+            case QuickMenuView.T_CAST:
+                // Sdileni Questu: streamovani (Chromecast, telefon...), nahravani a snimek obrazovky.
+                ok = openPanel("systemux://sharing") || openPanel("systemux://quick_settings");
                 break;
+            case QuickMenuView.T_SLEEP:
+                overlay.close();
+                if (!MetaButtonService.sleep()) needMetaService();
+                return;
+            case QuickMenuView.T_POWER:
+                overlay.close();
+                if (!MetaButtonService.powerMenu()) needMetaService();
+                return;
             default:
                 onOpenSettings();
                 return;
         }
         if (ok) overlay.close();
         else Toast.makeText(this, "Na tomto zařízení není k dispozici", Toast.LENGTH_SHORT).show();
+    }
+
+    /** Uspani / vypnuti umi jen sluzba Meta tlacitka (globalni akce pristupnosti). */
+    private void needMetaService() {
+        notice(Icons.ALERT, "Nejdřív zapni službu Meta tlačítka (Nastavení → Quest)", Palette.MAGENTA, 5000);
     }
 
     private boolean startSettings(String action) {
@@ -1035,10 +1128,12 @@ public class LauncherActivity extends Activity
         batteryPct = pct;
         batteryCharging = charging;
         batteryFast = fast;
+        battery.sample(charging);
         launcher.setBattery(pct, charging, fast);
         carousel.setBattery(pct, charging, fast);
         if (overlay.panel() instanceof QuickMenuView) {
             ((QuickMenuView) overlay.panel()).setBattery(pct, charging, fast);
+            ((QuickMenuView) overlay.panel()).setBatteryInfo(batteryInfoText());
         }
     }
 
@@ -1054,8 +1149,20 @@ public class LauncherActivity extends Activity
         } else if (charging && pct >= 100 && prev < 100) {
             showLive(Icons.CHECK, "Nabito na 100 %", Palette.COBALT_LIGHT, NeoLauncherView.LIVE_ICON_ONLY, 4000);
         } else if (!charging && ((pct <= 20 && prev > 20) || (pct <= 10 && prev > 10))) {
-            showLive(Icons.ALERT, "Slabá baterie · " + pct + " %", Palette.MAGENTA, NeoLauncherView.LIVE_ICON_ONLY, 5000);
+            final String left = BatteryEstimate.format(battery.minutesLeft(pct, false));
+            showLive(Icons.ALERT, "Slabá baterie · " + pct + " %" + (left != null ? " · asi " + left : ""),
+                    Palette.MAGENTA, NeoLauncherView.LIVE_ICON_ONLY, 5000);
         }
+    }
+
+    /** Pod hodinami rychleho menu: jak dlouho baterie vydrzi / za jak dlouho bude nabito. */
+    private String batteryInfoText() {
+        if (batteryCharging) {
+            final String full = chargeTimeText();
+            return batteryPct >= 100 ? "nabito" : full != null ? "nabito za " + full : null;
+        }
+        final String left = BatteryEstimate.format(battery.minutesLeft(batteryPct, false));
+        return left != null ? "vydrží asi " + left : null;
     }
 
     /** Odhad systemu, za jak dlouho bude nabito ("1 h 5 min"), nebo null. */

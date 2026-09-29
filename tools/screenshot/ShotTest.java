@@ -290,6 +290,13 @@ public class ShotTest {
             cn.recycle();
             pump(1200);
         }
+        // Lista bezici aplikace (3x Meta ze hry): Pokracovat / Ukoncit / skryt.
+        grid.setRunningApp(apps.get(0), "Beat Saber");
+        hover(grid, grid.getWidth() / 2f + 40 * d, grid.getHeight() - 60 * d);
+        pump(1100);
+        capture(a, root, outDir + "/neo-running.png");
+        grid.setRunningApp(null, null);
+        pump(900);
         com.neolauncher.ui.QuickMenuView menu = new com.neolauncher.ui.QuickMenuView(a,
                 new com.neolauncher.ui.QuickMenuView.Actions() {
                     @Override public void openTarget(int t) { }
@@ -297,6 +304,7 @@ public class ShotTest {
                     @Override public void launch(AppEntry app) { }
                 });
         menu.setBattery(14, false, false);
+        menu.setBatteryInfo("vydrží asi 25 min");
         menu.setLastPlayed(apps.get(5), "BONELAB", "Naposledy hráno · včera", art.get(apps.get(5)));
         // Leva lista po najeti (rozbalena s popisky).
         android.graphics.RectF gear = grid.settingsRect();

@@ -80,6 +80,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
         /** Hledani (ikona lupy v leve liste). */
         void onOpenSearch(RectF origin);
+
+        /** Lista bezici aplikace: RUN_RESUME / RUN_QUIT / RUN_HIDE. */
+        void onRunningAction(int action);
     }
 
     // --- Rozmery z preview (dp) ----------------------------------------------
@@ -129,6 +132,16 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private static final long LIVE_MAX_MS = 120_000L;
     /** Delsi text se zkrati trojteckou. */
     private static final float LIVE_TEXT_MAX = 280f;
+    /**
+     * Lista bezici aplikace dole na panelu (3x Meta): vyska, okraj uvnitr
+     * (soustredne: radius 32 - 8 = 24 u nahledu a tlacitek), odsazeni od spodni hrany.
+     */
+    private static final float RUN_H = 64f;
+    private static final float RUN_INSET = 8f;
+    private static final float RUN_BOTTOM = 16f;
+    private static final float RUN_BTN_PAD = 18f;
+    private static final float RUN_TITLE_MAX = 200f;
+    private static final String[] RUN_LABELS = {"Pokračovat", "Ukončit"};
     /** Tekute sklo ornamentu: sirka lomiveho okraje a posun obrazu na hrane (dp). */
     private static final float LIQUID_BAND = 16f;
     private static final float LIQUID_STRENGTH = 11f;
@@ -201,6 +214,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private static final int ZONE_RAIL0 = 20; // +index polozky leve listy
     private static final int ZONE_RAIL_BG = 30;
     private static final int ZONE_ORN_BG = 31;
+    /** Lista bezici aplikace: tlacitka (+index) a zbytek listy. */
+    private static final int ZONE_RUN0 = 40;
+    private static final int ZONE_RUN_BG = 43;
 
     private static final String[] RAIL_LABELS = {"Knihovna", "Hledat", "Karusel", "Rychlé menu", "Nastavení"};
     private static final int[] RAIL_ICONS = {Icons.COLUMNS, Icons.SEARCH, Icons.CAROUSEL, Icons.SLIDERS, Icons.GEAR};
@@ -368,6 +384,28 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final Spring liveWidth = new Spring(0, 0.4f, 0.9f, 0.3f);
     private final Runnable liveExpire = this::invalidate;
 
+    // --- Lista bezici aplikace (Pokracovat / Ukoncit) --------------------------------
+    public static final int RUN_RESUME = 0;
+    public static final int RUN_QUIT = 1;
+    public static final int RUN_HIDE = 2;
+    private AppEntry runApp;
+    private String runLabel;
+    private boolean runOn;
+    private final Spring runAmt = new Spring(0, 0.46f, 0.78f, 0.001f);
+    private final RectF runRect = new RectF();
+    private final RectF runThumb = new RectF();
+    private final RectF[] runBtn = {new RectF(), new RectF(), new RectF()};
+    private final Eased[] runHover = {new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT),
+            new Eased(0, 180, Eased.EASE_OUT)};
+    private final GlassSurface runGlass = new GlassSurface();
+    private final GlassSurface[] runBtnGlass = {new GlassSurface(), new GlassSurface()};
+    private Bitmap runArt;
+    private BitmapShader runShader;
+    private final Matrix runMatrix = new Matrix();
+    private final TextPaint runTitle = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+    private final TextPaint runSub = new TextPaint(Paint.ANTI_ALIAS_FLAG | Paint.SUBPIXEL_TEXT_FLAG);
+    private String runShownTitle;
+
     // --- Kresleni ------------------------------------------------------------------
     private final Matrix shaderMatrix = new Matrix();
     private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -410,6 +448,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private RenderEffect backdropEffect;
     /** Lom svetla u okraje horni bubliny (tekute sklo), retezeny za rozmazanim. */
     private final LiquidGlass liquidGlass = new LiquidGlass();
+    /** Totez pro listu bezici aplikace (vlastni instance - jina velikost, vlastni cache efektu). */
+    private final RenderNode runBackdropNode = new RenderNode("neo-run-backdrop");
+    private final LiquidGlass runLiquid = new LiquidGlass();
     private ModalDepth modalDepth;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
@@ -491,6 +532,11 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
         stroke.setStyle(Paint.Style.STROKE);
 
+        runTitle.setTypeface(semi);
+        runTitle.setTextSize(dp(15));
+        runSub.setTypeface(Typeface.create(Typeface.SANS_SERIF, 400, false));
+        runSub.setTextSize(dp(12.5f));
+
         // Blesk z preview: SVG path "M11 2L4 13h5l-1.5 9L18 11h-5.5L14 2Z" (viewBox 24x24)
         boltPath.moveTo(11, 2);
         boltPath.lineTo(4, 13);
@@ -552,6 +598,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         }
         contentNode.discardDisplayList();
         backdropNode.discardDisplayList();
+        runBackdropNode.discardDisplayList();
         for (Card k : cards) if (k.node != null) k.node.discardDisplayList();
         peephole.discard();
     }
@@ -686,6 +733,30 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         liveUntilNs = 1L; // v minulosti
         liveAmt.set(0f, System.nanoTime());
         handler.removeCallbacks(liveExpire);
+        invalidate();
+    }
+
+    /**
+     * Lista bezici aplikace (3x Meta ze hry): dole na panelu nahled, nazev
+     * a tlacitka Pokracovat / Ukoncit / skryt. null = schovat.
+     */
+    public void setRunningApp(AppEntry app, String label) {
+        final long now = System.nanoTime();
+        final boolean on = app != null;
+        if (on) {
+            runApp = app;
+            runLabel = label;
+            runShownTitle = null;
+        }
+        if (on != runOn) {
+            runOn = on;
+            runAmt.set(on ? 1f : 0f, now);
+            updateScrollBounds();
+            if (!on && hoverZone >= ZONE_RUN0 && hoverZone <= ZONE_RUN_BG) {
+                hoverZone = ZONE_NONE;
+                updateZoneHover(now);
+            }
+        }
         invalidate();
     }
 
@@ -904,7 +975,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private void updateScrollBounds() {
         final int rows = (cards.size() + cols - 1) / cols;
         final float contentH = rows * cardH + Math.max(0, rows - 1) * gap;
-        final float visibleBottom = frame.bottom - dp(GRID_BOTTOM);
+        // Lista bezici aplikace prekryva spodek mrizky - posledni rada musi jit odrolovat nad ni.
+        final float visibleBottom = frame.bottom - dp(GRID_BOTTOM) - (runOn ? dp(RUN_H + RUN_BOTTOM) : 0f);
         minScroll = Math.min(0f, visibleBottom - (gridTop + contentH));
         if (!touching) kickScroll();
     }
@@ -1050,11 +1122,18 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         for (int i = 0; i < railHover.length; i++) {
             railHover[i].set(hoverZone == ZONE_RAIL0 + i ? 1f : 0f, now);
         }
+        for (int i = 0; i < runHover.length; i++) {
+            runHover[i].set(hoverZone == ZONE_RUN0 + i ? 1f : 0f, now);
+        }
         // Leva lista se po najeti rozbali a ukaze popisky (jako lista ve visionOS).
         railExpand.set(isRailZone(hoverZone) ? 1f : 0f, now);
     }
 
     private int zoneAt(float x, float y) {
+        if (runOn && runRect.contains(x, y)) {
+            for (int i = 0; i < runBtn.length; i++) if (runBtn[i].contains(x, y)) return ZONE_RUN0 + i;
+            return ZONE_RUN_BG;
+        }
         if (railRect.contains(x, y)) {
             if (brandRect.contains(x, y)) return ZONE_BRAND;
             for (int i = 0; i < railRects.length; i++) if (railRects[i].contains(x, y)) return ZONE_RAIL0 + i;
@@ -1277,6 +1356,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 if (host != null) host.onOpenQuickMenu(new RectF(railRects[RAIL_QUICK]));
             } else if (zone == ZONE_RAIL0 + RAIL_SETTINGS) {
                 if (host != null) host.onOpenSettings();
+            } else if (zone >= ZONE_RUN0 && zone < ZONE_RUN0 + runBtn.length) {
+                if (host != null && runOn) host.onRunningAction(zone - ZONE_RUN0);
             }
             return;
         }
@@ -1299,7 +1380,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
     /**
      * "Kukatko" (viz PeepholeAnimation). Aplikace se spusti v polovine animace,
-     * na konci se launcher zavre (pokud je to zapnute v nastaveni). Obojí ridi
+     * na konci se launcher zavre (pokud je to zapnute v nastaveni). Oboji ridi
      * casovace, ne vykreslovani - pri spusteni VR hry se okno prestane kreslit.
      */
     private void startLaunch(Card k, long now, float animScale) {
@@ -1588,6 +1669,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         }
         drawRail(canvas, now);
         drawOrnament(canvas, now);
+        drawRunBar(canvas, now);
         if (par) canvas.restore();
         drawFocusedCard(canvas, now);
         drawDraggedCard(canvas, now);
@@ -1604,11 +1686,12 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 || (liveProgress == LIVE_SPINNER && liveOn(now))
                 || brandHover.active(now) || brandTap.active(now) || batteryHover.active(now)
                 || dragLift.active(now) || railExpand.active(now) || wiggle.active(now)
-                || ghostX.active(now) || ghostY.active(now)
+                || ghostX.active(now) || ghostY.active(now) || runAmt.active(now)
                 || (isLowBattery() && now - lowBatterySinceNs < LOW_BATTERY_PULSE_NS)
                 || dragTilt.active(now)) return true;
         for (Eased e : tabHover) if (e.active(now)) return true;
         for (Eased e : railHover) if (e.active(now)) return true;
+        for (Eased e : runHover) if (e.active(now)) return true;
         for (Card k : cards) {
             if (k.hover.active(now) || k.rotX.active(now) || k.rotY.active(now)
                     || k.press.active(now) || k.x.active(now) || k.y.active(now)
@@ -1755,6 +1838,12 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         ornHole.reset();
         ornHole.addRoundRect(ornRect.left + ox, ornRect.top + oy, ornRect.right + ox, ornRect.bottom + oy,
                 r, r, Path.Direction.CW);
+        // Usazena lista bezici aplikace ma pod sebou taky jen sve (rozmazane) sklo.
+        if (runOn && runAmt.get(now) >= 0.99f && !runRect.isEmpty()) {
+            final float rr = runRect.height() / 2f;
+            ornHole.addRoundRect(runRect.left + ox, runRect.top + oy, runRect.right + ox, runRect.bottom + oy,
+                    rr, rr, Path.Direction.CW);
+        }
     }
 
     /**
@@ -2238,6 +2327,33 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             railRects[i].set(left + pad, y, railRect.right - pad, y + it);
             y += it + gapY;
         }
+        layoutRunBar();
+    }
+
+    /** Lista bezici aplikace: [nahled] nazev | Pokracovat | Ukoncit | x, na stredu dole v panelu. */
+    private void layoutRunBar() {
+        if (runLabel == null) return;
+        if (runShownTitle == null) {
+            runShownTitle = TextUtils.ellipsize(runLabel, runTitle, dp(RUN_TITLE_MAX),
+                    TextUtils.TruncateAt.END).toString();
+        }
+        final float h = dp(RUN_H), in = dp(RUN_INSET), bh = h - 2 * in;
+        final float thumbW = bh * ArtworkLoader.CARD_ASPECT;
+        final float textW = Math.max(runTitle.measureText(runShownTitle), runSub.measureText("Běží na pozadí"));
+        final float icon = dp(18), gapI = dp(Glass.GAP_S);
+        final float b0 = 2 * dp(RUN_BTN_PAD) + icon + gapI + tabText.measureText(RUN_LABELS[0]);
+        final float b1 = 2 * dp(RUN_BTN_PAD) + icon + gapI + tabText.measureText(RUN_LABELS[1]);
+        final float w = in + thumbW + dp(14) + textW + dp(Glass.PAD) + b0 + dp(Glass.GAP_S) + b1
+                + dp(Glass.GAP_S) + bh + in;
+        final float bottom = frame.bottom - dp(RUN_BOTTOM);
+        runRect.set(frame.centerX() - w / 2f, bottom - h, frame.centerX() + w / 2f, bottom);
+        runThumb.set(runRect.left + in, runRect.top + in, runRect.left + in + thumbW, runRect.bottom - in);
+        float x = runRect.right - in;
+        runBtn[RUN_HIDE].set(x - bh, runRect.top + in, x, runRect.bottom - in);
+        x -= bh + dp(Glass.GAP_S);
+        runBtn[RUN_QUIT].set(x - b1, runRect.top + in, x, runRect.bottom - in);
+        x -= b1 + dp(Glass.GAP_S);
+        runBtn[RUN_RESUME].set(x - b0, runRect.top + in, x, runRect.bottom - in);
     }
 
     private float batteryWidth() {
@@ -2249,8 +2365,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
     /**
      * Sklo plovouciho prvku (ornament, lista) - stejny recept jako panel, s mekkym stinem.
-     * Stin jen VNE tvaru (clipOut), at sklo zustane pruhledne. Ornament (liquid) je
-     * pruhlednejsi - pod nim je rozmazany a lomeny obsah.
+     * Stin jen VNE tvaru (clipOut). Ornament a lista bezici aplikace (liquid) jsou
+     * pruhledne - pod nimi je rozmazany a lomeny obsah (backdrop); lista vlevo ma
+     * kryci telo (pod ni zadny rozmazany podklad neni).
      */
     private void drawChromeGlass(Canvas c, GlassSurface g, RectF r, float radius, boolean liquid) {
         final boolean light = prefs.glassStyle() == Prefs.GLASS_VISION;
@@ -2264,6 +2381,12 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         c.drawRoundRect(r.left + dp(2), r.top + dp(2), r.right - dp(2), r.bottom - dp(2), radius, radius, fill);
         fill.clearShadowLayer();
         c.restore();
+        if (!liquid) {
+            // Bez rozmazaneho podkladu (lista) kryci telo - karty pod rozbalenou listou
+            // by jinak prosvitaly i s napisy.
+            fill.setColor(light ? 0xFF6B7380 : Palette.VOID);
+            c.drawRoundRect(r.left + dp(1), r.top + dp(1), r.right - dp(1), r.bottom - dp(1), radius, radius, fill);
+        }
         final GlassSurface.Style st = liquid
                 ? (light ? GlassSurface.LIQUID_LIGHT : GlassSurface.LIQUID_DARK)
                 : (light ? GlassSurface.CHROME_LIGHT : GlassSurface.CHROME_DARK);
@@ -2369,6 +2492,139 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         c.drawText(liveText, cx + ringR + dp(LIVE_GAP), base, clockText);
         clockText.setColor(Palette.TEXT);
         c.restore();
+    }
+
+    /**
+     * Lista bezici aplikace (3x Meta ze hry): vyjede zdola na pruzine. Nahled hry,
+     * nazev, "Bezi na pozadi" a tlacitka Pokracovat (perlove) / Ukoncit / skryt.
+     */
+    private void drawRunBar(Canvas c, long now) {
+        final float a = runAmt.get(now);
+        if (a <= 0.004f || runLabel == null || runRect.isEmpty()) return;
+        final float ac = clamp(a, 0f, 1f);
+        final float h2 = runRect.height() / 2f;
+        c.save();
+        c.translate(0, (1f - a) * dp(28));
+        final float s = 0.94f + 0.06f * ac;
+        c.scale(s, s, runRect.centerX(), runRect.centerY());
+        final boolean fading = ac < 0.999f;
+        if (fading) {
+            tmp.set(runRect);
+            tmp.inset(-dp(40), -dp(40));
+            c.saveLayerAlpha(tmp, Math.round(255 * ac));
+        }
+        if (c.isHardwareAccelerated()) drawRunBackdrop(c, now);
+        drawChromeGlass(c, runGlass, runRect, h2, true);
+        drawRimLight(c, now, runRect, h2, false);
+
+        // Nahled hry (banner), soustredne zaobleny.
+        final float tr = runThumb.height() / 2f;
+        final Bitmap art = artwork != null && runApp != null ? artwork.get(runApp) : null;
+        if (art != runArt) {
+            runArt = art;
+            runShader = art != null ? new BitmapShader(art, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) : null;
+        }
+        if (runShader != null) {
+            final float k = Math.max(runThumb.width() / runArt.getWidth(), runThumb.height() / runArt.getHeight());
+            runMatrix.setScale(k, k);
+            runMatrix.postTranslate(runThumb.centerX() - runArt.getWidth() * k / 2f,
+                    runThumb.centerY() - runArt.getHeight() * k / 2f);
+            runShader.setLocalMatrix(runMatrix);
+            fill.setColor(Color.WHITE);
+            fill.setShader(runShader);
+            c.drawRoundRect(runThumb, tr, tr, fill);
+            fill.setShader(null);
+        } else {
+            fill.setShader(null);
+            fill.setColor(0x26FFFFFF);
+            c.drawRoundRect(runThumb, tr, tr, fill);
+        }
+        stroke.setShader(null);
+        stroke.setStrokeWidth(dp(1));
+        stroke.setColor(0x33FFFFFF);
+        c.drawRoundRect(runThumb.left + dp(0.5f), runThumb.top + dp(0.5f), runThumb.right - dp(0.5f),
+                runThumb.bottom - dp(0.5f), tr, tr, stroke);
+
+        // Nazev a stav.
+        final float tx = runThumb.right + dp(14);
+        final Paint.FontMetrics tfm = runTitle.getFontMetrics();
+        final Paint.FontMetrics sfm = runSub.getFontMetrics();
+        final float th = (tfm.descent - tfm.ascent) + dp(2) + (sfm.descent - sfm.ascent);
+        final float ty = runRect.centerY() - th / 2f;
+        runTitle.setColor(Palette.TEXT);
+        c.drawText(runShownTitle, tx, ty - tfm.ascent, runTitle);
+        runSub.setColor(Palette.text2());
+        c.drawText("Běží na pozadí", tx, ty + (tfm.descent - tfm.ascent) + dp(2) - sfm.ascent, runSub);
+
+        // Tlacitka.
+        final Paint.FontMetrics bfm = tabText.getFontMetrics();
+        final float icon = dp(18), gapI = dp(Glass.GAP_S);
+        for (int i = 0; i < runBtn.length; i++) {
+            final RectF r = runBtn[i];
+            final float hv = runHover[i].get(now);
+            final float rr = r.height() / 2f;
+            final float cy = r.centerY();
+            if (i == RUN_RESUME) {
+                // Hlavni akce: perlova pilulka s tmavym textem.
+                fill.setColor(Color.WHITE);
+                fill.setShader(pearlShader(r.left, r.top, r.right, r.bottom));
+                c.drawRoundRect(r, rr, rr, fill);
+                fill.setShader(null);
+                if (hv > 0.004f) {
+                    fill.setColor(Color.argb(Math.round(110 * hv), 255, 255, 255));
+                    c.drawRoundRect(r, rr, rr, fill);
+                }
+            } else {
+                final GlassSurface g = runBtnGlass[i == RUN_QUIT ? 0 : 1];
+                g.draw(c, r.left, r.top, r.right, r.bottom, rr, hv > 0.5f ? GlassSurface.TILE_HOVER : GlassSurface.TILE,
+                        d, 1f);
+                if (hv > 0.004f) {
+                    fill.setShader(null);
+                    fill.setColor(Color.argb(Math.round(26 * hv), 255, 255, 255));
+                    c.drawRoundRect(r, rr, rr, fill);
+                }
+            }
+            if (i == RUN_HIDE) {
+                Icons.draw(c, Icons.CLOSE, r.centerX(), cy, dp(18), Palette.TEXT, dp(1.8f), 1f, fill);
+                continue;
+            }
+            final int ink = i == RUN_RESUME ? Glass.INK : Palette.TEXT;
+            float x = r.left + dp(RUN_BTN_PAD);
+            if (i == RUN_RESUME) Icons.fill(c, Icons.PLAY, x + icon / 2f, cy, icon * 0.85f, ink, fill);
+            else Icons.draw(c, Icons.POWER, x + icon / 2f, cy, icon, Palette.MAGENTA, dp(1.8f), 1f, fill);
+            tabText.setTextAlign(Paint.Align.LEFT);
+            tabText.setColor(ink);
+            c.drawText(RUN_LABELS[i], x + icon + gapI, cy - (bfm.ascent + bfm.descent) / 2f, tabText);
+            tabText.setTextAlign(Paint.Align.CENTER);
+        }
+        if (fading) c.restore();
+        c.restore();
+    }
+
+    /** Tekute sklo listy: rozmazana kopie panelu a karet pod ni (jako u ornamentu). */
+    private void drawRunBackdrop(Canvas canvas, long now) {
+        if (backdropEffect == null) return;
+        final int l = Math.round(runRect.left), t = Math.round(runRect.top);
+        final int w = Math.round(runRect.width()), h = Math.round(runRect.height());
+        if (w <= 0 || h <= 0) return;
+        runBackdropNode.setPosition(l, t, l + w, t + h);
+        final Outline o = new Outline();
+        o.setRoundRect(0, 0, w, h, h / 2f);
+        runBackdropNode.setOutline(o);
+        runBackdropNode.setClipToOutline(true);
+        final RecordingCanvas rc = runBackdropNode.beginRecording(w, h);
+        try {
+            rc.translate(-l, -t);
+            rc.clipRect(frame.left, frame.top, frame.right, frame.bottom);
+            if (panelStyle != null) {
+                panelGlass.draw(rc, frame, dp(FRAME_RADIUS), panelStyle, getResources().getDisplayMetrics().density);
+            }
+            drawCardsInto(rc, now, runRect.top, runRect.bottom, 0f, false);
+        } finally {
+            runBackdropNode.endRecording();
+        }
+        runBackdropNode.setRenderEffect(runLiquid.effect(backdropEffect, w, h, dp(LIQUID_BAND), dp(LIQUID_STRENGTH)));
+        canvas.drawRenderNode(runBackdropNode);
     }
 
     /** Pilulka baterie: procenta v barve nabiti, bile blesky pri nabijeni. */

@@ -72,6 +72,8 @@ ICONS = [
     ("CHECK", "circle-check"),
     ("ALERT", "circle-alert"),
     ("BATTERY_CHARGING", "battery-charging"),
+    ("CAST", "cast"),
+    ("MOON", "moon"),
 ]
 
 

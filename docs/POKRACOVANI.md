@@ -1,6 +1,6 @@
 # Neo Launcher – předávací dokument (jak navázat)
 
-> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **29. 9. 2026, verze v2.0.49**),
+> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **29. 9. 2026, verze v2.0.50**),
 > a jak na to navázat v novém chatu – i s málo kredity. Podrobný technický
 > kontext je v [`CLAUDE.md`](../CLAUDE.md) v kořeni repozitáře.
 
@@ -84,6 +84,11 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
 - **Nové (29. 9., zatím neověřené na headsetu):** instalace APK z Nea (Nastavení → Aplikace),
   velikost her v menu karty + řazení „Velikost“, záloha a obnova nastavení (Nastavení → O Neo),
   paralaxa (karty se posouvají za laserem, lišty proti němu, na kartě odlesk; jde vypnout).
+- **Nové (29. 9. noc, neověřené):** 3× Meta ve hře otevře Neo s lištou dole
+  (Pokračovat / Ukončit / skrýt; Ukončit klepne za uživatele na Vynutit ukončení
+  v informacích o aplikaci), v Neu 3× Meta = zpět do hry; rychlé menu má dlaždice
+  Streamovat (sdílení Questu), Uspat a Vypnout (přes službu Meta tlačítka) a odhad
+  výdrže baterie.
 - **Nové (29. 9. večer, neověřené):** Neo se otevře po zapnutí Questu; živá bublina
   v horní liště (instalace, stahování aktualizace, záloha, nabíjení s odhadem, slabá baterie –
   nahradila vyskakovací hlášky); tekuté sklo horní bubliny (lom u okraje, AGSL); hrana skla
@@ -133,12 +138,12 @@ Zvuky/haptika a počasí možná později.
    (Android 14 obyčejné aplikaci nedovolí zavřít jinou) – čte systémové menu Questu
    a zmáčkne jeho „Ukončit“. Uživatel nechtěl jednodušší verzi s odhadem.
 
-**Nové nápady (29. 9. večer, uživatel zatím nevybral):** odhad výdrže baterie
-(CHARGE_COUNTER / CURRENT_NOW), úsporný režim při slabé baterii (vypne efekty, ztlumí jas),
+**Nové nápady (29. 9. večer, uživatel zatím nevybral; odhad výdrže, uspat/vypnout
+a dvojí/trojí Meta už jsou hotové):** úsporný režim při slabé baterii (vypne efekty, ztlumí jas),
 varování před přehřátím (PowerManager thermal status) v bublině, kontrola baterie před
 spuštěním velké hry, „Uvolnit místo“ (velké hry nehrané 30+ dní), kvalita Wi-Fi pro
 streamování z PC (pásmo, rychlost linky, ping), ADB přes Wi-Fi jedním klepnutím,
-dvojí stisk Meta = předchozí aplikace, Uspat / Snímek obrazovky v rychlém menu
+dvojí stisk Meta = předchozí aplikace, Snímek obrazovky v rychlém menu
 (globální akce služby přístupnosti), velká karta „Pokračovat“ s poslední hrou nahoře.
 
 **Starší nápady, které uživatel zatím nevybral:** info bublina při delším najetí, štítek

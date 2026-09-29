@@ -1,3 +1,11 @@
+# 3× Meta, odhad výdrže a uspání z Nea
+• Třikrát rychle zmáčkni Meta ve hře nebo aplikaci: otevře se Neo a dole lišta s tím, co běží na pozadí – Pokračovat, Ukončit, nebo ji schovat. Když pak v Neu zmáčkneš Meta zase třikrát, vrátíš se do hry. Zapíná se v Nastavení → Quest a potřebuje službu Meta tlačítka
+• Ukončit aplikaci zvládne Neo samo: na chvilku otevře informace o aplikaci a klepne za tebe na „Vynutit ukončení“
+• Rychlé menu má nové dlaždice: Streamovat (sdílení obrazu do televize nebo telefonu, nahrávání a snímky), Uspat a Vypnout (nabídka vypnutí a restartu). Uspat a Vypnout taky potřebují službu Meta tlačítka. Dlaždice Fotoaparát ustoupila – nahrávání a snímky najdeš ve Streamovat
+• Rychlé menu ukazuje, jak dlouho ještě baterie vydrží (Neo se učí z toho, kolik baterie ubude při hraní), a při nabíjení, za jak dlouho bude nabito. Odhad je i v upozornění na slabou baterii
+• Levá lišta je zase krycí – po rozbalení přes ni neprosvítají karty
+• Opravené plochy, které se místo výplně kreslily jen jako obrys (třeba zvýraznění v levé liště)
+
 # Živá bublina, tekuté sklo a přesouvání karet
 • Po zapnutí Questu se rovnou otevře Neo (Nastavení → Quest, potřebuje zapnutou službu Meta tlačítka)
 • Horní bublina ožila: když se něco děje, čas a baterie se v ní na chvíli promění – instalace APK s kroužkem průběhu, stahování nové verze Nea, záloha, začátek nabíjení (i odhad, za jak dlouho bude nabito), nabito na 100 % nebo slabá baterie. Místo vyskakovacích hlášek teď oznámení ukazuje právě bublina

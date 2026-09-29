@@ -440,7 +440,7 @@ místo `com.oculus.panelapp.library`) → přepsáno na doplněk jako u LL (viz
    ukončení hry se otevře Neo – a neotevře se při pouhé pauze? Při
    problému `adb -P 5038 logcat -s NeoMeta`.
 
-0. **Nejdřív (doplněk, v2.0.57+):** Nastavení → Quest → Meta tlačítko →
+0. **Nejdřív (doplněk, v2.0.59+):** Nastavení → Quest → Meta tlačítko →
    Nainstalovat → potvrdit → otevře se Android Přístupnost → zapnout
    „Neo – Meta tlačítko“ (bez Omezeného nastavení?). Službu Lightning
    Launcheru vypnout. Meta doma → Neo? Pak vše, co na doplňku stojí (3× Meta,

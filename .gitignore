@@ -6,3 +6,6 @@ local.properties
 *.iml
 .DS_Store
 captures/
+# Doplnek Meta tlacitka - pridava ho CI (viz build.yml), neni v gitu
+app/src/main/assets/meta-addon.apk
+metaaddon/build/

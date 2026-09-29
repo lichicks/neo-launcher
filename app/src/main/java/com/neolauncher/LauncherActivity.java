@@ -151,22 +151,29 @@ public class LauncherActivity extends Activity
         super.onNewIntent(intent);
         setIntent(intent);
         // Neo otevrene znovu (Meta tlacitko, knihovna), i kdyz okno nebylo zastavene -> nastup karet.
-        if (!carouselShown && !intent.getBooleanExtra(MetaButtonService.EXTRA_RESUME, false)) launcher.playIntro();
+        if (!carouselShown && !intent.getBooleanExtra(MetaAddon.EXTRA_RESUME, false)) launcher.playIntro();
         handleServiceIntent(intent);
     }
 
     /** Neo otevrela sluzba Meta tlacitka: po ukonceni aplikace, nebo 3x Meta v Neu = zpet do hry. */
     private void handleServiceIntent(Intent i) {
         if (i == null) return;
-        final String stopped = i.getStringExtra(MetaButtonService.EXTRA_STOPPED);
+        final String running = i.getStringExtra(MetaAddon.EXTRA_RUNNING);
+        if (running != null) {
+            // Doplnek otevrel Neo ze hry / aplikace (Meta nebo 3x Meta) -> lista Pokracovat / Ukoncit.
+            i.removeExtra(MetaAddon.EXTRA_RUNNING);
+            MetaAddon.setRunning(running);
+            syncRunningApp();
+        }
+        final String stopped = i.getStringExtra(MetaAddon.EXTRA_STOPPED);
         if (stopped != null) {
-            i.removeExtra(MetaButtonService.EXTRA_STOPPED);
+            i.removeExtra(MetaAddon.EXTRA_STOPPED);
             launcher.clearLive();
             final String label = appLabel(stopped);
             launcher.post(() -> notice(Icons.CHECK, "Ukončeno: " + label, Palette.COBALT_LIGHT, 3500));
         }
-        if (i.getBooleanExtra(MetaButtonService.EXTRA_RESUME, false)) {
-            i.removeExtra(MetaButtonService.EXTRA_RESUME);
+        if (i.getBooleanExtra(MetaAddon.EXTRA_RESUME, false)) {
+            i.removeExtra(MetaAddon.EXTRA_RESUME);
             onRunningAction(NeoLauncherView.RUN_RESUME);
         }
     }
@@ -185,7 +192,7 @@ public class LauncherActivity extends Activity
 
     /** Lista bezici aplikace podle sluzby Meta tlacitka (3x Meta ze hry). */
     private void syncRunningApp() {
-        final String pkg = MetaButtonService.runningApp();
+        final String pkg = MetaAddon.runningApp();
         if (pkg == null || pkg.equals(getPackageName())) {
             launcher.setRunningApp(null, null);
             return;
@@ -198,8 +205,8 @@ public class LauncherActivity extends Activity
 
     @Override
     public void onRunningAction(int action) {
-        final String pkg = MetaButtonService.runningApp();
-        MetaButtonService.clearRunning();
+        final String pkg = MetaAddon.runningApp();
+        MetaAddon.clearRunning(this);
         launcher.setRunningApp(null, null);
         if (pkg == null || action == NeoLauncherView.RUN_HIDE) return;
         final String label = appLabel(pkg);
@@ -210,7 +217,7 @@ public class LauncherActivity extends Activity
             return;
         }
         // Ukoncit: sluzba klepne v Informacich o aplikaci na Vynutit ukonceni a vrati se sem.
-        if (MetaButtonService.forceStop(pkg, label)) {
+        if (MetaAddon.forceStop(this, pkg)) {
             showLive(Icons.POWER, "Ukončuji " + label + "…", NeoLauncherView.LIVE_SPINNER, 0);
         } else {
             AppLauncher.openAppInfo(this, pkg);
@@ -634,7 +641,7 @@ public class LauncherActivity extends Activity
 
     private void openQuickTarget(int target) {
         // Otevreni systemu Questu z rychleho menu neni zmacknuti Meta tlacitka.
-        MetaButtonService.suppress(4000);
+        MetaAddon.suppress(this, 4000);
         boolean ok;
         switch (target) {
             case QuickMenuView.T_WIFI:
@@ -668,11 +675,11 @@ public class LauncherActivity extends Activity
                 break;
             case QuickMenuView.T_SLEEP:
                 overlay.close();
-                if (!MetaButtonService.sleep()) needMetaService();
+                if (!MetaAddon.sleep(this)) needMetaService();
                 return;
             case QuickMenuView.T_POWER:
                 overlay.close();
-                if (!MetaButtonService.powerMenu()) needMetaService();
+                if (!MetaAddon.powerMenu(this)) needMetaService();
                 return;
             default:
                 onOpenSettings();
@@ -684,7 +691,46 @@ public class LauncherActivity extends Activity
 
     /** Uspani / vypnuti umi jen sluzba Meta tlacitka (globalni akce pristupnosti). */
     private void needMetaService() {
-        notice(Icons.ALERT, "Nejdřív zapni službu Meta tlačítka (Nastavení → Quest)", Palette.MAGENTA, 5000);
+        notice(Icons.ALERT, "Nejdřív nainstaluj a zapni Meta tlačítko (Nastavení → Quest)", Palette.MAGENTA, 5000);
+    }
+
+    /**
+     * Nainstaluje pribaleny doplnek "Neo - Meta tlacitko" (Nastaveni -> Quest). Po instalaci
+     * se otevre Pristupnost v Android nastaveni, kde ho uzivatel zapne.
+     */
+    public void installMetaAddon() {
+        overlay.close();
+        final boolean started = MetaAddon.install(this, new ApkInstaller.Listener() {
+            @Override
+            public void onProgress(float p) {
+                showLive(Icons.META, "Připravuji Meta tlačítko…", NeoLauncherView.LIVE_SPINNER, 0);
+            }
+
+            @Override
+            public void onCommitted() {
+                showLive(Icons.META, "Potvrď instalaci Meta tlačítka", NeoLauncherView.LIVE_SPINNER, 0);
+            }
+
+            @Override
+            public void onError(String message) {
+                notice(Icons.ALERT, "Meta tlačítko se nepodařilo nainstalovat", Palette.MAGENTA, 5000);
+            }
+        });
+        if (!started) notice(Icons.ALERT, "Doplněk v téhle verzi Nea chybí", Palette.MAGENTA, 5000);
+    }
+
+    /** Zapnout doplnek: s povolenim z PC rovnou, jinak Pristupnost v Android nastaveni. */
+    public void enableMetaAddon() {
+        overlay.close();
+        if (MetaAddon.selfEnable(this)) {
+            notice(Icons.CHECK, "Meta tlačítko zapnuto", Palette.COBALT_LIGHT, 3000);
+            return;
+        }
+        if (MetaAddon.openSettings(this)) {
+            Toast.makeText(this, "Klepni na „Neo – Meta tlačítko“ a zapni ho", Toast.LENGTH_LONG).show();
+        } else {
+            notice(Icons.ALERT, "Přístupnost nejde otevřít", Palette.MAGENTA, 5000);
+        }
     }
 
     private boolean startSettings(String action) {
@@ -934,13 +980,23 @@ public class LauncherActivity extends Activity
     }
 
     /** Vysledek instalace (APK vybrane v Neu i aktualizace Nea) do bubliny. */
-    private final InstallReceiver.Listener installListener = (apk, status, label, message) -> {
+    private final InstallReceiver.Listener installListener = (kind, status, label, message) -> {
+        final boolean addon = ApkInstaller.KIND_ADDON.equals(kind);
+        final boolean apk = kind != null && !addon;
         switch (status) {
             case PackageInstaller.STATUS_PENDING_USER_ACTION:
-                showLive(apk ? Icons.PACKAGE_PLUS : Icons.DOWNLOAD, apk ? "Potvrď instalaci" : "Potvrď instalaci Nea",
+                showLive(apk ? Icons.PACKAGE_PLUS : addon ? Icons.META : Icons.DOWNLOAD,
+                        apk ? "Potvrď instalaci" : addon ? "Potvrď instalaci Meta tlačítka" : "Potvrď instalaci Nea",
                         NeoLauncherView.LIVE_SPINNER, 0);
                 return true;
             case PackageInstaller.STATUS_SUCCESS:
+                if (addon) {
+                    // Doplnek je nainstalovany -> rovnou ho zapnout (Pristupnost).
+                    showLive(Icons.CHECK, "Meta tlačítko nainstalováno – teď ho zapni", Palette.COBALT_LIGHT,
+                            NeoLauncherView.LIVE_ICON_ONLY, 4000);
+                    launcher.postDelayed(this::enableMetaAddon, 1200);
+                    return true;
+                }
                 return showLive(Icons.CHECK, "Nainstalováno: " + label, Palette.COBALT_LIGHT,
                         NeoLauncherView.LIVE_ICON_ONLY, 4500);
             case PackageInstaller.STATUS_FAILURE_ABORTED:
@@ -948,7 +1004,8 @@ public class LauncherActivity extends Activity
                 launcher.clearLive();
                 return true;
             default:
-                return showLive(Icons.ALERT, apk ? "Aplikace se nenainstalovala" : "Aktualizace se nenainstalovala",
+                return showLive(Icons.ALERT, addon ? "Meta tlačítko se nenainstalovalo"
+                                : apk ? "Aplikace se nenainstalovala" : "Aktualizace se nenainstalovala",
                         Palette.MAGENTA, NeoLauncherView.LIVE_ICON_ONLY, 5000);
         }
     };

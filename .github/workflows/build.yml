@@ -35,17 +35,26 @@ jobs:
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-36" "build-tools;36.0.0" "platform-tools"
 
+      # Doplnek "Neo - Meta tlacitko" (sluzba pristupnosti) se postavi prvni a pribali
+      # do assets Nea - Neo ho samo nainstaluje (jako Lightning Launcher svuj doplnek).
+      - name: Sestavit doplnek Meta tlacitka
+        run: |
+          chmod +x ./gradlew
+          ./gradlew :metaaddon:assembleDebug --stacktrace --no-daemon
+          mkdir -p app/src/main/assets
+          cp metaaddon/build/outputs/apk/debug/metaaddon-debug.apk app/src/main/assets/meta-addon.apk
+
       - name: Sestavit APK
         env:
           NEO_BUILD_NUMBER: ${{ github.run_number }}
         run: |
-          chmod +x ./gradlew
-          ./gradlew assembleDebug --stacktrace --no-daemon
+          ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
       - name: Pojmenovat APK
         run: |
           mkdir -p out
           cp app/build/outputs/apk/debug/app-debug.apk "out/NeoLauncher-2.0.${GITHUB_RUN_NUMBER}.apk"
+          cp metaaddon/build/outputs/apk/debug/metaaddon-debug.apk "out/NeoMetaTlacitko-2.0.${GITHUB_RUN_NUMBER}.apk"
 
       - name: Nahrat APK
         uses: actions/upload-artifact@v4
@@ -83,13 +92,17 @@ jobs:
               git log -1 --pretty=%B | grep -v -e '^Co-Authored-By:' -e '^Claude-Session:' | head -c 4000
             fi
           } > notes.md
+          # Neo jako PRVNI asset (starsi verze aktualizatoru berou prvni .apk), doplnek az potom.
           gh release create "v${VER}" "out/NeoLauncher-${VER}.apk" \
             --title "Neo ${VER}" --notes-file notes.md --target "${GITHUB_SHA}" ${PRE}
+          gh release upload "v${VER}" "out/NeoMetaTlacitko-${VER}.apk"
 
       - name: Nahrat logy pri chybe
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: build-logs
-          path: app/build/reports/**
+          path: |
+            app/build/reports/**
+            metaaddon/build/reports/**
           if-no-files-found: ignore

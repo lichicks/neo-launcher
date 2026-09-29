@@ -138,11 +138,14 @@ public final class Updater {
             String apk = null;
             JSONArray assets = o.optJSONArray("assets");
             if (assets != null) {
+                // Release ma i doplnek Meta tlacitka - brat APK Nea (NeoLauncher-*.apk).
                 for (int j = 0; j < assets.length(); j++) {
                     JSONObject a = assets.getJSONObject(j);
-                    if (a.optString("name", "").endsWith(".apk")) {
+                    final String name = a.optString("name", "");
+                    if (!name.endsWith(".apk") || name.contains("Meta")) continue;
+                    if (apk == null || name.startsWith("NeoLauncher")) {
                         apk = a.optString("browser_download_url", null);
-                        break;
+                        if (name.startsWith("NeoLauncher")) break;
                     }
                 }
             }

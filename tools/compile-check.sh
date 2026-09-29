@@ -59,3 +59,10 @@ echo "$GEN/R.java" >> "$WORK/sources.txt"
 javac -encoding UTF-8 --release 17 -Xlint:unchecked -Xmaxerrs 200 \
   -cp "$JAR" -d "$WORK/classes" @"$WORK/sources.txt"
 echo "OK: $(wc -l < "$WORK/sources.txt") souboru se prelozilo bez chyb."
+
+# Doplnek "Neo - Meta tlacitko" (samostatne APK, nepouziva R).
+rm -rf "$WORK/addon-classes" && mkdir -p "$WORK/addon-classes"
+find metaaddon/src/main/java -name '*.java' > "$WORK/addon-sources.txt"
+javac -encoding UTF-8 --release 17 -Xmaxerrs 200 \
+  -cp "$JAR" -d "$WORK/addon-classes" @"$WORK/addon-sources.txt"
+echo "OK: doplnek Meta tlacitka ($(wc -l < "$WORK/addon-sources.txt") souboru)."

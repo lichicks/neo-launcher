@@ -1,6 +1,6 @@
 # Neo Launcher – předávací dokument (jak navázat)
 
-> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **29. 9. 2026, verze v2.0.56**),
+> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **29. 9. 2026, verze v2.0.57**),
 > a jak na to navázat v novém chatu – i s málo kredity. Podrobný technický
 > kontext je v [`CLAUDE.md`](../CLAUDE.md) v kořeni repozitáře.
 
@@ -76,7 +76,7 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
 - **29. 9. první test na Questu: „funguje až podivuhodně super“.** Opraveno podle testu:
   Meta tlačítko (vestavěná služba, viz níže), karusel (pryč „Spuštěno 0×“ a datum
   instalace, nápověda volitelná), silnější světlo hry na skle, nástup karet při otevření.
-- **Meta tlačítko** otevírá Neo přes službu přístupnosti přímo v Neu (`MetaButtonService`):
+- **Meta tlačítko** (dříve služba přímo v Neu, od 30. 9. doplněk `metaaddon/`):
   zapíná se v Nastavení → Quest → „Meta tlačítko otevře Neo“. Doma Meta = Neo, když je
   Neo otevřené, další stisk = menu Questu, ve hře menu Questu, po hře se otevře Neo.
   Je to heuristika – **ještě neověřená na headsetu**; logy `adb -P 5038 logcat -s NeoMeta`.
@@ -84,6 +84,10 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
 - **Nové (29. 9., zatím neověřené na headsetu):** instalace APK z Nea (Nastavení → Aplikace),
   velikost her v menu karty + řazení „Velikost“, záloha a obnova nastavení (Nastavení → O Neo),
   paralaxa (po druhém testu odstraněna).
+- **Třetí test (30. 9.):** vše kromě Meta tlačítka OK. Meta tlačítko je teď samostatný
+  doplněk „Neo – Meta tlačítko“ (modul `metaaddon/`), který si Neo samo nainstaluje – přesně
+  jako Lightning Launcher (takto nainstalovanou aplikaci Android pustí zapnout v Přístupnosti).
+  Meta se pozná podle okna Knihovny `com.oculus.panelapp.library` (jako LL), ne systemux.
 - **Druhý test (29. 9. v noci):** skoro vše fajn. Opraveno: Quest přesměrovával
   odkazy na nastavení do Nastavení Questu → teď Android nastavení (jako Lightning
   Launcher); zapnutí služby Meta tlačítka blokuje Android „Omezené nastavení“ →
@@ -141,7 +145,7 @@ Zvuky/haptika a počasí možná později.
 **Další krok:**
 1. Ověřit na headsetu Meta tlačítko (checklist bod 0 v `CLAUDE.md`) a doladit podle logů.
 2. **Lišta běžící aplikace** dole na panelu (pilulka jako horní bublina): skutečný název
-   aplikace, **Pokračovat** a **Ukončit**. Detekci i ukončení udělá `MetaButtonService`
+   aplikace, **Pokračovat** a **Ukončit**. Detekci i ukončení udělá doplněk Meta tlačítka
    (Android 14 obyčejné aplikaci nedovolí zavřít jinou) – čte systémové menu Questu
    a zmáčkne jeho „Ukončit“. Uživatel nechtěl jednodušší verzi s odhadem.
 

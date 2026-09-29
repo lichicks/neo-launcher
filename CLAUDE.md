@@ -121,7 +121,7 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 | `ui/GlassWidgets.java`, `ui/Cascade.java` | Přepínač, posuvník a ikona v kulatém skle, postupný nástup dlaždic |
 | `ui/Palette.java`, `ui/GlassSurface.java`, `ui/GlassDrawable.java` | Barevná paleta, jeden recept na sklo (Canvas i Drawable) |
 | `ui/Icons.java`, `ui/IconPaths.java`, `ui/SvgPath.java` | Ikony Lucide: vygenerované SVG cesty + parser (viz „Barvy, sklo a ikony“) |
-| `MetaButtonService.java` | Meta tlačítko otevře Neo (služba přístupnosti, viz níže) |
+| `MetaAddon.java` + modul `metaaddon/` | Meta tlačítko: samostatný doplněk „Neo – Meta tlačítko“ (služba přístupnosti `meta/MetaService`), Neo ho má přibalený a instaluje ho samo (viz níže) |
 | `data/AppSizes.java`, `data/Backup.java`, `update/ApkInstaller.java` | Velikost her, záloha nastavení (zip), instalace APK |
 | `data/BatteryEstimate.java` | Odhad výdrže baterie (učí se z hraní, záložně okamžitý odběr) |
 
@@ -192,7 +192,7 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 
 **2026-09-29 první test na headsetu: „funguje až podivuhodně super“.**
 Zpětná vazba z testu (vyřešeno ve v2.0.4x): Meta tlačítko Neo neotevíralo
-(→ vestavěná služba `MetaButtonService`, viz níže), karusel ukazoval
+(→ vestavěná služba, od 2026-09-30 doplněk `metaaddon/`, viz níže), karusel ukazoval
 „Spuštěno 0×“ vedle hodin hraní (počítá jen spuštění z Nea → štítek pryč,
 datum instalace taky, nápověda dole = volba „Nápověda v karuselu“, výchozí
 vypnuto). Přání: silnější barevné světlo hry na skle (`drawGameLight`),
@@ -200,13 +200,18 @@ nástup karet při otevření (`playIntro`). Hudba v rychlém menu: spíš ne
 (jen kdyby šla ukázat jen když něco hraje). Připomínka pauzy: ne.
 Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživatelem.
 
+**Třetí test 2026-09-30:** nástup karet, bez paralaxy, Streamovat a Android
+nastavení fungují. Meta tlačítko ne: služba v Neu nešla zapnout (tlačítko
+Zapnout spadlo, Omezené nastavení) a navíc hledala špatné okno (systemux
+místo `com.oculus.panelapp.library`) → přepsáno na doplněk jako u LL (viz
+„Meta tlačítko — doplněk“).
+
 **Druhý test na headsetu 2026-09-29 v noci („víceméně všechno funguje fajn“) → opraveno:**
 - **Quest přesměruje systémové intenty nastavení do svého Nastavení Questu**
   (`ACTION_ACCESSIBILITY_SETTINGS`, `ACTION_APPLICATION_DETAILS_SETTINGS`…),
   kde nic není. Řešení jako Lightning Launcher: `setPackage("com.android.settings")`
   (`AppLauncher.ANDROID_SETTINGS`, `appInfoIntent`, `inAndroidSettings`,
-  `MetaButtonService.settingsIntent(Context)` = `ACCESSIBILITY_DETAILS_SETTINGS`
-  s naší komponentou, záložně seznam). Týká se i force stop (Ukončit) a Info.
+  `MetaAddon.openSettings` = seznam Přístupnosti v Android nastavení). Týká se i force stop (Ukončit) a Info.
 - **„Omezené nastavení“ (Android 13+ restricted settings)**: ručně instalovaná
   aplikace nesmí zapnout službu přístupnosti. Uživatel: Informace o aplikaci
   (Android) → ⋮ → Povolit omezená nastavení → znovu zapnout (tlačítko „Info
@@ -215,7 +220,7 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
   Z PC jde obejít: `adb -P 5038 shell appops set com.neolauncher.v1
   ACCESS_RESTRICTED_SETTINGS allow`, nebo `adb -P 5038 shell pm grant
   com.neolauncher.v1 android.permission.WRITE_SECURE_SETTINGS` → Neo si
-  službu zapne samo (`MetaButtonService.selfEnable`, zapisuje
+  službu zapne samo (`MetaAddon.selfEnable`, zapisuje
   `enabled_accessibility_services`).
 - **Android nastavení** (`AppLauncher.openAndroidSettings`): `ACTION_SETTINGS`
   s balíčkem, když nejde → Informace o aplikaci Nastavení (tlačítko Otevřít),
@@ -249,7 +254,7 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
 
 **Přidáno 2026-09-29 večer (NEOVĚŘENO na headsetu):**
 - **Po zapnutí Questu otevřít Neo** (`Prefs.openOnBoot`, výchozí zapnuto,
-  Nastavení → Quest): `MetaButtonService` se po startu připojí do
+  Nastavení → Quest): doplněk `MetaService` se po startu připojí do
   `BOOT_WINDOW_MS` (10 min od zapnutí) → při první události domova/systemux
   po 2,5 s otevře Neo; když mezitím běží jiná aplikace, nic. Záložně po 25 s.
 - **Živá bublina** (`NeoLauncherView.showLive(icon, text, color, progress, ms)`,
@@ -268,7 +273,7 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
 - **Světlo laseru na hraně skla** (`drawRimLight`, `RIM_*`): radiální přechod
   jako tah okraje panelu (+ měkká záře dovnitř), ornamentu a lišty.
 - **3× Meta + lišta běžící aplikace** (`Prefs.metaTriple`, výchozí zapnuto):
-  `MetaButtonService.onMenuOpened` počítá „otevření menu Questu“ = dávky
+  `MetaService.onMenuOpened` (doplněk) počítá „otevření menu Questu“ = dávky
   událostí systemux (události do `BURST_MS` 350 ms = jedno otevření); dvě
   otevření do `TRIPLE_WINDOW_MS` 1,6 s = otevřít–zavřít–otevřít = 3× Meta.
   Ve hře/aplikaci → `runningPkg` = aplikace v popředí + otevře Neo; v Neu
@@ -277,7 +282,7 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
   jako ornament, `runBackdropNode`): náhled, název, „Běží na pozadí“,
   Pokračovat (perlové) / Ukončit / ✕. `runningPkg` se maže, když se aplikace
   vrátí do popředí nebo se spustí jiná VR hra. **Ukončit** =
-  `MetaButtonService.forceStop`: otevře `ACTION_APPLICATION_DETAILS_SETTINGS`,
+  `MetaAddon.forceStop` → doplněk `MetaService.startForceStop`: otevře `ACTION_APPLICATION_DETAILS_SETTINGS`,
   pollingem (150 ms, max 8 s) najde tlačítko podle textu (`FORCE_STOP_LABELS`),
   klepne, potvrdí `android:id/button1`, BACK a otevře Neo s `EXTRA_STOPPED`
   (bublina „Ukončeno“). Bez služby: otevře informace o aplikaci + hláška.
@@ -289,7 +294,7 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
   Prohlížeč, **Uspat** (`GLOBAL_ACTION_LOCK_SCREEN`), **Vypnout**
   (`GLOBAL_ACTION_POWER_DIALOG` = systémová nabídka vypnout/restartovat;
   přímo vypnout ani restartovat obyčejná aplikace nesmí). Uspat/Vypnout jdou
-  jen přes `MetaButtonService` (statické `sleep()` / `powerMenu()`).
+  jen přes doplněk (`MetaAddon.sleep()` / `powerMenu()` → broadcast).
   Fotoaparát vypadl (nahrávání je ve Sdílení).
 - **Odhad výdrže** (`data/BatteryEstimate`): při odchodu z Nea (`onStop`) si
   uloží baterii a čas, při návratu spočítá %/h za dobu provozu (uptime, ≥ 10 min,
@@ -435,11 +440,11 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
    ukončení hry se otevře Neo – a neotevře se při pouhé pauze? Při
    problému `adb -P 5038 logcat -s NeoMeta`.
 
-0. **Nejdřív (po druhém testu):** Nastavení → Quest → Meta tlačítko „Zapnout“
-   otevře Android Přístupnost? Omezené nastavení → „Info o Neu“ → ⋮ → Povolit
-   → znovu Zapnout. Pak otestovat vše, co na službě stojí (3× Meta, Ukončit,
-   Uspat, Vypnout, otevření po zapnutí). Dlaždice Android a Streamovat
-   (otevře Fotoaparát se sdílením?). Je vidět nástup karet?
+0. **Nejdřív (doplněk, v2.0.57+):** Nastavení → Quest → Meta tlačítko →
+   Nainstalovat → potvrdit → otevře se Android Přístupnost → zapnout
+   „Neo – Meta tlačítko“ (bez Omezeného nastavení?). Službu Lightning
+   Launcheru vypnout. Meta doma → Neo? Pak vše, co na doplňku stojí (3× Meta,
+   Ukončit, Uspat, Vypnout, otevření po zapnutí Questu). `NeoMeta` v logcatu.
 
 0b. **Nové 29. 9.:** instalace APK (otevře se výběr souborů?), velikost v menu
    karty a řazení „Velikost“ (po povolení herního času), záloha → obnova.
@@ -492,38 +497,55 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
     průhledná část okna kolem panelu vidět jako rozmazaný obdélník
     (systémové rozmazání prostředí)? Velikost okna je 1176×664 dp.
 
-## Meta tlačítko — vestavěná služba `MetaButtonService` (od 2026-09-29)
+## Meta tlačítko — doplněk „Neo – Meta tlačítko“ (od 2026-09-30, modul `metaaddon/`)
 
-Meta tlačítko do aplikací nechodí a přepsat natvrdo nejde (a uživatel se
-bál, že by se pak nedostal do nastavení Questu). Řešení jako v Lightning
-Launcheru, ale **přímo v Neu** (žádný zvláštní addon): služba přístupnosti
-`MetaButtonService` (`res/xml/meta_button_service.xml`), uživatel ji zapne
-jednou v Nastavení → Quest → „Meta tlačítko otevře Neo“ → Zapnout
-(otevře `Settings.ACTION_ACCESSIBILITY_SETTINGS`).
+Meta tlačítko do aplikací nechodí a přepsat natvrdo nejde. Řešení **přesně
+jako Lightning Launcher**: samostatná malá aplikace se službou přístupnosti
+(`com.neolauncher.meta`, třídy `MetaService`, `CommandReceiver`, `Neo`).
 
-- **Jak LL pozná Meta tlačítko** (`threethan/LightningLauncher`,
-  `RedirectServices/.../ShortcutAccessibilityService.java`, varianta
-  *navigator*): jen `com.oculus.systemux`, `TYPE_WINDOW_STATE_CHANGED`
-  s textem přesně `[Library]` nebo `[Navigator]` (lokalizace v
-  `src/navigator/res/values-*/target_name.xml`). Proto uživateli fungoval,
-  jen když se Navigator otevřel na záložce aplikací.
-- **Neo navíc:** Navigator na jiné záložce pozná podle tlačítka Knihovna
-  uvnitř okna (prohledá max. 400 uzlů, `LIBRARY_LABELS`).
-- **Pravidla:** doma Meta = Neo; když je Neo vidět (`fgPkg` = Neo a
-  `LauncherActivity.isVisible()`), další stisk = opravdové menu Questu;
-  ve VR hře menu Questu (volba „Ve hře menu Questu“, `Prefs.metaGameMenu`);
-  po skončení hry (hra byla v popředí > 4 s a objeví se
-  `com.oculus.vrshell`/`com.oculus.shellenv`) se otevře Neo (volba „Po
-  hře otevřít Neo“, `Prefs.metaAfterGame`). Když Neo samo otevírá systém
-  Questu (rychlé menu, `AppLauncher` panely), `MetaButtonService.suppress()`
-  na 4 s. Respektuje i `Prefs.allowShortcuts`.
-- **Vše heuristika z událostí oken, NEOVĚŘENO na headsetu.** Loguje:
-  `adb -P 5038 logcat -s NeoMeta` (popředí, Navigator, rozhodnutí). Když
-  „po hře“ otevře Neo i při pauze ve hře, je to tím, že vrshell pošle
-  událost i při otevření menu → vypnout volbu nebo zpřísnit `onHome`.
-- Pokud má uživatel zapnutou i službu Lightning Launcheru, otevřou se po
+- **Proč samostatně:** Android 13+ nedovolí zapnout službu přístupnosti
+  aplikaci nainstalované ručně ze souboru („Omezené nastavení“ – uživateli
+  se to stalo s vestavěnou službou v Neu, v2.0.4x–56). Aplikaci, kterou
+  nainstaluje jiná aplikace přes `PackageInstaller` session (výchozí zdroj),
+  Android za ručně nainstalovanou nepovažuje → jde zapnout. LL takhle instaluje
+  svůj doplněk (`RemotePackageUpdater.installApk`).
+- **Přibalení:** CI (`build.yml`) nejdřív postaví `:metaaddon:assembleDebug`,
+  zkopíruje APK do `app/src/main/assets/meta-addon.apk` (v `.gitignore`)
+  a pak postaví Neo. Do releasu jde i `NeoMetaTlacitko-*.apk` (až jako
+  druhý asset – staré aktualizátory berou první `.apk`; nový bere
+  `NeoLauncher*`). Verze doplňku = `versionCode` v `metaaddon/build.gradle`
+  (**zvýšit při každé změně kódu doplňku**) – Neo porovná přibalenou verzi
+  (`getPackageArchiveInfo`) s nainstalovanou a nabídne „Aktualizovat“.
+- **Postup pro uživatele:** Nastavení → Quest → Meta tlačítko →
+  Nainstalovat (`LauncherActivity.installMetaAddon` → `ApkInstaller.installFile`,
+  `KIND_ADDON`) → Quest potvrdí → Neo otevře Přístupnost v Android nastavení
+  (`MetaAddon.openSettings` = `ACTION_ACCESSIBILITY_SETTINGS` +
+  `setPackage("com.android.settings")`, stejný intent jako LL) → zapnout
+  „Neo – Meta tlačítko“. S `WRITE_SECURE_SETTINGS` (adb pm grant pro Neo) se
+  doplněk zapne sám (`MetaAddon.selfEnable`).
+- **Jak se pozná Meta (jako LL, varianta *navigator*):** událost
+  `TYPE_WINDOW_STATE_CHANGED` z **`com.oculus.panelapp.library`** s titulkem
+  „Knihovna“ / „Navigátor“ (lokalizované, `NAV_TITLES`). Vestavěná služba
+  v2.0.4x hledala jen `com.oculus.systemux` → na novém Questu nereagovala.
+  `systemux` + hledání tlačítka Knihovna v okně zůstaly jako záloha.
+- **Komunikace:** doplněk čte stav a volby Nea z `ShortcutStateProvider`
+  (`content://com.neolauncher.v1.shortcutStateProvider`, sloupce `isVisible`,
+  `allowShortcuts`, `metaGameMenu`, `metaAfterGame`, `openOnBoot`,
+  `metaTriple`) a otevírá `LauncherActivity` s extra `neo.running` /
+  `neo.stopped` / `neo.resume`. Neo posílá příkazy explicitním broadcastem
+  na `CommandReceiver` (`SLEEP`, `POWER`, `FORCE_STOP`, `SUPPRESS`,
+  `CLEAR_RUNNING`), chráněno signature oprávněním
+  `com.neolauncher.permission.CONTROL` (definují ho obě aplikace, stejný klíč).
+- **Pravidla** (stejná jako dřív): doma Meta = Neo; když je Neo vidět, další
+  stisk = menu Questu; ve VR hře menu Questu (`metaGameMenu`); po hře Neo
+  (`metaAfterGame`); po zapnutí Questu Neo (`openOnBoot`); 3× Meta (dvě
+  otevření menu do 1,6 s) ze hry = Neo s lištou Pokračovat / Ukončit, v Neu
+  = zpět do hry (`metaTriple`); uspat / nabídka vypnutí / vynutit ukončení
+  na příkaz z Nea. `MetaAddon.suppress` když Neo samo otevírá systém Questu.
+- **Heuristika z událostí oken, loguje:** `adb -P 5038 logcat -s NeoMeta`.
+- Když má uživatel zapnutou i službu Lightning Launcheru, otevřou se po
   stisku oba launchery → v Přístupnosti nechat jen „Neo – Meta tlačítko“.
-- `ShortcutStateProvider` zůstává kvůli starému addonu (kompatibilita).
+- `ShortcutStateProvider` slouží i starému addonu RedirectServices (kompatibilita).
 
 ## Co zbývá / nápady
 

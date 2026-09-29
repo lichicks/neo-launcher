@@ -1,11 +1,10 @@
-package com.neolauncher;
+package com.neolauncher.meta;
 
 import android.accessibilityservice.AccessibilityService;
-import android.content.ComponentName;
-import android.content.ContentResolver;
-import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -14,11 +13,6 @@ import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.Toast;
-
-import com.neolauncher.data.AppEntry;
-import com.neolauncher.data.AppRepository;
-import com.neolauncher.data.Prefs;
-import com.neolauncher.launch.AppLauncher;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -29,64 +23,68 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Meta tlacitko otevre Neo - sluzba pristupnosti primo v Neu (driv samostatny
- * addon RedirectServices z Lightning Launcheru). Uzivatel ji zapne jednou
- * v Nastaveni -> Pristupnost.
+ * Meta tlacitko otevre Neo - sluzba pristupnosti v samostatnem doplnku (jako
+ * RedirectServices u Lightning Launcheru). Neo ho instaluje samo, takze ho
+ * Android bere jako normalne nainstalovanou aplikaci a jde zapnout v Pristupnosti
+ * bez "Omezeneho nastaveni".
  * <p>
- * Meta tlacitko samo do aplikaci nechodi; pozname ho podle toho, ze systemova
- * aplikace Questu (com.oculus.systemux) otevre Navigator. Lightning Launcher
- * hleda jen titulek "Library"/"Navigator", takze funguje, jen kdyz se Navigator
- * otevre na zalozce aplikaci. Tady navic: Navigator na jakekoliv zalozce poznat
- * podle tlacitka Knihovna uvnitr okna.
+ * Meta tlacitko samo do aplikaci nechodi. Pozname ho jako Lightning Launcher:
+ * otevre se okno Knihovny Questu (com.oculus.panelapp.library) s titulkem
+ * "Knihovna" / "Navigator" (lokalizovane). Navic: systemux (starsi Quest)
+ * a Navigator na jine zalozce podle tlacitka Knihovna uvnitr okna.
  * <p>
  * Pravidla (prani uzivatele):
  * <ul>
  * <li>Doma: Meta = Neo.</li>
  * <li>Kdyz uz je Neo otevrene: Meta = opravdove menu Questu (k nastaveni Questu se da vzdy dostat).</li>
- * <li>Ve VR hre: menu Questu (Pokracovat / Ukoncit), ne Neo pres hru (volba).</li>
+ * <li>Ve VR hre: menu Questu (Pokracovat / Ukoncit), ne Neo pres hru (volba v Neu).</li>
  * <li>Po skonceni hry se otevre Neo (volba).</li>
  * <li>Po zapnuti Questu se otevre Neo (volba) - sluzbu system pripoji hned po startu.</li>
  * <li>3x Meta ve hre/aplikaci: otevre Neo a dole nabidne Pokracovat / Ukoncit (volba).
  *     Znovu 3x Meta v Neu = zpet do hry.</li>
  * </ul>
- * Navic umi globalni akce, ktere obycejna aplikace nesmi: uspat headset, systemova
- * nabidka vypnuti/restartu, a "Ukoncit" bezici aplikaci (klepne v Informacich
- * o aplikaci na Vynutit ukonceni).
+ * Navic umi globalni akce, ktere obycejna aplikace nesmi (na prikaz z Nea, viz
+ * CommandReceiver): uspat headset, systemova nabidka vypnuti/restartu a "Ukoncit"
+ * bezici aplikaci (klepne v Informacich o aplikaci na Vynutit ukonceni).
  * Vse jen heuristika z udalosti oken - loguje se pod tagem "NeoMeta"
  * (adb -P 5038 logcat -s NeoMeta), at jde na headsetu doladit.
  */
-public class MetaButtonService extends AccessibilityService {
-    private static final String TAG = "NeoMeta";
+public class MetaService extends AccessibilityService {
+    static final String TAG = "NeoMeta";
     private static final String SYSTEMUX = "com.oculus.systemux";
+    /** Okno Knihovny / Navigatoru na novejsim Questu (tady ho hleda Lightning Launcher). */
+    private static final String LIBRARY_PANEL = "com.oculus.panelapp.library";
+    private static final String ANDROID_SETTINGS = "com.android.settings";
     /** Domovske prostredi Questu - kdyz se objevi po hre, hra skoncila. */
     private static final Set<String> HOME = new HashSet<>(Arrays.asList(
             "com.oculus.vrshell", "com.oculus.shellenv"));
-    /** Titulky Navigatoru (jako v RedirectServices z Lightning Launcheru, ruzne jazyky). */
+    /** Titulky Navigatoru / Knihovny (jako v RedirectServices z Lightning Launcheru, ruzne jazyky). */
     private static final Set<String> NAV_TITLES = lower(
-            "Library", "Navigator", "App Library", "Knihovna", "Navigátor", "Bibliothek", "Bibliothèque",
-            "Navigateur", "Biblioteca", "Navegador", "Explorador", "Libreria", "Navigatore", "Biblioteka",
-            "Nawigator", "Библиотека", "Навигатор", "ライブラリ", "ナビゲーター", "라이브러리", "내비게이터",
-            "资源库", "导航工具", "資料庫", "導覽小幫手", "Bibliotek", "Navigatorn", "Kirjasto");
+            "Library", "Navigator", "App Library", "Knihovna", "Knihovna aplikací", "Navigátor",
+            "Bibliothek", "App-Bibliothek", "Bibliothèque", "Navigateur", "Biblioteca", "Navegador",
+            "Explorador", "Libreria", "Navigatore", "Biblioteka", "Nawigator", "Библиотека", "Навигатор",
+            "ライブラリ", "ナビゲーター", "라이브러리", "내비게이터", "资源库", "导航工具", "資料庫",
+            "導覽小幫手", "Bibliotek", "Navigatorn", "Kirjasto");
     /** Popisky tlacitka Knihovna uvnitr Navigatoru (Navigator otevreny na jine zalozce). */
     private static final Set<String> LIBRARY_LABELS = lower(
-            "Library", "App Library", "Apps Library", "Knihovna", "Bibliothek", "Bibliothèque", "Biblioteca",
-            "Libreria", "Biblioteka", "Библиотека", "ライブラリ", "라이브러리", "资源库", "資料庫", "Bibliotek");
+            "Library", "App Library", "Apps Library", "Knihovna", "Knihovna aplikací", "Bibliothek",
+            "Bibliothèque", "Biblioteca", "Libreria", "Biblioteka", "Библиотека", "ライブラリ",
+            "라이브러리", "资源库", "資料庫", "Bibliotek");
     private static final int NODE_BUDGET = 400;
     /** Po otevreni Nea chvili nereagovat (Navigator muze poslat vic udalosti). */
     private static final long LAUNCH_COOLDOWN_MS = 1500;
     /** Hra musi byt v popredi aspon takhle dlouho, aby se "po hre" otevrelo Neo. */
     private static final long MIN_GAME_MS = 4000;
     private static final long AFTER_GAME_DELAY_MS = 700;
-    /** Sluzba pripojena do takove doby od zapnuti = start Questu (ne zapnuti sluzby / aktualizace Nea). */
+    /** Sluzba pripojena do takove doby od zapnuti = start Questu (ne zapnuti sluzby / aktualizace). */
     private static final long BOOT_WINDOW_MS = 10 * 60 * 1000L;
     /** Po prvnim domovskem okne chvili pockat, az se prostredi Questu nacte. */
     private static final long BOOT_DELAY_MS = 2500;
     /** Kdyby po startu zadne domovske okno neprislo, otevrit Neo i tak. */
     private static final long BOOT_FALLBACK_MS = 25_000;
-
     /**
      * 3x Meta: kazde zmacknuti, ktere otevre menu Questu, posle davku udalosti
-     * systemux (vic udalosti do BURST_MS = jedno otevreni). Otevrit - zavrit - otevrit
+     * (vic udalosti do BURST_MS = jedno otevreni). Otevrit - zavrit - otevrit
      * = dve davky do TRIPLE_WINDOW_MS.
      */
     private static final long BURST_MS = 350;
@@ -99,19 +97,15 @@ public class MetaButtonService extends AccessibilityService {
             "Force stop", "Force Stop", "Vynutit ukončení", "Beenden erzwingen", "Stoppen erzwingen",
             "Forcer l'arrêt", "Forzar detención", "Forzar cierre", "Forza interruzione",
             "Wymuś zatrzymanie", "Остановить", "Принудительно остановить", "強制停止", "강제 중지",
-            "强行停止", "強制停止", "Forçar parada", "Forçar paragem", "Tvinga stopp", "Pakota lopetus");
-    /** Pro LauncherActivity: Neo otevrene po ukonceni aplikace / 3x Meta v Neu. */
-    public static final String EXTRA_STOPPED = "neo.stopped";
-    public static final String EXTRA_RESUME = "neo.resume";
+            "强行停止", "Forçar parada", "Forçar paragem", "Tvinga stopp", "Pakota lopetus");
 
-    private static volatile long suppressUntil;
-    private static volatile boolean connected;
-    private static volatile MetaButtonService instance;
-    /** Aplikace, ze ktere se odeslo do Nea (bezi na pozadi) - lista Pokracovat / Ukoncit. */
-    private static volatile String runningPkg;
+    private static volatile MetaService instance;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Map<String, Boolean> vrCache = new HashMap<>();
+    private long suppressUntil;
+    /** Aplikace, ze ktere se odeslo do Nea (bezi na pozadi) - lista Pokracovat / Ukoncit v Neu. */
+    private String runningPkg;
     private String fgPkg;
     private boolean fgVr;
     private long fgSince;
@@ -119,116 +113,26 @@ public class MetaButtonService extends AccessibilityService {
     private Runnable pendingAfterGame;
     private boolean bootPending;
     private final Runnable bootLaunch = this::onBootLaunch;
-    private long lastSysUx;
+    private long lastMenuEvent;
     private long firstOpen;
     private int opens;
-    private String stopPkg, stopLabel;
+    private String stopPkg;
     private long stopDeadline;
     private boolean stopConfirming;
     private final Runnable stopPoll = this::pollForceStop;
 
-    /** Neo samo otevira system Questu (Nastaveni, Menu Questu...) - chvili to nebrat jako Meta tlacitko. */
-    public static void suppress(long ms) {
-        suppressUntil = SystemClock.uptimeMillis() + ms;
-    }
-
-    /** Je sluzba zapnuta v Nastaveni -> Pristupnost? */
-    public static boolean isEnabled(Context c) {
-        if (connected) return true;
-        try {
-            final String s = Settings.Secure.getString(c.getContentResolver(),
-                    Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            return s != null && s.contains(c.getPackageName() + "/");
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
-    /** Bezici aplikace na pozadi (odesel jsi z ni do Nea), nebo null. */
-    public static String runningApp() {
-        return runningPkg;
-    }
-
-    public static void clearRunning() {
-        runningPkg = null;
-    }
-
-    /** Uspat headset (jako kratke zmacknuti tlacitka napajeni). */
-    public static boolean sleep() {
-        final MetaButtonService s = instance;
-        return s != null && s.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
-    }
-
-    /** Systemova nabidka napajeni (vypnout / restartovat). */
-    public static boolean powerMenu() {
-        final MetaButtonService s = instance;
-        return s != null && s.performGlobalAction(GLOBAL_ACTION_POWER_DIALOG);
-    }
-
-    /**
-     * Ukonci aplikaci: otevre Informace o aplikaci a klepne na Vynutit ukonceni
-     * (+ potvrzeni). Pak otevre Neo. Obycejna aplikace cizi aplikaci zavrit nesmi.
-     * @return false = sluzba nebezi
-     */
-    public static boolean forceStop(String pkg, String label) {
-        final MetaButtonService s = instance;
-        if (s == null) return false;
-        s.handler.post(() -> s.startForceStop(pkg, label));
-        return true;
-    }
-
-    /**
-     * Obrazovka, kde se sluzba zapina: Pristupnost v ANDROID nastaveni (rovnou detail
-     * sluzby Nea). Bez setPackage Quest otevre sve Nastaveni Questu, kde sluzby nejsou.
-     */
-    public static Intent settingsIntent(Context c) {
-        final PackageManager pm = c.getPackageManager();
-        final String me = new ComponentName(c, MetaButtonService.class).flattenToString();
-        final Intent detail = new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
-                .putExtra(Intent.EXTRA_COMPONENT_NAME, me)
-                .setPackage(AppLauncher.ANDROID_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        if (detail.resolveActivity(pm) != null) return detail;
-        final Intent list = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-                .setPackage(AppLauncher.ANDROID_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        if (list.resolveActivity(pm) != null) return list;
-        return new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-    }
-
-    /** Povolil uzivatel z PC WRITE_SECURE_SETTINGS? Pak se Neo umi zapnout samo. */
-    public static boolean canSelfEnable(Context c) {
-        return c.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") == PackageManager.PERMISSION_GRANTED;
-    }
-
-    /**
-     * Zapne sluzbu primo v systemovem nastaveni (jen s WRITE_SECURE_SETTINGS) -
-     * obejde "Omezene nastaveni", ktere Android dava rucne instalovanym aplikacim.
-     */
-    public static boolean selfEnable(Context c) {
-        if (!canSelfEnable(c)) return false;
-        try {
-            final ContentResolver cr = c.getContentResolver();
-            final String me = new ComponentName(c, MetaButtonService.class).flattenToString();
-            String cur = Settings.Secure.getString(cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
-            if (cur == null || cur.trim().isEmpty()) cur = me;
-            else if (!cur.contains(me)) cur = cur + ":" + me;
-            Settings.Secure.putString(cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, cur);
-            Settings.Secure.putInt(cr, Settings.Secure.ACCESSIBILITY_ENABLED, 1);
-            Log.i(TAG, "Sluzba zapnuta pres WRITE_SECURE_SETTINGS");
-            return true;
-        } catch (Exception e) {
-            Log.w(TAG, "Sluzbu nejde zapnout", e);
-            return false;
-        }
+    /** Bezici instance (null = sluzba neni zapnuta). Pro CommandReceiver. */
+    static MetaService get() {
+        return instance;
     }
 
     @Override
     protected void onServiceConnected() {
         super.onServiceConnected();
-        connected = true;
         instance = this;
         Log.i(TAG, "Sluzba Meta tlacitka bezi");
-        final Prefs prefs = prefs();
-        if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS && (prefs == null || prefs.openOnBoot())) {
+        final Neo.State s = Neo.state(this);
+        if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS && (s == null || s.openOnBoot)) {
             // Quest se prave zapnul -> az se ukaze domov, otevrit Neo.
             bootPending = true;
             handler.postDelayed(bootLaunch, BOOT_FALLBACK_MS);
@@ -238,7 +142,6 @@ public class MetaButtonService extends AccessibilityService {
 
     @Override
     public boolean onUnbind(Intent intent) {
-        connected = false;
         instance = null;
         handler.removeCallbacksAndMessages(null);
         return super.onUnbind(intent);
@@ -263,8 +166,8 @@ public class MetaButtonService extends AccessibilityService {
         final String pkg = p.toString();
         final long now = SystemClock.uptimeMillis();
         if (bootPending) onBootEvent(pkg);
-        if (SYSTEMUX.equals(pkg)) {
-            onSystemUx(e, now);
+        if (SYSTEMUX.equals(pkg) || LIBRARY_PANEL.equals(pkg)) {
+            onMenuWindow(e, pkg, now);
         } else if (HOME.contains(pkg)) {
             onHome(now);
         } else if (!isTransient(pkg)) {
@@ -272,15 +175,34 @@ public class MetaButtonService extends AccessibilityService {
         }
     }
 
+    // --- Prikazy z Nea (CommandReceiver) -------------------------------------------
+
+    /** Neo samo otevira system Questu (Nastaveni, Menu Questu...) - chvili to nebrat jako Meta tlacitko. */
+    void suppress(long ms) {
+        suppressUntil = SystemClock.uptimeMillis() + ms;
+    }
+
+    void clearRunning() {
+        runningPkg = null;
+    }
+
+    boolean sleep() {
+        return performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
+    }
+
+    boolean powerMenu() {
+        return performGlobalAction(GLOBAL_ACTION_POWER_DIALOG);
+    }
+
     // --- Start Questu -----------------------------------------------------------
 
     private void onBootEvent(String pkg) {
-        if (HOME.contains(pkg) || SYSTEMUX.equals(pkg)) {
+        if (HOME.contains(pkg) || SYSTEMUX.equals(pkg) || LIBRARY_PANEL.equals(pkg)) {
             // Domov je nacteny -> za chvilku Neo.
             bootPending = false;
             handler.removeCallbacks(bootLaunch);
             handler.postDelayed(bootLaunch, BOOT_DELAY_MS);
-        } else if (pkg.equals(getPackageName()) || isLaunchable(pkg)) {
+        } else if (pkg.equals(Neo.PKG) || isLaunchable(pkg)) {
             // Uzivatel uz neco spustil (nebo je Neo otevrene) - nerusit.
             // Systemove veci po startu (Guardian, zamykaci obrazovka...) se nepocitaji.
             bootPending = false;
@@ -291,10 +213,10 @@ public class MetaButtonService extends AccessibilityService {
 
     private void onBootLaunch() {
         bootPending = false;
-        final Prefs prefs = prefs();
-        if (prefs != null && !prefs.openOnBoot()) return;
-        if (LauncherActivity.isVisible() || (fgPkg != null && isLaunchable(fgPkg))) return;
-        launchNeo("po zapnuti Questu");
+        final Neo.State s = Neo.state(this);
+        if (s == null || !s.openOnBoot || s.visible) return;
+        if (fgPkg != null && isLaunchable(fgPkg)) return;
+        launchNeo("po zapnuti Questu", null);
     }
 
     /** Aplikace, kterou jde spustit (hra, aplikace) - ne systemovy prekryv Questu. */
@@ -312,28 +234,29 @@ public class MetaButtonService extends AccessibilityService {
         if (pkg.equals(fgPkg)) return;
         // Hra se vratila (napr. Pokracovat v menu) - "po hre" uz neplati.
         cancelAfterGame();
-        if (runningPkg != null && !pkg.equals(getPackageName()) && isLaunchable(pkg)) {
+        if (runningPkg != null && !pkg.equals(Neo.PKG) && isLaunchable(pkg)) {
             // Bezici aplikace je zase v popredi (Pokracovat), nebo se spustila jina VR hra
             // (Quest drzi jen jednu) -> lista v Neu uz neplati.
             if (pkg.equals(runningPkg) || (isVrApp(pkg) && isVrApp(runningPkg))) runningPkg = null;
         }
         fgPkg = pkg;
         fgSince = now;
-        fgVr = !pkg.equals(getPackageName()) && isVrApp(pkg);
+        fgVr = !pkg.equals(Neo.PKG) && isVrApp(pkg);
         Log.d(TAG, "Popredi: " + pkg + (fgVr ? " (VR hra)" : ""));
     }
 
     private void onHome(long now) {
         Log.d(TAG, "Domovske prostredi, predtim " + fgPkg);
-        final Prefs prefs = prefs();
-        if (fgVr && now - fgSince > MIN_GAME_MS && prefs != null && prefs.metaAfterGame()
-                && pendingAfterGame == null) {
-            // Hra skoncila (nebo odesla domu) -> po chvilce otevrit Neo.
-            pendingAfterGame = () -> {
-                pendingAfterGame = null;
-                launchNeo("po skonceni hry");
-            };
-            handler.postDelayed(pendingAfterGame, AFTER_GAME_DELAY_MS);
+        if (fgVr && now - fgSince > MIN_GAME_MS && pendingAfterGame == null) {
+            final Neo.State s = Neo.state(this);
+            if (s != null && s.afterGame) {
+                // Hra skoncila (nebo odesla domu) -> po chvilce otevrit Neo.
+                pendingAfterGame = () -> {
+                    pendingAfterGame = null;
+                    launchNeo("po skonceni hry", null);
+                };
+                handler.postDelayed(pendingAfterGame, AFTER_GAME_DELAY_MS);
+            }
         }
         fgPkg = null;
         fgVr = false;
@@ -352,53 +275,77 @@ public class MetaButtonService extends AccessibilityService {
                 || pkg.contains("inputmethod") || pkg.contains("keyboard");
     }
 
+    /** VR hra (stejne pravidlo jako Neo / Lightning Launcher). */
     private boolean isVrApp(String pkg) {
         final Boolean cached = vrCache.get(pkg);
         if (cached != null) return cached;
-        boolean vr;
-        final NeoApp app = NeoApp.get();
-        final AppEntry e = app != null ? app.apps().find(pkg) : null;
-        vr = e != null ? e.isVr() : AppRepository.isVrPackage(getPackageManager(), pkg);
+        boolean vr = false;
+        try {
+            final PackageManager pm = getPackageManager();
+            final ApplicationInfo ai = pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA);
+            if (!ANDROID_SETTINGS.equals(pkg)) {
+                if (ai.metaData != null && (ai.metaData.containsKey("com.oculus.ossplash")
+                        || ai.metaData.containsKey("com.samsung.android.vr.application.mode")
+                        || ai.metaData.containsKey("com.oculus.intent.category.VR"))) {
+                    vr = true;
+                } else {
+                    final Intent i = new Intent(Intent.ACTION_MAIN).addCategory("com.oculus.intent.category.VR")
+                            .setPackage(pkg);
+                    vr = !pm.queryIntentActivities(i, 0).isEmpty();
+                }
+            }
+        } catch (Exception ignored) {
+        }
         vrCache.put(pkg, vr);
         return vr;
     }
 
-    // --- Navigator (Meta tlacitko) -------------------------------------------
+    // --- Navigator / Knihovna (Meta tlacitko) ----------------------------------
 
-    private void onSystemUx(AccessibilityEvent e, long now) {
-        // 3x Meta (kazda davka udalosti systemux = jedno otevreni menu Questu).
-        if (now - lastSysUx > BURST_MS && onMenuOpened(now)) {
-            lastSysUx = now;
+    private void onMenuWindow(AccessibilityEvent e, String pkg, long now) {
+        // 3x Meta (kazda davka udalosti = jedno otevreni menu Questu).
+        if (now - lastMenuEvent > BURST_MS && onMenuOpened(now)) {
+            lastMenuEvent = now;
             return;
         }
-        lastSysUx = now;
-        if (!isNavigator(e)) {
-            Log.v(TAG, "systemux okno: " + e.getText() + " / " + e.getClassName());
+        lastMenuEvent = now;
+        if (!isNavigator(e, pkg)) {
+            Log.v(TAG, pkg + " okno: " + e.getText() + " / " + e.getClassName());
             return;
         }
-        Log.i(TAG, "Navigator: " + e.getText() + ", popredi=" + fgPkg + (fgVr ? " (VR)" : ""));
+        Log.i(TAG, "Navigator (" + pkg + "): " + e.getText() + ", popredi=" + fgPkg + (fgVr ? " (VR)" : ""));
         if (now < suppressUntil) return;                  // Neo samo otevrelo system Questu
         if (now - lastLaunch < LAUNCH_COOLDOWN_MS) return;
-        if (getPackageName().equals(fgPkg) && LauncherActivity.isVisible()) {
+        final Neo.State s = Neo.state(this);
+        if (s == null) {
+            Log.w(TAG, "Neo neni nainstalovane");
+            return;
+        }
+        if (s.visible) {
             // Neo uz je otevrene -> druhe zmacknuti = opravdove menu Questu.
             Log.i(TAG, "Neo je otevrene, necham menu Questu");
             return;
         }
-        final Prefs prefs = prefs();
-        if (prefs != null && !prefs.allowShortcuts()) return;
-        if (fgVr && (prefs == null || prefs.metaGameMenu())) {
+        if (!s.allowShortcuts) return;
+        if (fgVr && s.gameMenu) {
             Log.i(TAG, "Bezi VR hra, necham menu Questu");
             return;
         }
         // Z bezici aplikace rovnou do Nea -> v Neu lista Pokracovat / Ukoncit.
-        if (fgPkg != null && !getPackageName().equals(fgPkg) && isLaunchable(fgPkg)) runningPkg = fgPkg;
-        launchNeo("Meta tlacitko");
+        Intent extras = null;
+        if (fgPkg != null && !Neo.PKG.equals(fgPkg) && isLaunchable(fgPkg)) {
+            runningPkg = fgPkg;
+            extras = new Intent().putExtra(Neo.EXTRA_RUNNING, fgPkg);
+        }
+        launchNeo("Meta tlacitko", extras);
     }
 
-    private boolean isNavigator(AccessibilityEvent e) {
-        // 1) Jako Lightning Launcher: titulek okna je "Library" / "Navigator".
+    private boolean isNavigator(AccessibilityEvent e, String pkg) {
+        // 1) Jako Lightning Launcher: titulek okna je "Knihovna" / "Navigator" (lokalizovany).
         final List<CharSequence> texts = e.getText();
-        if (texts != null && texts.size() == 1 && matches(texts.get(0), NAV_TITLES)) return true;
+        if (texts != null) {
+            for (CharSequence t : texts) if (matches(t, NAV_TITLES)) return true;
+        }
         if (matches(e.getContentDescription(), NAV_TITLES)) return true;
         // 2) Navigator otevreny na jine zalozce: uvnitr okna je tlacitko Knihovna.
         AccessibilityNodeInfo root = null;
@@ -457,42 +404,42 @@ public class MetaButtonService extends AccessibilityService {
         Log.d(TAG, "Menu Questu otevreno (" + opens + "), popredi=" + fgPkg);
         if (opens < 2) return false;
         opens = 0;
-        final Prefs prefs = prefs();
-        if (prefs != null && !prefs.metaTriple()) return false;
         if (now < suppressUntil) return false;
-        final boolean inNeo = getPackageName().equals(fgPkg) && LauncherActivity.isVisible();
-        if (inNeo) {
+        final Neo.State s = Neo.state(this);
+        if (s == null || !s.triple) return false;
+        if (s.visible && Neo.PKG.equals(fgPkg)) {
             // V Neu: 3x Meta = zpet do aplikace, ktera bezi na pozadi.
             if (runningPkg == null) return false;
             Log.i(TAG, "3x Meta v Neu -> zpet do " + runningPkg);
-            startNeo(new Intent().putExtra(EXTRA_RESUME, true));
+            Neo.open(this, new Intent().putExtra(Neo.EXTRA_RESUME, true));
             return true;
         }
-        if (fgPkg == null || getPackageName().equals(fgPkg) || !isLaunchable(fgPkg)) return false;
+        if (fgPkg == null || Neo.PKG.equals(fgPkg) || !isLaunchable(fgPkg)) return false;
         Log.i(TAG, "3x Meta ve " + fgPkg + " -> Neo s nabidkou Pokracovat / Ukoncit");
         runningPkg = fgPkg;
         cancelAfterGame();
         lastLaunch = 0;
-        launchNeo("3x Meta");
+        launchNeo("3x Meta", new Intent().putExtra(Neo.EXTRA_RUNNING, fgPkg));
         return true;
     }
 
     // --- Vynutit ukonceni (Ukoncit v liste bezici aplikace) ----------------------
 
-    private void startForceStop(String pkg, String label) {
+    void startForceStop(String pkg) {
         if (pkg == null) return;
         stopPkg = pkg;
-        stopLabel = label;
         stopConfirming = false;
         stopDeadline = SystemClock.uptimeMillis() + STOP_TIMEOUT_MS;
         if (pkg.equals(runningPkg)) runningPkg = null;
         Log.i(TAG, "Ukoncuji " + pkg);
         try {
-            // Android Informace o aplikaci (s tlacitkem Vynutit ukonceni), ne Nastaveni Questu.
-            final Intent i = AppLauncher.appInfoIntent(this, pkg);
-            i.addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                    | Intent.FLAG_ACTIVITY_NO_ANIMATION);
-            startActivity(i);
+            // Android Informace o aplikaci (s tlacitkem Vynutit ukonceni). Bez setPackage by
+            // Quest otevrel sve Nastaveni Questu, kde nic takoveho neni.
+            final Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + pkg));
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_HISTORY
+                    | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            final Intent android = new Intent(i).setPackage(ANDROID_SETTINGS);
+            startActivity(android.resolveActivity(getPackageManager()) != null ? android : i);
         } catch (Exception ex) {
             Log.w(TAG, "Informace o aplikaci nejdou otevrit", ex);
             stopPkg = null;
@@ -511,9 +458,8 @@ public class MetaButtonService extends AccessibilityService {
             Toast.makeText(this, "Klepni na „Vynutit ukončení“", Toast.LENGTH_LONG).show();
             return;
         }
-        AccessibilityNodeInfo root = null;
         try {
-            root = getRootInActiveWindow();
+            final AccessibilityNodeInfo root = getRootInActiveWindow();
             if (root != null) {
                 if (!stopConfirming) {
                     final AccessibilityNodeInfo btn = findLabel(root, FORCE_STOP_LABELS, new int[]{NODE_BUDGET}, 0);
@@ -550,10 +496,10 @@ public class MetaButtonService extends AccessibilityService {
         stopPkg = null;
         // Zavrit Informace o aplikaci a vratit se do Nea s hlaskou "Ukonceno".
         handler.postDelayed(() -> performGlobalAction(GLOBAL_ACTION_BACK), 250);
-        handler.postDelayed(() -> startNeo(new Intent().putExtra(EXTRA_STOPPED, pkg)), 600);
+        handler.postDelayed(() -> Neo.open(this, new Intent().putExtra(Neo.EXTRA_STOPPED, pkg)), 600);
     }
 
-    /** Uzel s jednim z popisku (vcetne rodicu, na ktere jde klepnout). */
+    /** Uzel s jednim z popisku. */
     private static AccessibilityNodeInfo findLabel(AccessibilityNodeInfo n, Set<String> labels, int[] budget, int depth) {
         if (n == null || budget[0]-- <= 0 || depth > 20) return null;
         if (matches(n.getText(), labels) || matches(n.getContentDescription(), labels)) return n;
@@ -564,6 +510,7 @@ public class MetaButtonService extends AccessibilityService {
         return null;
     }
 
+    /** Klepne na uzel nebo na nejblizsiho rodice, na ktereho jde klepnout. */
     private static boolean click(AccessibilityNodeInfo n) {
         for (AccessibilityNodeInfo p = n; p != null; p = p.getParent()) {
             if (p.isClickable()) return p.performAction(AccessibilityNodeInfo.ACTION_CLICK);
@@ -573,33 +520,11 @@ public class MetaButtonService extends AccessibilityService {
 
     // --- Otevreni Nea ------------------------------------------------------------
 
-    private void startNeo(Intent extras) {
-        final Intent i = new Intent(this, LauncherActivity.class);
-        i.putExtras(extras);
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
-        try {
-            startActivity(i);
-        } catch (Exception ex) {
-            Log.w(TAG, "Neo nejde otevrit", ex);
-        }
-    }
-
-    private void launchNeo(String why) {
+    private void launchNeo(String why, Intent extras) {
         final long now = SystemClock.uptimeMillis();
         if (now - lastLaunch < LAUNCH_COOLDOWN_MS) return;
         lastLaunch = now;
         Log.i(TAG, "Oteviram Neo (" + why + ")");
-        final Intent i = new Intent(this, LauncherActivity.class);
-        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_ANIMATION);
-        try {
-            startActivity(i);
-        } catch (Exception ex) {
-            Log.w(TAG, "Neo nejde otevrit", ex);
-        }
-    }
-
-    private static Prefs prefs() {
-        final NeoApp app = NeoApp.get();
-        return app != null ? app.prefs() : null;
+        Neo.open(this, extras);
     }
 }

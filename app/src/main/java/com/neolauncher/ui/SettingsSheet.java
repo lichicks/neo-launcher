@@ -20,9 +20,9 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.neolauncher.art.ArtworkLoader;
-import com.neolauncher.MetaButtonService;
-import com.neolauncher.update.ApkInstaller;
 import com.neolauncher.LauncherActivity;
+import com.neolauncher.MetaAddon;
+import com.neolauncher.update.ApkInstaller;
 import com.neolauncher.data.AppEntry;
 import com.neolauncher.data.AppRepository;
 import com.neolauncher.data.Platform;
@@ -302,49 +302,50 @@ public final class SettingsSheet {
                             }
                         }));
 
-        // Meta tlacitko: sluzba pristupnosti primo v Neu (zapina se jednou v Android Pristupnosti).
-        // Android rucne instalovanym aplikacim sluzbu nejdriv nepusti ("Omezene nastaveni") -
-        // proto hned vedle tlacitko na Informace o aplikaci (tri tecky -> Povolit omezena nastaveni).
-        final boolean metaOn = MetaButtonService.isEnabled(c);
-        final boolean selfOk = MetaButtonService.canSelfEnable(c);
+        // Meta tlacitko: doplnek "Neo - Meta tlacitko" (jako u Lightning Launcheru) - Neo ho
+        // samo nainstaluje (jinak by ho Android kvuli "Omezenemu nastaveni" nepustil zapnout)
+        // a pak se zapne v Pristupnosti Androidu.
+        final boolean installed = MetaAddon.isInstalled(c);
+        final boolean update = installed && MetaAddon.needsUpdate(c);
+        final boolean metaOn = installed && MetaAddon.isEnabled(c);
+        final String metaDesc;
+        final String metaButton;
+        if (!installed) {
+            metaDesc = "Nainstaluj malý doplněk „Neo – Meta tlačítko“ (jako u Lightning Launcheru)";
+            metaButton = "Nainstalovat";
+        } else if (update) {
+            metaDesc = "Je nová verze doplňku Meta tlačítka";
+            metaButton = "Aktualizovat";
+        } else if (!metaOn) {
+            metaDesc = "V Přístupnosti Androidu zapni „Neo – Meta tlačítko“";
+            metaButton = "Zapnout";
+        } else {
+            metaDesc = "Zapnuto. Když je Neo otevřené, další zmáčknutí ukáže menu Questu";
+            metaButton = "Nastavení";
+        }
         grid(c, page,
-                actionTile(c, Icons.META, "Meta tlačítko otevře Neo", metaOn
-                                ? "Zapnuto. Když je Neo otevřené, další zmáčknutí ukáže menu Questu"
-                                : selfOk ? "Neo si službu zapne samo (povoleno z PC)"
-                                : "V Přístupnosti Androidu zapni „Neo – Meta tlačítko“",
-                        metaOn ? "Nastavení" : "Zapnout", v -> {
-                            if (!metaOn && MetaButtonService.selfEnable(c)) {
-                                Toast.makeText(c, "Služba Meta tlačítka zapnuta", Toast.LENGTH_SHORT).show();
-                                return;
-                            }
-                            try {
-                                c.startActivity(MetaButtonService.settingsIntent(c));
-                            } catch (Exception e) {
-                                Toast.makeText(c, "Otevři Android nastavení → Přístupnost ručně", Toast.LENGTH_LONG).show();
-                            }
-                        }),
-                actionTile(c, Icons.ALERT, "„Omezené nastavení“?", metaOn
-                                ? "Služba běží – tohle už není potřeba"
-                                : "Když Android službu nepustí: tady vpravo nahoře tři tečky → Povolit omezená nastavení, pak znovu Zapnout",
-                        "Info o Neu", v -> {
-                            try {
-                                c.startActivity(AppLauncher.appInfoIntent(c, c.getPackageName()));
-                            } catch (Exception e) {
-                                Toast.makeText(c, "Informace o aplikaci nejdou otevřít", Toast.LENGTH_SHORT).show();
-                            }
-                        }),
+                actionTile(c, Icons.META, "Meta tlačítko otevře Neo", metaDesc, metaButton, v -> {
+                    if (!(c instanceof LauncherActivity)) return;
+                    final LauncherActivity a = (LauncherActivity) c;
+                    if (!installed || update) a.installMetaAddon();
+                    else if (!metaOn) a.enableMetaAddon();
+                    else if (!MetaAddon.openSettings(a)) {
+                        Toast.makeText(c, "Přístupnost nejde otevřít", Toast.LENGTH_SHORT).show();
+                    }
+                }),
                 toggleTile(c, Icons.PLAY, "Ve hře menu Questu", "Meta ve hře ukáže menu Questu (Pokračovat / Ukončit), ne Neo",
-                        prefs.metaGameMenu(), prefs::setMetaGameMenu));
-        grid(c, page,
+                        prefs.metaGameMenu(), prefs::setMetaGameMenu),
                 toggleTile(c, Icons.EXIT, "Po hře otevřít Neo", "Když hru ukončíš, rovnou se ukáže Neo",
-                        prefs.metaAfterGame(), prefs::setMetaAfterGame),
+                        prefs.metaAfterGame(), prefs::setMetaAfterGame));
+        grid(c, page,
                 toggleTile(c, Icons.LAYERS, "3× Meta = zpět do Nea",
                         "Ve hře třikrát rychle zmáčkni Meta: otevře se Neo a dole Pokračovat / Ukončit",
                         prefs.metaTriple(), prefs::setMetaTriple),
                 toggleTile(c, Icons.POWER, "Po zapnutí Questu otevřít Neo",
                         metaOn ? "Po startu headsetu se rovnou ukáže Neo"
-                                : "Potřebuje službu Meta tlačítka (výše)",
-                        prefs.openOnBoot(), prefs::setOpenOnBoot));
+                                : "Potřebuje doplněk Meta tlačítka (vlevo)",
+                        prefs.openOnBoot(), prefs::setOpenOnBoot),
+                infoTile(c, Icons.MOON, "Uspat a vypnout", "V rychlém menu – taky přes doplněk Meta tlačítka"));
         boolean canWrite;
         try {
             canWrite = Settings.System.canWrite(c);
@@ -366,7 +367,7 @@ public final class SettingsSheet {
                             }
                         }),
                 infoTile(c, Icons.SLIDERS, "Rychlé menu", "Klepni na hodiny v horní liště – jas, hlasitost, Wi-Fi a funkce Questu"),
-                infoTile(c, Icons.MOON, "Uspat a vypnout", "V rychlém menu – taky přes službu Meta tlačítka"));
+                null);
     }
 
     private static void pageUpdates(Ctx x, LinearLayout page) {

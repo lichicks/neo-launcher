@@ -4,6 +4,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Prikazy pro doplnek "Neo - Meta tlacitko" (uspat, vypnout, ukoncit aplikaci).
+         Signature = smi jen aplikace se stejnym klicem. Definuje ho i doplnek. -->
+    <permission
+        android:name="com.neolauncher.permission.CONTROL"
+        android:protectionLevel="signature" />
+    <uses-permission android:name="com.neolauncher.permission.CONTROL" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.REQUEST_DELETE_PACKAGES" />
@@ -76,30 +82,15 @@
             </intent-filter>
         </activity>
 
-        <!-- Kompatibilita s addonem pro Meta tlacitko (RedirectServices
-             z Lightning Launcheru): addon se sem pta, jestli je launcher
-             otevreny a jestli ho ma spustit s rozmazanim pozadi. -->
+        <!-- Stav pro doplnek "Neo - Meta tlacitko" (a starsi RedirectServices
+             z Lightning Launcheru): je launcher otevreny, co chce uzivatel
+             (menu ve hre, po hre, po zapnuti, 3x Meta). -->
         <provider
             android:name=".ShortcutStateProvider"
             android:authorities="${applicationId}.shortcutStateProvider"
             android:exported="true"
             android:grantUriPermissions="true"
             tools:ignore="ExportedContentProvider" />
-        <!-- Meta tlacitko otevre Neo (sluzba pristupnosti, zapina se v Nastaveni ->
-             Pristupnost). Driv samostatny addon RedirectServices. -->
-        <service
-            android:name=".MetaButtonService"
-            android:label="@string/meta_service_name"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-            android:exported="true"
-            tools:ignore="AccessibilityPolicy">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/meta_button_service" />
-        </service>
         <!-- Vysledek instalace aktualizace (PackageInstaller). -->
         <receiver
             android:name=".update.InstallReceiver"

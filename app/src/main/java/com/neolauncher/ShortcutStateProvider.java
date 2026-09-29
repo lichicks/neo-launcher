@@ -10,10 +10,10 @@ import com.neolauncher.data.Platform;
 import com.neolauncher.data.Prefs;
 
 /**
- * Odpovida addonu pro Meta tlacitko (RedirectServices z Lightning Launcheru).
- * Addon se pred otevrenim launcheru pta na tri sloupce:
- * isOpen (je uz v popredi?), shouldBlur (spustit s rozmazanim pozadi?)
- * a allowShortcuts (smi se launcher otevirat zkratkou?).
+ * Stav Nea pro doplnek "Neo - Meta tlacitko" (MetaAddon) a starsi addon
+ * RedirectServices z Lightning Launcheru: isOpen / isVisible (je Neo otevrene?),
+ * shouldBlur, allowShortcuts a volby Meta tlacitka z nastaveni Nea
+ * (metaGameMenu, metaAfterGame, openOnBoot, metaTriple).
  */
 public class ShortcutStateProvider extends ContentProvider {
 
@@ -25,15 +25,20 @@ public class ShortcutStateProvider extends ContentProvider {
     @Override
     public Cursor query(Uri uri, String[] projection, String selection,
                         String[] selectionArgs, String sortOrder) {
-        MatrixCursor c = new MatrixCursor(new String[]{"isOpen", "shouldBlur", "allowShortcuts"});
-        NeoApp app = NeoApp.get();
-        Prefs prefs = app != null ? app.prefs() : null;
-        if (prefs != null && !prefs.allowShortcuts()) {
-            c.addRow(new Object[]{0, 0, 0});
+        final MatrixCursor c = new MatrixCursor(new String[]{"isOpen", "shouldBlur", "allowShortcuts",
+                "isVisible", "metaGameMenu", "metaAfterGame", "openOnBoot", "metaTriple"});
+        final NeoApp app = NeoApp.get();
+        final Prefs prefs = app != null ? app.prefs() : null;
+        final int visible = LauncherActivity.isVisible() ? 1 : 0;
+        if (prefs == null) {
+            c.addRow(new Object[]{LauncherActivity.isInForeground() ? 1 : 0, 0, 1, visible, 1, 1, 1, 1});
             return c;
         }
-        boolean blur = prefs != null && prefs.systemBlur() && Platform.supportsBlendEffects();
-        c.addRow(new Object[]{LauncherActivity.isInForeground() ? 1 : 0, blur ? 1 : 0, 1});
+        final boolean allow = prefs.allowShortcuts();
+        final boolean blur = allow && prefs.systemBlur() && Platform.supportsBlendEffects();
+        c.addRow(new Object[]{allow && LauncherActivity.isInForeground() ? 1 : 0, blur ? 1 : 0, allow ? 1 : 0,
+                visible, prefs.metaGameMenu() ? 1 : 0, prefs.metaAfterGame() ? 1 : 0,
+                prefs.openOnBoot() ? 1 : 0, prefs.metaTriple() ? 1 : 0});
         return c;
     }
 

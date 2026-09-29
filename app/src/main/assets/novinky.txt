@@ -1,3 +1,10 @@
+# Meta tlačítko jako doplněk (stejně jako u Lightning Launcheru)
+• Meta tlačítko teď funguje přes malý doplněk „Neo – Meta tlačítko“, který si Neo nainstaluje samo – stejně jako to dělá Lightning Launcher. Android ho pak pustí zapnout bez „Omezeného nastavení“
+• Nastavení → Quest → Meta tlačítko: Nainstalovat → potvrď instalaci → otevře se Přístupnost, kde zapneš „Neo – Meta tlačítko“
+• Meta se teď pozná stejně jako v Lightning Launcheru – podle okna Knihovny (dřív Neo hledalo jiné okno, a proto nereagovalo)
+• Na doplňku stojí i otevření Nea po zapnutí Questu, 3× Meta, Uspat, Vypnout a Ukončit
+• Kdyby se po Meta otevíraly oba launchery, v Přístupnosti vypni službu Lightning Launcheru
+
 # Opravy po testu na Questu
 • Zapnutí Meta tlačítka teď otevírá Přístupnost v nastavení Androidu (dřív se otevřelo prázdné Nastavení Questu). Když Android napíše „Omezené nastavení“: v Nastavení → Quest klepni u „Omezené nastavení?“ na Info o Neu, vpravo nahoře tři tečky → Povolit omezená nastavení, a pak znovu Zapnout
 • Nová volba Android nastavení – v rychlém menu (dlaždice Android místo Nastavení Questu) i v Nastavení → Quest

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Sluzba Meta tlacitka: sleduje zmeny oken (kdo je v popredi, kdy se otevre
-     Navigator Questu). Obsah okna cte jen u systemove aplikace Questu, aby
-     poznala Navigator na kterekoliv zalozce (tlacitko Knihovna). -->
+     Navigator / Knihovna Questu). Obsah okna cte jen kvuli poznani Navigatoru
+     a klepnuti na "Vynutit ukonceni" (Ukoncit v Neu). -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:description="@string/meta_service_desc"
+    android:description="@string/service_desc"
     android:accessibilityEventTypes="typeWindowStateChanged"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault|flagIncludeNotImportantViews"

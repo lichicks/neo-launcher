@@ -71,7 +71,7 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
 
 ## 3. Stav
 
-- Poslední verze: **v2.0.49** (testovací buildy z větve `claude/funny-ramanujan-xp8ba6`
+- Poslední verze: **v2.0.52** (testovací buildy z větve `claude/funny-ramanujan-xp8ba6`
   PR #1 do `main` je otevřený). APK: GitHub → Releases → nejnovější `NeoLauncher-2.0.xx.apk`.
 - **29. 9. první test na Questu: „funguje až podivuhodně super“.** Opraveno podle testu:
   Meta tlačítko (vestavěná služba, viz níže), karusel (pryč „Spuštěno 0×“ a datum

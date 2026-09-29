@@ -440,7 +440,12 @@ místo `com.oculus.panelapp.library`) → přepsáno na doplněk jako u LL (viz
    ukončení hry se otevře Neo – a neotevře se při pouhé pauze? Při
    problému `adb -P 5038 logcat -s NeoMeta`.
 
-0. **Nejdřív (doplněk, v2.0.59+):** Nastavení → Quest → Meta tlačítko →
+0. **Čtvrtý test 2026-09-30:** Meta doma a otevření po zapnutí FUNGUJÍ.
+   Ve hře se otevíralo Neo (i s volbou menu Questu) a chyběla lišta → opraveno
+   (UsageStats, doplněk v1.1 – v Neu „Aktualizovat“). Ověřit: ve hře Meta =
+   menu Questu, 3× Meta = Neo s lištou, po ukončení hry Neo.
+
+0. **Doplněk (v2.0.59+):** Nastavení → Quest → Meta tlačítko →
    Nainstalovat → potvrdit → otevře se Android Přístupnost → zapnout
    „Neo – Meta tlačítko“ (bez Omezeného nastavení?). Službu Lightning
    Launcheru vypnout. Meta doma → Neo? Pak vše, co na doplňku stojí (3× Meta,
@@ -542,7 +547,20 @@ jako Lightning Launcher**: samostatná malá aplikace se službou přístupnosti
   otevření menu do 1,6 s) ze hry = Neo s lištou Pokračovat / Ukončit, v Neu
   = zpět do hry (`metaTriple`); uspat / nabídka vypnutí / vynutit ukončení
   na příkaz z Nea. `MetaAddon.suppress` když Neo samo otevírá systém Questu.
-- **Heuristika z událostí oken, loguje:** `adb -P 5038 logcat -s NeoMeta`.
+- **Co je v popředí = UsageStats v Neu, ne události oken** (od doplňku v1.1,
+  čtvrtý test 2026-09-30: ve hře Meta otevřelo Neo a chyběla lišta – menu
+  Questu ve hře posílá i událost `vrshell`, takže doplněk myslel, že hra
+  skončila). `data/ForegroundApps` (Neo, oprávnění Přístup k využití) projde
+  `UsageEvents` za 8 h: poslední RESUMED / PAUSED / STOPPED každé aktivity →
+  `vrPkg` (VR hra RESUMED nebo PAUSED < 5 s = běží i pod menu), `topPkg`,
+  `endedVrPkg` (STOPPED < 15 s po ≥ 4 s hraní). Provider je posílá doplňku
+  (`usageKnown`, `topPkg`, `vrPkg`, `endedVrPkg`). Doplněk: Navigator + `vrPkg`
+  + `metaGameMenu` → menu Questu; lišta/3× cílí na `vrPkg` (jinak `topPkg`);
+  událost domova jen naplánuje `checkAfterGame` za 1,5 s (Neo po hře jen při
+  `endedVrPkg`). Bez oprávnění záložně události oken. Dlaždice Meta v Nastavení
+  → Quest nabídne „Povolit“, když Neo Přístup k využití nemá.
+- **Heuristika z událostí oken, loguje:** `adb -P 5038 logcat -s NeoMeta`
+  (od v1.1 i každé okno: „Okno: balíček třída [text]“).
 - Když má uživatel zapnutou i službu Lightning Launcheru, otevřou se po
   stisku oba launchery → v Přístupnosti nechat jen „Neo – Meta tlačítko“.
 - `ShortcutStateProvider` slouží i starému addonu RedirectServices (kompatibilita).

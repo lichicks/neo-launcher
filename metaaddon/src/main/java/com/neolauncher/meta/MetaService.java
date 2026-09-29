@@ -75,7 +75,11 @@ public class MetaService extends AccessibilityService {
     private static final long LAUNCH_COOLDOWN_MS = 1500;
     /** Hra musi byt v popredi aspon takhle dlouho, aby se "po hre" otevrelo Neo. */
     private static final long MIN_GAME_MS = 4000;
-    private static final long AFTER_GAME_DELAY_MS = 700;
+    /**
+     * Udalost domova neni jista: menu Questu ve hre posila taky udalost vrshell.
+     * Proto se "hra skoncila" rozhodne az za chvili podle UsageStats z Nea.
+     */
+    private static final long AFTER_GAME_CHECK_MS = 1500;
     /** Sluzba pripojena do takove doby od zapnuti = start Questu (ne zapnuti sluzby / aktualizace). */
     private static final long BOOT_WINDOW_MS = 10 * 60 * 1000L;
     /** Po prvnim domovskem okne chvili pockat, az se prostredi Questu nacte. */
@@ -114,6 +118,10 @@ public class MetaService extends AccessibilityService {
     private boolean bootPending;
     private final Runnable bootLaunch = this::onBootLaunch;
     private long lastMenuEvent;
+    /** Kdy prisla posledni udalost domova (vrshell) a posledni otevreni Navigatoru. */
+    private long homeAt, lastNavigatorAt;
+    /** Uz obslouzena skoncena hra (at se "po hre" neotevre dvakrat). */
+    private String endedHandled;
     private long firstOpen;
     private int opens;
     private String stopPkg;
@@ -165,6 +173,7 @@ public class MetaService extends AccessibilityService {
         if (p == null) return;
         final String pkg = p.toString();
         final long now = SystemClock.uptimeMillis();
+        Log.d(TAG, "Okno: " + pkg + " " + e.getClassName() + " " + e.getText());
         if (bootPending) onBootEvent(pkg);
         if (SYSTEMUX.equals(pkg) || LIBRARY_PANEL.equals(pkg)) {
             onMenuWindow(e, pkg, now);
@@ -215,7 +224,7 @@ public class MetaService extends AccessibilityService {
         bootPending = false;
         final Neo.State s = Neo.state(this);
         if (s == null || !s.openOnBoot || s.visible) return;
-        if (fgPkg != null && isLaunchable(fgPkg)) return;
+        if (s.usageKnown ? s.topPkg != null : fgPkg != null && isLaunchable(fgPkg)) return;
         launchNeo("po zapnuti Questu", null);
     }
 
@@ -247,19 +256,42 @@ public class MetaService extends AccessibilityService {
 
     private void onHome(long now) {
         Log.d(TAG, "Domovske prostredi, predtim " + fgPkg);
-        if (fgVr && now - fgSince > MIN_GAME_MS && pendingAfterGame == null) {
-            final Neo.State s = Neo.state(this);
-            if (s != null && s.afterGame) {
-                // Hra skoncila (nebo odesla domu) -> po chvilce otevrit Neo.
-                pendingAfterGame = () -> {
-                    pendingAfterGame = null;
-                    launchNeo("po skonceni hry", null);
-                };
-                handler.postDelayed(pendingAfterGame, AFTER_GAME_DELAY_MS);
-            }
+        homeAt = now;
+        // Nemazat hned popredi: menu Questu ve hre posila taky udalost domova. Za chvili
+        // se overi, jestli hra opravdu skoncila (UsageStats v Neu), a pak pripadne Neo.
+        if (pendingAfterGame == null) {
+            final boolean wasGame = fgVr && now - fgSince > MIN_GAME_MS;
+            pendingAfterGame = () -> {
+                pendingAfterGame = null;
+                checkAfterGame(wasGame);
+            };
+            handler.postDelayed(pendingAfterGame, AFTER_GAME_CHECK_MS);
         }
+    }
+
+    /** Skoncila hra (a ne jen menu Questu pres hru)? Pak "po hre otevrit Neo". */
+    private void checkAfterGame(boolean wasGame) {
+        final Neo.State s = Neo.state(this);
+        if (s == null) return;
+        final boolean ended;
+        final String game;
+        if (s.usageKnown) {
+            // Spolehlive: hra je STOPPED pred chvilkou a zadna VR hra nebezi.
+            ended = s.vrPkg == null && s.endedVrPkg != null && !s.endedVrPkg.equals(endedHandled);
+            game = s.endedVrPkg;
+        } else {
+            // Bez UsageStats: kdyz se po udalosti domova neotevrel Navigator, hra skoncila.
+            ended = wasGame && lastNavigatorAt < homeAt;
+            game = fgPkg;
+        }
+        Log.i(TAG, "Kontrola po udalosti domova: " + (ended ? "hra " + game + " skoncila" : "hra bezi / nic")
+                + (s.usageKnown ? " (UsageStats)" : " (udalosti oken)"));
+        if (!ended) return;
+        endedHandled = game;
+        if (game != null && game.equals(runningPkg)) runningPkg = null;
         fgPkg = null;
         fgVr = false;
+        if (s.afterGame && !s.visible) launchNeo("po skonceni hry", null);
     }
 
     private void cancelAfterGame() {
@@ -313,7 +345,7 @@ public class MetaService extends AccessibilityService {
             Log.v(TAG, pkg + " okno: " + e.getText() + " / " + e.getClassName());
             return;
         }
-        Log.i(TAG, "Navigator (" + pkg + "): " + e.getText() + ", popredi=" + fgPkg + (fgVr ? " (VR)" : ""));
+        lastNavigatorAt = now;
         if (now < suppressUntil) return;                  // Neo samo otevrelo system Questu
         if (now - lastLaunch < LAUNCH_COOLDOWN_MS) return;
         final Neo.State s = Neo.state(this);
@@ -321,23 +353,34 @@ public class MetaService extends AccessibilityService {
             Log.w(TAG, "Neo neni nainstalovane");
             return;
         }
+        final String game = game(s);
+        Log.i(TAG, "Navigator (" + pkg + "): " + e.getText() + ", hra=" + game + ", popredi=" + fgPkg
+                + (s.usageKnown ? " (UsageStats)" : " (udalosti oken)"));
         if (s.visible) {
             // Neo uz je otevrene -> druhe zmacknuti = opravdove menu Questu.
             Log.i(TAG, "Neo je otevrene, necham menu Questu");
             return;
         }
         if (!s.allowShortcuts) return;
-        if (fgVr && s.gameMenu) {
+        if (game != null && s.gameMenu) {
+            // Ve hre menu Questu (Pokracovat / Ukoncit). Neni to konec hry.
+            cancelAfterGame();
             Log.i(TAG, "Bezi VR hra, necham menu Questu");
             return;
         }
-        // Z bezici aplikace rovnou do Nea -> v Neu lista Pokracovat / Ukoncit.
+        // Ze hry rovnou do Nea (volba vypnuta) -> v Neu lista Pokracovat / Ukoncit.
         Intent extras = null;
-        if (fgPkg != null && !Neo.PKG.equals(fgPkg) && isLaunchable(fgPkg)) {
-            runningPkg = fgPkg;
-            extras = new Intent().putExtra(Neo.EXTRA_RUNNING, fgPkg);
+        if (game != null) {
+            runningPkg = game;
+            extras = new Intent().putExtra(Neo.EXTRA_RUNNING, game);
         }
         launchNeo("Meta tlacitko", extras);
+    }
+
+    /** VR hra, ktera ted bezi (i pod menu Questu), nebo null. */
+    private String game(Neo.State s) {
+        if (s.usageKnown) return s.vrPkg;
+        return fgVr && fgPkg != null ? fgPkg : null;
     }
 
     private boolean isNavigator(AccessibilityEvent e, String pkg) {
@@ -407,19 +450,28 @@ public class MetaService extends AccessibilityService {
         if (now < suppressUntil) return false;
         final Neo.State s = Neo.state(this);
         if (s == null || !s.triple) return false;
-        if (s.visible && Neo.PKG.equals(fgPkg)) {
+        if (s.visible) {
             // V Neu: 3x Meta = zpet do aplikace, ktera bezi na pozadi.
             if (runningPkg == null) return false;
             Log.i(TAG, "3x Meta v Neu -> zpet do " + runningPkg);
             Neo.open(this, new Intent().putExtra(Neo.EXTRA_RESUME, true));
             return true;
         }
-        if (fgPkg == null || Neo.PKG.equals(fgPkg) || !isLaunchable(fgPkg)) return false;
-        Log.i(TAG, "3x Meta ve " + fgPkg + " -> Neo s nabidkou Pokracovat / Ukoncit");
-        runningPkg = fgPkg;
+        // Hra (i pod menu Questu), jinak posledni aplikace v popredi.
+        String target = game(s);
+        if (target == null) {
+            target = s.usageKnown ? s.topPkg
+                    : fgPkg != null && !Neo.PKG.equals(fgPkg) && isLaunchable(fgPkg) ? fgPkg : null;
+        }
+        if (target == null) {
+            Log.i(TAG, "3x Meta, ale nic nebezi");
+            return false;
+        }
+        Log.i(TAG, "3x Meta ve " + target + " -> Neo s nabidkou Pokracovat / Ukoncit");
+        runningPkg = target;
         cancelAfterGame();
         lastLaunch = 0;
-        launchNeo("3x Meta", new Intent().putExtra(Neo.EXTRA_RUNNING, fgPkg));
+        launchNeo("3x Meta", new Intent().putExtra(Neo.EXTRA_RUNNING, target));
         return true;
     }
 

@@ -32,6 +32,12 @@ final class Neo {
         boolean afterGame = true;
         boolean openOnBoot = true;
         boolean triple = true;
+        /**
+         * Neo zna popredi z UsageStats (ma "Pristup k vyuziti"). Pak plati topPkg / vrPkg /
+         * endedVrPkg - spolehlivejsi nez udalosti oken (menu ve hre posila i udalost domova).
+         */
+        boolean usageKnown;
+        String topPkg, vrPkg, endedVrPkg;
     }
 
     /** @return null = Neo neni nainstalovane / neodpovida */
@@ -45,6 +51,10 @@ final class Neo {
             s.afterGame = flag(cur, "metaAfterGame", true);
             s.openOnBoot = flag(cur, "openOnBoot", true);
             s.triple = flag(cur, "metaTriple", true);
+            s.usageKnown = flag(cur, "usageKnown", false);
+            s.topPkg = text(cur, "topPkg");
+            s.vrPkg = text(cur, "vrPkg");
+            s.endedVrPkg = text(cur, "endedVrPkg");
             return s;
         } catch (Exception e) {
             Log.w(MetaService.TAG, "Stav Nea nejde precist", e);
@@ -59,6 +69,16 @@ final class Neo {
             return cur.getInt(i) != 0;
         } catch (Exception e) {
             return def;
+        }
+    }
+
+    private static String text(Cursor cur, String col) {
+        final int i = cur.getColumnIndex(col);
+        if (i < 0) return null;
+        try {
+            return cur.isNull(i) ? null : cur.getString(i);
+        } catch (Exception e) {
+            return null;
         }
     }
 

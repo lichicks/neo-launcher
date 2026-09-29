@@ -15,8 +15,8 @@ android {
         targetSdkVersion 34
         // Verze doplnku - zvysit pri kazde zmene kodu doplnku. Neo porovna
         // pribalenou verzi s nainstalovanou a nabidne aktualizaci.
-        versionCode 1
-        versionName "1.0"
+        versionCode 2
+        versionName "1.1"
     }
 
     signingConfigs {

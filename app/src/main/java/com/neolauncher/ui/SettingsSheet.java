@@ -308,6 +308,8 @@ public final class SettingsSheet {
         final boolean installed = MetaAddon.isInstalled(c);
         final boolean update = installed && MetaAddon.needsUpdate(c);
         final boolean metaOn = installed && MetaAddon.isEnabled(c);
+        // Hru v popredi pozna doplnek z UsageStats v Neu (udalosti oken ve hre klamou).
+        final boolean usageOk = com.neolauncher.data.ForegroundApps.query(c).known;
         final String metaDesc;
         final String metaButton;
         if (!installed) {
@@ -319,6 +321,9 @@ public final class SettingsSheet {
         } else if (!metaOn) {
             metaDesc = "V Přístupnosti Androidu zapni „Neo – Meta tlačítko“";
             metaButton = "Zapnout";
+        } else if (!usageOk) {
+            metaDesc = "Zapnuto. Ať ve hře pozná hru, povol Neu herní čas (Přístup k využití)";
+            metaButton = "Povolit";
         } else {
             metaDesc = "Zapnuto. Když je Neo otevřené, další zmáčknutí ukáže menu Questu";
             metaButton = "Nastavení";
@@ -329,6 +334,7 @@ public final class SettingsSheet {
                     final LauncherActivity a = (LauncherActivity) c;
                     if (!installed || update) a.installMetaAddon();
                     else if (!metaOn) a.enableMetaAddon();
+                    else if (!usageOk) UsageInfo.requestPermission(a);
                     else if (!MetaAddon.openSettings(a)) {
                         Toast.makeText(c, "Přístupnost nejde otevřít", Toast.LENGTH_SHORT).show();
                     }

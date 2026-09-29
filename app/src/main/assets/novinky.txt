@@ -1,3 +1,10 @@
+# Meta tlačítko ve hře
+• Ve hře teď Meta ukáže menu Questu (Pokračovat / Ukončit) a Neo se přes hru neotevře – když máš v Nastavení → Quest zapnuté „Ve hře menu Questu“
+• 3× Meta ve hře otevře Neo a dole je lišta s hrou, která běží na pozadí (Pokračovat / Ukončit)
+• Po skončení hry se Neo otevře, jen když hra opravdu skončila – ne při otevření menu Questu ve hře
+• Že běží hra, teď Neo pozná podle herního času (Přístup k využití). Když ho nemáš povolený, v Nastavení → Quest u Meta tlačítka je tlačítko Povolit
+• Doplněk Meta tlačítka má novou verzi – v Nastavení → Quest klepni u Meta tlačítka na Aktualizovat
+
 # Meta tlačítko jako doplněk (stejně jako u Lightning Launcheru)
 • Meta tlačítko teď funguje přes malý doplněk „Neo – Meta tlačítko“, který si Neo nainstaluje samo – stejně jako to dělá Lightning Launcher. Android ho pak pustí zapnout bez „Omezeného nastavení“
 • Nastavení → Quest → Meta tlačítko: Nainstalovat → potvrď instalaci → otevře se Přístupnost, kde zapneš „Neo – Meta tlačítko“

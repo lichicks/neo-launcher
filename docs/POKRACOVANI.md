@@ -84,6 +84,9 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
 - **Nové (29. 9., zatím neověřené na headsetu):** instalace APK z Nea (Nastavení → Aplikace),
   velikost her v menu karty + řazení „Velikost“, záloha a obnova nastavení (Nastavení → O Neo),
   paralaxa (po druhém testu odstraněna).
+- **Čtvrtý test (30. 9.):** Meta doma i otevření po zapnutí Questu fungují. Ve hře se ale
+  otevíralo Neo a chyběla lišta Pokračovat / Ukončit → doplněk teď bere „co běží“ ze statistik
+  využití v Neu (`data/ForegroundApps`), ne z událostí oken; doplněk v1.1.
 - **Třetí test (30. 9.):** vše kromě Meta tlačítka OK. Meta tlačítko je teď samostatný
   doplněk „Neo – Meta tlačítko“ (modul `metaaddon/`), který si Neo samo nainstaluje – přesně
   jako Lightning Launcher (takto nainstalovanou aplikaci Android pustí zapnout v Přístupnosti).

@@ -47,6 +47,11 @@ public final class AppRepository {
         void onAppsChanged(List<AppEntry> apps);
     }
 
+    /** Systemovy balicek Questu/Androidu (neni to hra ani aplikace pro uzivatele). */
+    public static boolean isExcluded(String pkg) {
+        return EXCLUDED.contains(pkg) || pkg.startsWith("com.threethan.launcher.service");
+    }
+
     /** Systemove balicky Questu/Androidu, ktere v launcheru nemaji co delat. */
     private static final Set<String> EXCLUDED = new HashSet<>(List.of(
             "android",

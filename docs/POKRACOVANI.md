@@ -83,7 +83,14 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
   Službu Lightning Launcheru v Přístupnosti vypnout (jinak se otevřou oba).
 - **Nové (29. 9., zatím neověřené na headsetu):** instalace APK z Nea (Nastavení → Aplikace),
   velikost her v menu karty + řazení „Velikost“, záloha a obnova nastavení (Nastavení → O Neo),
-  paralaxa (karty se posouvají za laserem, lišty proti němu, na kartě odlesk; jde vypnout).
+  paralaxa (po druhém testu odstraněna).
+- **Druhý test (29. 9. v noci):** skoro vše fajn. Opraveno: Quest přesměrovával
+  odkazy na nastavení do Nastavení Questu → teď Android nastavení (jako Lightning
+  Launcher); zapnutí služby Meta tlačítka blokuje Android „Omezené nastavení“ →
+  Informace o aplikaci → ⋮ → Povolit omezená nastavení (nebo z PC `adb -P 5038 shell
+  appops set com.neolauncher.v1 ACCESS_RESTRICTED_SETTINGS allow`); paralaxa pryč;
+  Streamovat → aplikace Fotoaparát; nová dlaždice Android nastavení; nástup karet
+  výraznější a až je okno vidět.
 - **Nové (29. 9. noc, neověřené):** 3× Meta ve hře otevře Neo s lištou dole
   (Pokračovat / Ukončit / skrýt; Ukončit klepne za uživatele na Vynutit ukončení
   v informacích o aplikaci), v Neu 3× Meta = zpět do hry; rychlé menu má dlaždice

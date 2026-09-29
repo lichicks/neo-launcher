@@ -150,6 +150,8 @@ public class LauncherActivity extends Activity
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        // Neo otevrene znovu (Meta tlacitko, knihovna), i kdyz okno nebylo zastavene -> nastup karet.
+        if (!carouselShown && !intent.getBooleanExtra(MetaButtonService.EXTRA_RESUME, false)) launcher.playIntro();
         handleServiceIntent(intent);
     }
 
@@ -643,8 +645,8 @@ public class LauncherActivity extends Activity
                 ok = startSettings(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS)
                         || openPanel("systemux://settings");
                 break;
-            case QuickMenuView.T_QUEST_SETTINGS:
-                ok = openPanel("systemux://settings");
+            case QuickMenuView.T_ANDROID_SETTINGS:
+                ok = AppLauncher.openAndroidSettings(this);
                 break;
             case QuickMenuView.T_QUEST_QUICK:
                 ok = openPanel("systemux://quick_settings");
@@ -657,8 +659,12 @@ public class LauncherActivity extends Activity
                 ok = openPackage("com.oculus.browser", "Prohlížeč");
                 break;
             case QuickMenuView.T_CAST:
-                // Sdileni Questu: streamovani (Chromecast, telefon...), nahravani a snimek obrazovky.
-                ok = openPanel("systemux://sharing") || openPanel("systemux://quick_settings");
+                // Sdileni Questu (streamovani do TV / telefonu, nahravani, snimek): od Horizon OS v81
+                // je to aplikace Fotoaparat (com.oculus.metacam), driv panel systemux://sharing
+                // (Lightning Launcher to deli stejne). Jinak aspon rychle nastaveni Questu.
+                ok = openPackage("com.oculus.metacam", "Fotoaparát")
+                        || (com.neolauncher.data.Platform.vrOsVersion() < 81 && openPanel("systemux://sharing"))
+                        || openPanel("systemux://quick_settings");
                 break;
             case QuickMenuView.T_SLEEP:
                 overlay.close();
@@ -708,7 +714,7 @@ public class LauncherActivity extends Activity
             Intent i = new Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS,
                     Uri.parse("package:" + getPackageName()));
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(i);
+            startActivity(AppLauncher.inAndroidSettings(this, i));
             toast("Povol Neo Launcheru úpravu systémových nastavení");
         } catch (Exception e) {
             toast("Nastavení není dostupné. Z PC: adb shell appops set "

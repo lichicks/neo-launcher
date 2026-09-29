@@ -92,29 +92,22 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
      * a baterii - napul zanorena do horni hrany panelu (stred na frame.top).
      */
     private static final float ORN_H = 52f;
-    /*
-     * Paralaxa (hloubka): panel je "okno", karty lezi za sklem, lista a ornament
-     * pred nim. Kdyz laser (= kam se divas) jde doprava, vzdalenejsi vrstva se
-     * vuci oknu posune s nim a blizsi proti nemu - jako pohled oknem. Na karte
-     * pod laserem totez v malem: obrazek (vzadu) jde s laserem, nazev a stitky
-     * (vepredu) proti nemu, pres kartu prejede odlesk. Vse na pomale pruzine,
-     * male hodnoty (v brylich se to nesmi "houpat").
-     */
-    private static final float PAR_GRID_X = 9f, PAR_GRID_Y = 6f;
-    private static final float PAR_CHROME_X = 3.5f, PAR_CHROME_Y = 2.5f;
-    /** Obrazek karty: zvetseni a posun (podil sirky) pod laserem. */
-    private static final float PAR_IMG_ZOOM = 0.07f, PAR_IMG_SHIFT = 0.032f;
-    private static final float PAR_FRONT_X = 5f, PAR_FRONT_Y = 3.5f;
-    private static final float PAR_RESPONSE = 0.9f;
     /** Svetly okraj skla u laseru: dosah svetla (dp), rychlost dojezdu (s), tloustka hrany (dp). */
     private static final float RIM_RADIUS = 230f;
     private static final float RIM_RESPONSE = 0.24f;
     private static final float RIM_WIDTH = 1.6f;
     /** Nastup karet pri otevreni: delka, zpozdeni okraju proti stredu, rozestup a priblizeni na zacatku. */
-    private static final float INTRO_MS = 560f;
-    private static final float INTRO_STAGGER_MS = 170f;
-    private static final float INTRO_SPREAD = 0.16f;
-    private static final float INTRO_ZOOM = 0.10f;
+    private static final float INTRO_MS = 900f;
+    private static final float INTRO_STAGGER_MS = 300f;
+    private static final float INTRO_SPREAD = 0.34f;
+    private static final float INTRO_ZOOM = 0.22f;
+    /**
+     * Nastup zacne az od prvniho opravdu vykresleneho snimku a jeste o chvili
+     * pozdeji - Quest okno ukazuje s vlastni animaci, jinak by nastup probehl
+     * "naslepo" (na headsetu nebyl videt). Prolnuti obsahu (ms).
+     */
+    private static final long INTRO_DELAY_MS = 180;
+    private static final float INTRO_FADE_MS = 450f;
     /** Polozky ornamentu (zalozky, stav) - soustredne s ornamentem: (52 - 40) / 2 = 6. */
     private static final float ORN_ITEM_H = 40f;
     private static final float ORN_INSET = 6f;
@@ -330,6 +323,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     /** Nastup karet pri otevreni (playIntro): zacatek, meritko animaci systemu. */
     private long introNs;
     private float introScale = 1f;
+    /** playIntro zavolano, ale jeste nebyl vykresleny snimek - hodiny nastupu se spusti v onDraw. */
+    private boolean introArmed;
     /** Logo Neo nahore v leve liste. */
     private final RectF brandRect = new RectF();
     private final RectF ornRect = new RectF();
@@ -338,18 +333,12 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final Eased[] railHover = {new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT),
             new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT)};
     private final Spring railExpand = new Spring(0, 0.36f, 0.82f, 0.002f);
-    /** Paralaxa: poloha laseru v panelu (-1..1), na pomale pruzine. */
-    private final Spring parX = new Spring(0, PAR_RESPONSE, 1f, 0.001f);
-    private final Spring parY = new Spring(0, PAR_RESPONSE, 1f, 0.001f);
     /** Svetly okraj skla u laseru: poloha (px) a sila. */
     private final Spring rimX = new Spring(0, RIM_RESPONSE, 1f, 0.3f);
     private final Spring rimY = new Spring(0, RIM_RESPONSE, 1f, 0.3f);
     private final Spring rimAmt = new Spring(0, 0.45f, 1f, 0.002f);
     private Shader rimShader;
     private final Matrix rimMatrix = new Matrix();
-    /** Odlesk na karte pod laserem (radialni prechod, posouva se matici). */
-    private Shader glareShader;
-    private final Matrix glareMatrix = new Matrix();
     private final Path chromePath = new Path();
     /** Tvar ornamentu (vcetne paralaxy) - pod nim se panel a ostre karty nekresli, jen sklo. */
     private final Path ornHole = new Path();
@@ -805,15 +794,23 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         final float scale = ValueAnimator.getDurationScale();
         if (scale <= 0f) return;
         final long now = System.nanoTime();
-        introNs = now;
+        introArmed = true;
         introScale = scale;
-        contentFade.snap(0f);
-        contentFade.set(1f, now);
+        // Do spusteni v onDraw karty nekreslit (nastup zacina z pruhledna).
+        introNs = now + 60_000_000_000L;
         invalidate();
     }
 
     private boolean introActive(long now) {
-        return introNs != 0 && (now - introNs) / 1e6f < (INTRO_MS + INTRO_STAGGER_MS) * introScale;
+        return introArmed
+                || (introNs != 0 && (now - introNs) / 1e6f < (INTRO_MS + INTRO_STAGGER_MS) * introScale);
+    }
+
+    /** Pruhlednost obsahu behem nastupu (0 pred zacatkem, pak ease-out do 1). */
+    private float introAlpha(long now) {
+        if (!introActive(now)) return 1f;
+        final float t = clamp((now - introNs) / 1e6f / introScale / INTRO_FADE_MS, 0f, 1f);
+        return 1f - (1f - t) * (1f - t);
     }
 
     /** Navrat z karuselu: obsah se plynule objevi. */
@@ -849,9 +846,6 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         focused = null;
         hoverZone = ZONE_NONE;
         blurAmount.set(0, now);
-        // Paralaxa plynule zpet na stred.
-        parX.set(0, now);
-        parY.set(0, now);
         updateZoneHover(now);
     }
 
@@ -996,24 +990,11 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     }
 
     private float cardLeft(Card k, long now) {
-        return gridLeft + k.x.get(now) + parallaxX(now);
+        return gridLeft + k.x.get(now);
     }
 
     private float cardTop(Card k, long now) {
-        return gridTop + k.y.get(now) + scrollCur + parallaxY(now);
-    }
-
-    private boolean parallaxOn() {
-        return prefs != null && prefs.parallax() && ValueAnimator.getDurationScale() > 0f;
-    }
-
-    /** Karty (za sklem) se posouvaji s laserem. */
-    private float parallaxX(long now) {
-        return parallaxOn() ? parX.get(now) * dp(PAR_GRID_X) : 0f;
-    }
-
-    private float parallaxY(long now) {
-        return parallaxOn() ? parY.get(now) * dp(PAR_GRID_Y) : 0f;
+        return gridTop + k.y.get(now) + scrollCur;
     }
 
     private float visualScale(Card k, long now) {
@@ -1062,15 +1043,6 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             zone = zoneAt(px, py);
         }
         if (target != null) zone = ZONE_NONE;
-
-        // Paralaxa: cil = poloha laseru v panelu; bez laseru zpet na stred.
-        float tx = 0f, ty = 0f;
-        if (pointerIn && interactive && !dragging && frame.width() > 0) {
-            tx = clamp((px - frame.centerX()) / (frame.width() / 2f), -1f, 1f);
-            ty = clamp((py - frame.centerY()) / (frame.height() / 2f), -1f, 1f);
-        }
-        if (Math.abs(tx - parX.target()) > 0.01f) parX.set(tx, now);
-        if (Math.abs(ty - parY.target()) > 0.01f) parY.set(ty, now);
 
         // Svetly okraj skla jede za laserem (objevi se rovnou u nej, nepriletava).
         final boolean rimOn = pointerIn && interactive;
@@ -1626,6 +1598,11 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     protected void onDraw(Canvas canvas) {
         if (prefs == null || frame.isEmpty()) return;
         final long now = System.nanoTime();
+        if (introArmed) {
+            // Prvni skutecny snimek po otevreni -> ted (s kratkou pauzou) nastup karet.
+            introArmed = false;
+            introNs = now + INTRO_DELAY_MS * 1_000_000L;
+        }
         final boolean again = stepScroll(now);
         // Behem rolovani jede karta pod stojicim ukazatelem - fokus prepocitat kazdy snimek.
         if (again) updateFocus(now);
@@ -1646,14 +1623,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             canvas.clipOutPath(ornHole);
             drawContentLayer(canvas, now);
             canvas.restore();
-            // Matne sklo ornamentu jede s ornamentem (paralaxa).
-            final boolean parB = parallaxOn();
-            if (parB) {
-                canvas.save();
-                canvas.translate(-parX.get(now) * dp(PAR_CHROME_X), -parY.get(now) * dp(PAR_CHROME_Y));
-            }
             drawOrnamentBackdrop(canvas, now);
-            if (parB) canvas.restore();
         } else {
             canvas.save();
             canvas.clipRect(frame.left, topBarBottom, frame.right, frame.bottom);
@@ -1661,16 +1631,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             canvas.restore();
         }
         drawEmptyState(canvas);
-        // Lista a ornament jsou "pred sklem" -> posun proti laseru (paralaxa).
-        final boolean par = parallaxOn();
-        if (par) {
-            canvas.save();
-            canvas.translate(-parX.get(now) * dp(PAR_CHROME_X), -parY.get(now) * dp(PAR_CHROME_Y));
-        }
         drawRail(canvas, now);
         drawOrnament(canvas, now);
         drawRunBar(canvas, now);
-        if (par) canvas.restore();
         drawFocusedCard(canvas, now);
         drawDraggedCard(canvas, now);
         drawLaunch(canvas, now);
@@ -1680,7 +1643,6 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
     private boolean isAnimating(long now) {
         if (blurAmount.active(now) || tabPos.active(now) || contentFade.active(now) || introActive(now)
-                || parX.active(now) || parY.active(now)
                 || rimX.active(now) || rimY.active(now) || rimAmt.active(now)
                 || liveAmt.active(now) || liveProg.active(now) || liveWidth.active(now)
                 || (liveProgress == LIVE_SPINNER && liveOn(now))
@@ -1826,23 +1788,18 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         } else {
             contentNode.setRenderEffect(null);
         }
-        contentNode.setAlpha(contentFade.get(now));
+        contentNode.setAlpha(contentFade.get(now) * introAlpha(now));
         canvas.drawRenderNode(contentNode);
     }
 
     private void updateOrnHole(long now) {
-        final boolean par = parallaxOn();
-        final float ox = par ? -parX.get(now) * dp(PAR_CHROME_X) : 0f;
-        final float oy = par ? -parY.get(now) * dp(PAR_CHROME_Y) : 0f;
         final float r = ornRect.height() / 2f;
         ornHole.reset();
-        ornHole.addRoundRect(ornRect.left + ox, ornRect.top + oy, ornRect.right + ox, ornRect.bottom + oy,
-                r, r, Path.Direction.CW);
+        ornHole.addRoundRect(ornRect, r, r, Path.Direction.CW);
         // Usazena lista bezici aplikace ma pod sebou taky jen sve (rozmazane) sklo.
         if (runOn && runAmt.get(now) >= 0.99f && !runRect.isEmpty()) {
             final float rr = runRect.height() / 2f;
-            ornHole.addRoundRect(runRect.left + ox, runRect.top + oy, runRect.right + ox, runRect.bottom + oy,
-                    rr, rr, Path.Direction.CW);
+            ornHole.addRoundRect(runRect, rr, rr, Path.Direction.CW);
         }
     }
 
@@ -1972,9 +1929,10 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             final float dx = cx - gx, dy = cy - gy;
             final float dn = clamp((float) Math.hypot(dx, dy)
                     / (float) Math.hypot(frame.width() / 2f, frame.height() / 2f), 0f, 1f);
-            final float ms = (now - introNs) / 1e6f / introScale - dn * INTRO_STAGGER_MS;
+            final float ms = (now - introNs) / 1e6f / introScale - dn * INTRO_STAGGER_MS; // < 0 = jeste ceka
             final float p = clamp(ms / INTRO_MS, 0f, 1f);
-            final float e = 1f - (float) Math.pow(1f - p, 4);
+            // Kubicky ease-out: pohyb je videt celou dobu (kvarticky skoncil moc brzy).
+            final float e = 1f - (float) Math.pow(1f - p, 3);
             final float spread = 1f + INTRO_SPREAD * (1f - e);
             cx = gx + dx * spread;
             cy = gy + dy * spread;
@@ -2011,8 +1969,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         if (!dragging || dragCard == null) return;
         final float a = clamp(dragLift.get(now), 0f, 1f);
         if (a < 0.01f) return;
-        final float l = gridLeft + ghostX.get(now) + parallaxX(now);
-        final float t = gridTop + ghostY.get(now) + scrollCur + parallaxY(now);
+        final float l = gridLeft + ghostX.get(now);
+        final float t = gridTop + ghostY.get(now) + scrollCur;
         final float r = dp(CARD_RADIUS);
         final float in = dp(3);
         fill.setShader(null);
@@ -2112,20 +2070,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                     ? new BitmapShader(art, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP) : null;
             k.artShaderW = -1;
         }
-        // Paralaxa uvnitr karty pod laserem: kam miri laser na karte (-1..1) podle naklonu.
-        final boolean layered = h > 0.004f && parallaxOn();
-        final float lnx = layered ? clamp(TILT_SIGN * k.rotY.get(now) / TILT_DEG, -1f, 1f) * h : 0f;
-        final float lny = layered ? clamp(-TILT_SIGN * k.rotX.get(now) / TILT_DEG, -1f, 1f) * h : 0f;
         if (k.artShader != null) {
-            if (layered) {
-                // Obrazek je "vzadu": lehce vetsi a posunuty s laserem (okraje se neodkryji).
-                final float z = 1f + PAR_IMG_ZOOM * h;
-                shaderMatrix.setScale(cardW * z / k.art.getWidth(), cardH * z / k.art.getHeight());
-                shaderMatrix.postTranslate(-w2 * z + lnx * PAR_IMG_SHIFT * cardW,
-                        -h2 * z + lny * PAR_IMG_SHIFT * cardH);
-                k.artShader.setLocalMatrix(shaderMatrix);
-                k.artShaderW = -1; // pristi klidove kresleni matici vrati
-            } else if (k.artShaderW != cardW) {
+            if (k.artShaderW != cardW) {
                 shaderMatrix.setScale(cardW / k.art.getWidth(), cardH / k.art.getHeight());
                 shaderMatrix.postTranslate(-w2, -h2);
                 k.artShader.setLocalMatrix(shaderMatrix);
@@ -2161,24 +2107,6 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             c.drawRoundRect(-w2, -h2, w2, h2, r, r, fill);
         }
 
-        if (layered) {
-            // Odlesk: mekke svetlo tam, kam miri laser (jako leskla fotka v ruce).
-            if (glareShader == null) {
-                glareShader = new RadialGradient(0, 0, 1f, new int[]{0x42FFFFFF, 0x14FFFFFF, 0x00FFFFFF},
-                        new float[]{0f, 0.45f, 1f}, Shader.TileMode.CLAMP);
-            }
-            final float gr = cardW * 0.8f;
-            glareMatrix.setScale(gr, gr);
-            glareMatrix.postTranslate(lnx * w2 * 1.1f, lny * h2 * 1.1f);
-            glareShader.setLocalMatrix(glareMatrix);
-            fill.setShader(glareShader);
-            fill.setColor(Color.WHITE);
-            fill.setAlpha(Math.round(255 * h));
-            c.drawRoundRect(-w2, -h2, w2, h2, r, r, fill);
-            fill.setShader(null);
-            fill.setAlpha(255);
-        }
-
         // Ramecek 1px: rgba(255,255,255,.12) -> .85 pri hoveru.
         final float bw = dp(1f);
         stroke.setShader(null);
@@ -2187,14 +2115,8 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
         c.drawRoundRect(-w2 + bw / 2f, -h2 + bw / 2f, w2 - bw / 2f, h2 - bw / 2f,
                 r - bw / 2f, r - bw / 2f, stroke);
 
-        // Nazev a stitky jsou "vepredu": posun proti laseru.
-        if (layered) {
-            c.save();
-            c.translate(-lnx * dp(PAR_FRONT_X), -lny * dp(PAR_FRONT_Y));
-        }
         drawBadges(c, k, w2, h2);
         drawTitlePill(c, k, h, w2, h2);
-        if (layered) c.restore();
     }
 
     /** Stitek NOVE vlevo nahore a hvezdicka oblibenych vpravo nahore. */

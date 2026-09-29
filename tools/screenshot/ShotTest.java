@@ -131,7 +131,9 @@ public class ShotTest {
         capture(a, v, outDir + "/neo-idle.png");
         // Nastup karet pri otevreni (playIntro) - snimek v prvni tretine animace.
         v.playIntro();
-        Thread.sleep(160);
+        // Nastup se spusti az prvnim vykreslenym snimkem (+ kratka pauza) - pak tretina animace.
+        capture(a, v, outDir + "/warmup.png");
+        Thread.sleep(180 + 200);
         shadowOf(Looper.getMainLooper()).idle();
         capture(a, v, outDir + "/neo-intro.png");
         pump(900);
@@ -168,15 +170,13 @@ public class ShotTest {
         dumpState(v);
         System.out.println("glow BONELAB=" + Integer.toHexString(art.glowColor("com.StressLevelZero.BONELAB", 0)));
         capture(a, v, outDir + "/neo-hover.png");
-        // Paralaxa: laser u praveho okraje panelu na karte vpravo nahore - mrizka
-        // (za sklem) se posune s laserem, lista a ornament proti nemu, obrazek karty
-        // jde za laserem a pres kartu prejede odlesk.
+        // Laser u praveho okraje panelu (karta vpravo nahore) - hrana skla chyta svetlo.
         float rightLeft = (Float) f(v, "gridLeft") + 3 * (cardW + gp);
         hover(v, rightLeft + cardW * 0.5f, top - (cardH + gp) + cardH * 0.5f);
         pump(150);
         hover(v, rightLeft + cardW * 0.92f, top - (cardH + gp) + cardH * 0.12f);
         pump(1600);
-        capture(a, v, outDir + "/neo-parallax.png");
+        capture(a, v, outDir + "/neo-edge.png");
         dumpState(v);
 
         // Kliknuti na kartu -> animace spusteni "kukatko", 6x zpomalena

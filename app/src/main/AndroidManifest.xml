@@ -16,6 +16,10 @@
          Uzivatel ho musi povolit v Nastaveni -> Pristup k vyuziti. -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
+    <!-- Jen kdyz ho uzivatel jednou povoli z PC (adb shell pm grant ... WRITE_SECURE_SETTINGS):
+         Neo si pak samo zapne sluzbu Meta tlacitka - obejde "Omezene nastaveni" Androidu. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
     <!-- Posuvnik jasu v rychlem menu (Settings.System.SCREEN_BRIGHTNESS), uzivatel
          povoli v "Uprava systemovych nastaveni" - stejne jako QuestDim. -->
     <uses-permission android:name="android.permission.WRITE_SETTINGS"

@@ -1,3 +1,11 @@
+# Opravy po testu na Questu
+• Zapnutí Meta tlačítka teď otevírá Přístupnost v nastavení Androidu (dřív se otevřelo prázdné Nastavení Questu). Když Android napíše „Omezené nastavení“: v Nastavení → Quest klepni u „Omezené nastavení?“ na Info o Neu, vpravo nahoře tři tečky → Povolit omezená nastavení, a pak znovu Zapnout
+• Nová volba Android nastavení – v rychlém menu (dlaždice Android místo Nastavení Questu) i v Nastavení → Quest
+• Streamovat otevře aplikaci Fotoaparát Questu, kde je sdílení obrazu, nahrávání a snímky (starý odkaz na novém Questu nic nedělal)
+• Info o aplikaci a Ukončit teď míří do nastavení Androidu, kde je Vynutit ukončení
+• Paralaxa je pryč
+• Nástup karet při otevření je výraznější a spustí se, až je okno opravdu vidět (i při otevření přes Meta tlačítko)
+
 # 3× Meta, odhad výdrže a uspání z Nea
 • Třikrát rychle zmáčkni Meta ve hře nebo aplikaci: otevře se Neo a dole lišta s tím, co běží na pozadí – Pokračovat, Ukončit, nebo ji schovat. Když pak v Neu zmáčkneš Meta zase třikrát, vrátíš se do hry. Zapíná se v Nastavení → Quest a potřebuje službu Meta tlačítka
 • Ukončit aplikaci zvládne Neo samo: na chvilku otevře informace o aplikaci a klepne za tebe na „Vynutit ukončení“

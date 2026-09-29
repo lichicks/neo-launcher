@@ -1,12 +1,14 @@
 package com.neolauncher;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.ComponentName;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
-import android.net.Uri;
 import android.provider.Settings;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
@@ -16,6 +18,7 @@ import android.widget.Toast;
 import com.neolauncher.data.AppEntry;
 import com.neolauncher.data.AppRepository;
 import com.neolauncher.data.Prefs;
+import com.neolauncher.launch.AppLauncher;
 
 import java.util.Arrays;
 import java.util.HashMap;
@@ -174,9 +177,48 @@ public class MetaButtonService extends AccessibilityService {
         return true;
     }
 
-    /** Obrazovka, kde se sluzba zapina. */
-    public static Intent settingsIntent() {
+    /**
+     * Obrazovka, kde se sluzba zapina: Pristupnost v ANDROID nastaveni (rovnou detail
+     * sluzby Nea). Bez setPackage Quest otevre sve Nastaveni Questu, kde sluzby nejsou.
+     */
+    public static Intent settingsIntent(Context c) {
+        final PackageManager pm = c.getPackageManager();
+        final String me = new ComponentName(c, MetaButtonService.class).flattenToString();
+        final Intent detail = new Intent("android.settings.ACCESSIBILITY_DETAILS_SETTINGS")
+                .putExtra(Intent.EXTRA_COMPONENT_NAME, me)
+                .setPackage(AppLauncher.ANDROID_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (detail.resolveActivity(pm) != null) return detail;
+        final Intent list = new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                .setPackage(AppLauncher.ANDROID_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (list.resolveActivity(pm) != null) return list;
         return new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+    }
+
+    /** Povolil uzivatel z PC WRITE_SECURE_SETTINGS? Pak se Neo umi zapnout samo. */
+    public static boolean canSelfEnable(Context c) {
+        return c.checkSelfPermission("android.permission.WRITE_SECURE_SETTINGS") == PackageManager.PERMISSION_GRANTED;
+    }
+
+    /**
+     * Zapne sluzbu primo v systemovem nastaveni (jen s WRITE_SECURE_SETTINGS) -
+     * obejde "Omezene nastaveni", ktere Android dava rucne instalovanym aplikacim.
+     */
+    public static boolean selfEnable(Context c) {
+        if (!canSelfEnable(c)) return false;
+        try {
+            final ContentResolver cr = c.getContentResolver();
+            final String me = new ComponentName(c, MetaButtonService.class).flattenToString();
+            String cur = Settings.Secure.getString(cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            if (cur == null || cur.trim().isEmpty()) cur = me;
+            else if (!cur.contains(me)) cur = cur + ":" + me;
+            Settings.Secure.putString(cr, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES, cur);
+            Settings.Secure.putInt(cr, Settings.Secure.ACCESSIBILITY_ENABLED, 1);
+            Log.i(TAG, "Sluzba zapnuta pres WRITE_SECURE_SETTINGS");
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "Sluzbu nejde zapnout", e);
+            return false;
+        }
     }
 
     @Override
@@ -446,9 +488,10 @@ public class MetaButtonService extends AccessibilityService {
         if (pkg.equals(runningPkg)) runningPkg = null;
         Log.i(TAG, "Ukoncuji " + pkg);
         try {
-            final Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + pkg));
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_NO_HISTORY
-                    | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS | Intent.FLAG_ACTIVITY_NO_ANIMATION);
+            // Android Informace o aplikaci (s tlacitkem Vynutit ukonceni), ne Nastaveni Questu.
+            final Intent i = AppLauncher.appInfoIntent(this, pkg);
+            i.addFlags(Intent.FLAG_ACTIVITY_NO_HISTORY | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                    | Intent.FLAG_ACTIVITY_NO_ANIMATION);
             startActivity(i);
         } catch (Exception ex) {
             Log.w(TAG, "Informace o aplikaci nejdou otevrit", ex);

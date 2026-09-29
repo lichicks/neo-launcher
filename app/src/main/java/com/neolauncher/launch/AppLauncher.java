@@ -3,6 +3,7 @@ package com.neolauncher.launch;
 import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -103,14 +104,58 @@ public final class AppLauncher {
         }
     }
 
-    public static void openAppInfo(Activity a, String pkg) {
-        Intent i = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
-        i.setData(Uri.parse("package:" + pkg.replaceFirst("systemux://", "")));
+    /** Android nastaveni (na Questu schovane) - Quest jinak kazdy odkaz na nastaveni presmeruje do svych. */
+    public static final String ANDROID_SETTINGS = "com.android.settings";
+
+    /**
+     * Informace o aplikaci v ANDROID nastaveni (Vynutit ukonceni, uloziste, tri tecky - Povolit
+     * omezena nastaveni). Bez setPackage by Quest otevrel sve Nastaveni Questu,
+     * kde nic z toho neni (jako Lightning Launcher).
+     */
+    public static Intent appInfoIntent(Context c, String pkg) {
+        final Intent i = new Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + pkg.replaceFirst("systemux://", "")));
         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        final Intent android = new Intent(i).setPackage(ANDROID_SETTINGS);
+        return android.resolveActivity(c.getPackageManager()) != null ? android : i;
+    }
+
+    /** Obecne: systemova obrazovka v Android nastaveni, kdyz ji umi (jinak puvodni intent). */
+    public static Intent inAndroidSettings(Context c, Intent i) {
+        final Intent android = new Intent(i).setPackage(ANDROID_SETTINGS);
+        return android.resolveActivity(c.getPackageManager()) != null ? android : i;
+    }
+
+    public static void openAppInfo(Activity a, String pkg) {
         try {
-            a.startActivity(i);
+            a.startActivity(appInfoIntent(a, pkg));
         } catch (Exception e) {
             Toast.makeText(a, "Informace o aplikaci nejdou otevřít", Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    /**
+     * Android nastaveni. Kdyz hlavni obrazovka nejde spustit primo (na Questu byva
+     * zamcena), otevrou se Informace o aplikaci Nastaveni s tlacitkem Otevrit - stejne
+     * jako "Android nastaveni" v Lightning Launcheru.
+     */
+    public static boolean openAndroidSettings(Activity a) {
+        final Intent main = new Intent(android.provider.Settings.ACTION_SETTINGS).setPackage(ANDROID_SETTINGS)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            if (main.resolveActivity(a.getPackageManager()) != null) {
+                a.startActivity(main);
+                return true;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Android nastaveni nejdou spustit primo", e);
+        }
+        try {
+            final Intent info = appInfoIntent(a, ANDROID_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            a.startActivity(info);
+            return true;
+        } catch (Exception e) {
+            return false;
         }
     }
 

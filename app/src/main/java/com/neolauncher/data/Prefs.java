@@ -56,7 +56,6 @@ public final class Prefs {
     private static final String K_CLOSE_AFTER_LAUNCH = "close_after_launch";
     private static final String K_CAROUSEL = "carousel_mode";
     private static final String K_CAROUSEL_HINT = "carousel_hint";
-    private static final String K_PARALLAX = "parallax";
     private static final String K_UPDATE_TEST = "update_test_builds";
     private static final String K_UPDATE_LAST_CHECK = "update_last_check";
     private static final String K_UPDATE_DISMISSED = "update_dismissed";
@@ -204,16 +203,6 @@ public final class Prefs {
     public void setCarouselMode(boolean b) {
         if (b == carouselMode()) return;
         sp.edit().putBoolean(K_CAROUSEL, b).apply();
-        changed();
-    }
-
-    /** Paralaxa - karty se posouvaji za laserem, panel pusobi hloubeji (vychozi zapnuto). */
-    public boolean parallax() {
-        return sp.getBoolean(K_PARALLAX, true);
-    }
-
-    public void setParallax(boolean b) {
-        sp.edit().putBoolean(K_PARALLAX, b).apply();
         changed();
     }
 

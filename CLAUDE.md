@@ -200,6 +200,37 @@ nástup karet při otevření (`playIntro`). Hudba v rychlém menu: spíš ne
 (jen kdyby šla ukázat jen když něco hraje). Připomínka pauzy: ne.
 Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživatelem.
 
+**Druhý test na headsetu 2026-09-29 v noci („víceméně všechno funguje fajn“) → opraveno:**
+- **Quest přesměruje systémové intenty nastavení do svého Nastavení Questu**
+  (`ACTION_ACCESSIBILITY_SETTINGS`, `ACTION_APPLICATION_DETAILS_SETTINGS`…),
+  kde nic není. Řešení jako Lightning Launcher: `setPackage("com.android.settings")`
+  (`AppLauncher.ANDROID_SETTINGS`, `appInfoIntent`, `inAndroidSettings`,
+  `MetaButtonService.settingsIntent(Context)` = `ACCESSIBILITY_DETAILS_SETTINGS`
+  s naší komponentou, záložně seznam). Týká se i force stop (Ukončit) a Info.
+- **„Omezené nastavení“ (Android 13+ restricted settings)**: ručně instalovaná
+  aplikace nesmí zapnout službu přístupnosti. Uživatel: Informace o aplikaci
+  (Android) → ⋮ → Povolit omezená nastavení → znovu zapnout (tlačítko „Info
+  o Neu“ vedle Meta tlačítka v Nastavení → Quest). LL to řeší stejně (a jeho
+  addon se instaluje session-based přes PackageInstaller, takže omezený není).
+  Z PC jde obejít: `adb -P 5038 shell appops set com.neolauncher.v1
+  ACCESS_RESTRICTED_SETTINGS allow`, nebo `adb -P 5038 shell pm grant
+  com.neolauncher.v1 android.permission.WRITE_SECURE_SETTINGS` → Neo si
+  službu zapne samo (`MetaButtonService.selfEnable`, zapisuje
+  `enabled_accessibility_services`).
+- **Android nastavení** (`AppLauncher.openAndroidSettings`): `ACTION_SETTINGS`
+  s balíčkem, když nejde → Informace o aplikaci Nastavení (tlačítko Otevřít),
+  jako LL. Dlaždice „Android“ v rychlém menu (místo Nastavení Questu)
+  a v Nastavení → Quest.
+- **Streamovat**: `systemux://sharing` funguje jen do VrOS 80 (LL:
+  `questVersionedIncludedApps`), od v81 je sdílení v aplikaci Fotoaparát
+  `com.oculus.metacam` → ta první, pak sharing (starý OS), pak quick_settings.
+- **Paralaxa odstraněna** (uživateli „divná“) — kód, volba i přepínač pryč.
+- **Nástup karet nebyl vidět**: hodiny se spouštěly v `onResume`, dřív než
+  Quest okno ukáže. Teď `playIntro` jen „natáhne“ (`introArmed`), start je
+  první vykreslený snímek + `INTRO_DELAY_MS` 180, obsah do té doby průhledný
+  (`introAlpha`), výraznější (spread 0,34, zoom 0,22, 900 ms, kubický ease-out)
+  a spouští se i v `onNewIntent` (Meta tlačítko, když Neo nebylo zastavené).
+
 **Přidáno 2026-09-29 (po testu, na přání uživatele, NEOVĚŘENO na headsetu):**
 - **Instalace APK** (`update/ApkInstaller`): Nastavení → Aplikace → „Nainstalovat
   APK“ → systémový výběr souboru (`ACTION_OPEN_DOCUMENT`, `*/*` + typ apk) →
@@ -214,13 +245,7 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
   `neo-zaloha.json` (SharedPreferences `neo`, `neo_recents`, `neo_launch_counts`
   s typy) + `art-custom/*`. Po obnově `Prefs.reloadAfterRestore()` +
   `ArtworkLoader.clearMemory()`.
-- **Paralaxa** (`NeoLauncherView`, konstanty `PAR_*`, volba `Prefs.parallax`,
-  výchozí zapnuto): panel = okno. Karty (za sklem) se posouvají **s** laserem
-  (`cardLeft/cardTop` + `parallaxX/Y`, takže i hit-test sedí), lišta a ornament
-  (před sklem) **proti** němu, na kartě pod laserem obrázek s laserem (zvětšený
-  o 7 %), název a štítky proti němu, přes kartu měkký odlesk v místě laseru.
-  Pomalá pružina `PAR_RESPONSE` 0,9 s. Když by to v brýlích „houpalo“, zmenšit
-  `PAR_GRID_*`.
+- ~~Paralaxa~~ — po testu odstraněna (viz výše).
 
 **Přidáno 2026-09-29 večer (NEOVĚŘENO na headsetu):**
 - **Po zapnutí Questu otevřít Neo** (`Prefs.openOnBoot`, výchozí zapnuto,
@@ -259,8 +284,8 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
   Riziko: jedno otevření menu může poslat události rozložené přes > 350 ms →
   falešné 3× (otevře jen Neo, nic neukončí). Ladit podle `NeoMeta`.
 - **Rychlé menu v2**: dlaždice ve 3 sloupcích (ikona nad názvem): Wi-Fi,
-  Bluetooth, **Streamovat** (`systemux://sharing` = sdílení Questu: cast,
-  nahrávání, snímek; zná ho i LL), Nastavení (Questu), Menu Questu, Soubory,
+  Bluetooth, **Streamovat** (Fotoaparát `com.oculus.metacam`, na VrOS < 81
+  `systemux://sharing`), **Android** (Android nastavení), Menu Questu, Soubory,
   Prohlížeč, **Uspat** (`GLOBAL_ACTION_LOCK_SCREEN`), **Vypnout**
   (`GLOBAL_ACTION_POWER_DIALOG` = systémová nabídka vypnout/restartovat;
   přímo vypnout ani restartovat obyčejná aplikace nesmí). Uspat/Vypnout jdou
@@ -410,9 +435,14 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
    ukončení hry se otevře Neo – a neotevře se při pouhé pauze? Při
    problému `adb -P 5038 logcat -s NeoMeta`.
 
+0. **Nejdřív (po druhém testu):** Nastavení → Quest → Meta tlačítko „Zapnout“
+   otevře Android Přístupnost? Omezené nastavení → „Info o Neu“ → ⋮ → Povolit
+   → znovu Zapnout. Pak otestovat vše, co na službě stojí (3× Meta, Ukončit,
+   Uspat, Vypnout, otevření po zapnutí). Dlaždice Android a Streamovat
+   (otevře Fotoaparát se sdílením?). Je vidět nástup karet?
+
 0b. **Nové 29. 9.:** instalace APK (otevře se výběr souborů?), velikost v menu
-   karty a řazení „Velikost“ (po povolení herního času), záloha → obnova,
-   paralaxa (nepůsobí v brýlích nepříjemně?), nástup karet při otevření.
+   karty a řazení „Velikost“ (po povolení herního času), záloha → obnova.
 
 0d. **3× Meta ve hře** → otevře se Neo s lištou dole? Pokračovat vrátí do hry?
    Ukončit hru opravdu zavře (Informace o aplikaci → Vynutit ukončení,

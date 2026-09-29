@@ -43,7 +43,8 @@ public final class QuickMenuView extends View {
     public static final int T_BLUETOOTH = 1;
     /** Sdileni Questu: streamovani (Chromecast...), nahravani, snimek. */
     public static final int T_CAST = 2;
-    public static final int T_QUEST_SETTINGS = 3;
+    /** Android nastaveni (schovana na Questu - opravneni, pristupnost, aplikace). */
+    public static final int T_ANDROID_SETTINGS = 3;
     public static final int T_QUEST_QUICK = 4;
     public static final int T_FILES = 5;
     public static final int T_BROWSER = 6;
@@ -63,9 +64,9 @@ public final class QuickMenuView extends View {
         void requestBrightnessAccess();
     }
 
-    private static final String[] TILE_LABELS = {"Wi-Fi", "Bluetooth", "Streamovat", "Nastavení",
+    private static final String[] TILE_LABELS = {"Wi-Fi", "Bluetooth", "Streamovat", "Android",
             "Menu Questu", "Soubory", "Prohlížeč", "Uspat", "Vypnout", "Neo"};
-    private static final int[] TILE_ICONS = {Icons.WIFI, Icons.BLUETOOTH, Icons.CAST, Icons.HEADSET,
+    private static final int[] TILE_ICONS = {Icons.WIFI, Icons.BLUETOOTH, Icons.CAST, Icons.GEAR,
             Icons.SLIDERS, Icons.FOLDER, Icons.GLOBE, Icons.MOON, Icons.POWER, Icons.NEO};
     private static final float W_DP = 400f;
     private static final float H_DP = 598f;

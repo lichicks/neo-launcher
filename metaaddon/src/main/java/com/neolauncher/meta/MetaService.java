@@ -1,10 +1,15 @@
 package com.neolauncher.meta;
 
 import android.accessibilityservice.AccessibilityService;
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
+import android.os.BatteryManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -12,8 +17,10 @@ import android.provider.Settings;
 import android.util.Log;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 import android.widget.Toast;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -44,8 +51,10 @@ import java.util.Set;
  *     Znovu 3x Meta v Neu = zpet do hry.</li>
  * </ul>
  * Navic umi globalni akce, ktere obycejna aplikace nesmi (na prikaz z Nea, viz
- * CommandReceiver): uspat headset, systemova nabidka vypnuti/restartu a "Ukoncit"
- * bezici aplikaci (klepne v Informacich o aplikaci na Vynutit ukonceni).
+ * CommandReceiver): uspat headset, vypnout / restartovat (otevre systemovou nabidku
+ * vypnuti a sama v ni klepne) a "Ukoncit" bezici aplikaci (klepne v Informacich
+ * o aplikaci na Vynutit ukonceni). A protoze bezi porad (i ve hre), hlida baterii
+ * a upozorni na slabou baterii / nabito (Alerts).
  * Vse jen heuristika z udalosti oken - loguje se pod tagem "NeoMeta"
  * (adb -P 5038 logcat -s NeoMeta), at jde na headsetu doladit.
  */
@@ -92,10 +101,27 @@ public class MetaService extends AccessibilityService {
      * = dve davky do TRIPLE_WINDOW_MS.
      */
     private static final long BURST_MS = 350;
-    private static final long TRIPLE_WINDOW_MS = 1600;
+    private static final long TRIPLE_WINDOW_MS = 2200;
+    /**
+     * Navigator otevreny kolem udalosti domova = menu Questu pres hru (Quest pri nem
+     * posila i udalost domova a hru muze zastavit), ne konec hry.
+     */
+    private static final long NAV_NEAR_HOME_MS = 1500;
     /** Vynutit ukonceni: jak dlouho zkouset klepat v Informacich o aplikaci. */
     private static final long STOP_TIMEOUT_MS = 8000;
     private static final long STOP_POLL_MS = 150;
+    /** Nabidka vypnuti: jak dlouho hledat polozku Vypnout / Restartovat. */
+    private static final long POWER_TIMEOUT_MS = 4000;
+    static final String POWER_OFF = "off";
+    static final String POWER_RESTART = "restart";
+    private static final Set<String> POWER_OFF_LABELS = lower(
+            "Power off", "Shut down", "Shutdown", "Turn off", "Vypnout", "Ausschalten", "Herunterfahren",
+            "Éteindre", "Apagar", "Spegni", "Wyłącz", "Выключить", "電源を切る", "전원 끄기", "关机",
+            "關機", "Desligar", "Stäng av", "Sammuta", "Slå av", "Sluk");
+    private static final Set<String> RESTART_LABELS = lower(
+            "Restart", "Reboot", "Restartovat", "Neu starten", "Neustart", "Redémarrer", "Reiniciar",
+            "Riavvia", "Uruchom ponownie", "Перезагрузить", "Перезапустить", "再起動", "다시 시작",
+            "重新启动", "重新啟動", "重启", "Starta om", "Käynnistä uudelleen", "Start på nytt", "Genstart");
     /** Tlacitko "Vynutit ukonceni" v ruznych jazycich (Informace o aplikaci v Androidu). */
     private static final Set<String> FORCE_STOP_LABELS = lower(
             "Force stop", "Force Stop", "Vynutit ukončení", "Beenden erzwingen", "Stoppen erzwingen",
@@ -107,6 +133,7 @@ public class MetaService extends AccessibilityService {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Map<String, Boolean> vrCache = new HashMap<>();
+    private final Map<String, Boolean> launchCache = new HashMap<>();
     private long suppressUntil;
     /** Aplikace, ze ktere se odeslo do Nea (bezi na pozadi) - lista Pokracovat / Ukoncit v Neu. */
     private String runningPkg;
@@ -128,6 +155,18 @@ public class MetaService extends AccessibilityService {
     private long stopDeadline;
     private boolean stopConfirming;
     private final Runnable stopPoll = this::pollForceStop;
+    private Set<String> powerLabels;
+    private long powerStart;
+    private final Runnable powerPoll = this::pollPower;
+    /** Baterie pro upozorneni (i kdyz Neo neni otevrene). */
+    private int battPct = -1;
+    private boolean batteryRegistered;
+    private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context c, Intent i) {
+            onBattery(i);
+        }
+    };
 
     /** Bezici instance (null = sluzba neni zapnuta). Pro CommandReceiver. */
     static MetaService get() {
@@ -139,6 +178,7 @@ public class MetaService extends AccessibilityService {
         super.onServiceConnected();
         instance = this;
         Log.i(TAG, "Sluzba Meta tlacitka bezi");
+        registerBattery();
         final Neo.State s = Neo.state(this);
         if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS && (s == null || s.openOnBoot)) {
             // Quest se prave zapnul -> az se ukaze domov, otevrit Neo.
@@ -152,6 +192,7 @@ public class MetaService extends AccessibilityService {
     public boolean onUnbind(Intent intent) {
         instance = null;
         handler.removeCallbacksAndMessages(null);
+        unregisterBattery();
         return super.onUnbind(intent);
     }
 
@@ -159,6 +200,7 @@ public class MetaService extends AccessibilityService {
     public void onDestroy() {
         if (instance == this) instance = null;
         handler.removeCallbacksAndMessages(null);
+        unregisterBattery();
         super.onDestroy();
     }
 
@@ -199,8 +241,118 @@ public class MetaService extends AccessibilityService {
         return performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN);
     }
 
-    boolean powerMenu() {
-        return performGlobalAction(GLOBAL_ACTION_POWER_DIALOG);
+    /**
+     * Systemova nabidka vypnuti. what = POWER_OFF / POWER_RESTART: v nabidce sama
+     * klepne na Vypnout / Restartovat (uzivatel vybiral uz v okne Nea). Kdyby se
+     * polozka nenasla, nabidka zustane otevrena.
+     */
+    boolean powerMenu(String what) {
+        final boolean ok = performGlobalAction(GLOBAL_ACTION_POWER_DIALOG);
+        Log.i(TAG, "Nabidka vypnuti" + (what != null ? " -> " + what : "") + (ok ? "" : " se neotevrela"));
+        if (!ok || what == null) return ok;
+        powerLabels = POWER_RESTART.equals(what) ? RESTART_LABELS : POWER_OFF_LABELS;
+        powerStart = SystemClock.uptimeMillis();
+        handler.removeCallbacks(powerPoll);
+        handler.postDelayed(powerPoll, 300);
+        return true;
+    }
+
+    private void pollPower() {
+        if (powerLabels == null) return;
+        final long t = SystemClock.uptimeMillis() - powerStart;
+        if (t > POWER_TIMEOUT_MS) {
+            Log.w(TAG, "V nabidce vypnuti se polozka nenasla - necham ji otevrenou");
+            powerLabels = null;
+            return;
+        }
+        try {
+            // Nejdriv jen okna systemu (nabidka je v SystemUI), po chvili vsechna.
+            final AccessibilityNodeInfo hit = findInWindows(powerLabels, t > POWER_TIMEOUT_MS / 2);
+            if (hit != null && hit.isEnabled() && click(hit)) {
+                Log.i(TAG, "Nabidka vypnuti: klepnuto na " + hit.getText());
+                powerLabels = null;
+                return;
+            }
+        } catch (Exception ex) {
+            Log.w(TAG, "Chyba v nabidce vypnuti", ex);
+        }
+        handler.postDelayed(powerPoll, STOP_POLL_MS);
+    }
+
+    /** Uzel s popiskem ve vsech oknech na obrazovce (flagRetrieveInteractiveWindows). */
+    private AccessibilityNodeInfo findInWindows(Set<String> labels, boolean anyWindow) {
+        final List<AccessibilityNodeInfo> roots = new ArrayList<>();
+        try {
+            for (AccessibilityWindowInfo w : getWindows()) {
+                final AccessibilityNodeInfo r = w.getRoot();
+                if (r != null) roots.add(r);
+            }
+        } catch (Exception ignored) {
+        }
+        final AccessibilityNodeInfo active = getRootInActiveWindow();
+        if (active != null) roots.add(active);
+        for (AccessibilityNodeInfo r : roots) {
+            final CharSequence p = r.getPackageName();
+            final boolean system = p != null && (p.toString().contains("systemui") || "android".contentEquals(p));
+            if (!system && !anyWindow) continue;
+            final AccessibilityNodeInfo hit = findLabel(r, labels, new int[]{NODE_BUDGET}, 0);
+            if (hit != null) return hit;
+        }
+        return null;
+    }
+
+    // --- Baterie (upozorneni i ve hre) --------------------------------------------
+
+    private void registerBattery() {
+        if (batteryRegistered) return;
+        try {
+            final IntentFilter f = new IntentFilter(Intent.ACTION_BATTERY_CHANGED);
+            if (Build.VERSION.SDK_INT >= 33) registerReceiver(batteryReceiver, f, Context.RECEIVER_NOT_EXPORTED);
+            else registerReceiver(batteryReceiver, f);
+            batteryRegistered = true;
+        } catch (Exception e) {
+            Log.w(TAG, "Baterii nejde hlidat", e);
+        }
+    }
+
+    private void unregisterBattery() {
+        if (!batteryRegistered) return;
+        batteryRegistered = false;
+        try {
+            unregisterReceiver(batteryReceiver);
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** Slaba baterie (20 %, 10 %) pri vybijeni a nabito na 100 % - jako Quest Game Optimizer. */
+    private void onBattery(Intent i) {
+        final int level = i.getIntExtra(BatteryManager.EXTRA_LEVEL, -1);
+        final int scale = i.getIntExtra(BatteryManager.EXTRA_SCALE, 100);
+        final int pct = level >= 0 && scale > 0 ? Math.round(level * 100f / scale) : -1;
+        final int status = i.getIntExtra(BatteryManager.EXTRA_STATUS, -1);
+        final boolean charging = i.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+                && (status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL);
+        final int prev = battPct;
+        battPct = pct;
+        if (prev < 0 || pct < 0 || pct == prev) return; // prvni hodnota po pripojeni sluzby
+        final int alert;
+        if (charging) {
+            alert = pct >= 100 && prev < 100 ? Alerts.FULL : 0;
+        } else if (pct <= 10 && prev > 10) {
+            alert = Alerts.LOW_10;
+        } else if (pct <= 20 && prev > 20) {
+            alert = Alerts.LOW_20;
+        } else {
+            alert = 0;
+        }
+        if (alert == 0) return;
+        final Neo.State s = Neo.state(this);
+        if (s != null && !s.batteryAlerts) return;
+        if (s != null && s.visible) {
+            Log.i(TAG, "Baterie " + pct + " %, Neo je otevrene - ukaze to samo");
+            return;
+        }
+        Alerts.battery(this, alert, pct);
     }
 
     // --- Start Questu -----------------------------------------------------------
@@ -230,17 +382,27 @@ public class MetaService extends AccessibilityService {
 
     /** Aplikace, kterou jde spustit (hra, aplikace) - ne systemovy prekryv Questu. */
     private boolean isLaunchable(String pkg) {
+        final Boolean cached = launchCache.get(pkg);
+        if (cached != null) return cached;
+        boolean ok;
         try {
-            return getPackageManager().getLaunchIntentForPackage(pkg) != null;
+            ok = getPackageManager().getLaunchIntentForPackage(pkg) != null;
         } catch (Exception e) {
-            return false;
+            ok = false;
         }
+        launchCache.put(pkg, ok);
+        return ok;
     }
 
     // --- Aplikace v popredi ---------------------------------------------------
 
     private void onForeground(String pkg, long now) {
         if (pkg.equals(fgPkg)) return;
+        if (!pkg.equals(Neo.PKG) && !isLaunchable(pkg) && !isVrApp(pkg)) {
+            // Systemovy prekryv Questu (Guardian, oznameni, panely...) - hra porad bezi.
+            Log.d(TAG, "Prekryv " + pkg + ", popredi zustava " + fgPkg);
+            return;
+        }
         // Hra se vratila (napr. Pokracovat v menu) - "po hre" uz neplati.
         cancelAfterGame();
         if (runningPkg != null && !pkg.equals(Neo.PKG) && isLaunchable(pkg)) {
@@ -273,25 +435,30 @@ public class MetaService extends AccessibilityService {
     private void checkAfterGame(boolean wasGame) {
         final Neo.State s = Neo.state(this);
         if (s == null) return;
+        // Navigator kolem udalosti domova = Meta ve hre (menu Questu pres hru), ne konec hry.
+        // Quest pri tom hru muze i zastavit, takze to UsageStats samy neodlisi.
+        final boolean menu = lastNavigatorAt >= homeAt - NAV_NEAR_HOME_MS;
         final boolean ended;
         final String game;
         if (s.usageKnown) {
-            // Spolehlive: hra je STOPPED pred chvilkou a zadna VR hra nebezi.
-            ended = s.vrPkg == null && s.endedVrPkg != null && !s.endedVrPkg.equals(endedHandled);
+            // Hra je STOPPED pred chvilkou a zadna VR hra nebezi.
+            ended = !menu && s.vrPkg == null && s.endedVrPkg != null && !s.endedVrPkg.equals(endedHandled);
             game = s.endedVrPkg;
         } else {
-            // Bez UsageStats: kdyz se po udalosti domova neotevrel Navigator, hra skoncila.
-            ended = wasGame && lastNavigatorAt < homeAt;
+            // Bez UsageStats: kdyz se kolem udalosti domova neotevrel Navigator, hra skoncila.
+            ended = !menu && wasGame;
             game = fgPkg;
         }
-        Log.i(TAG, "Kontrola po udalosti domova: " + (ended ? "hra " + game + " skoncila" : "hra bezi / nic")
-                + (s.usageKnown ? " (UsageStats)" : " (udalosti oken)"));
+        Log.i(TAG, "Kontrola po udalosti domova: " + (ended ? "hra " + game + " skoncila"
+                : menu ? "menu Questu pres hru" : "hra bezi / nic") + ", " + s.describe());
         if (!ended) return;
         endedHandled = game;
         if (game != null && game.equals(runningPkg)) runningPkg = null;
         fgPkg = null;
         fgVr = false;
-        if (s.afterGame && !s.visible) launchNeo("po skonceni hry", null);
+        if (s.afterGame && !s.visible) {
+            launchNeo("po skonceni hry", game != null ? new Intent().putExtra(Neo.EXTRA_ENDED, game) : null);
+        }
     }
 
     private void cancelAfterGame() {
@@ -355,7 +522,7 @@ public class MetaService extends AccessibilityService {
         }
         final String game = game(s);
         Log.i(TAG, "Navigator (" + pkg + "): " + e.getText() + ", hra=" + game + ", popredi=" + fgPkg
-                + (s.usageKnown ? " (UsageStats)" : " (udalosti oken)"));
+                + (fgVr ? " (VR)" : "") + ", " + s.describe());
         if (s.visible) {
             // Neo uz je otevrene -> druhe zmacknuti = opravdove menu Questu.
             Log.i(TAG, "Neo je otevrene, necham menu Questu");
@@ -377,9 +544,12 @@ public class MetaService extends AccessibilityService {
         launchNeo("Meta tlacitko", extras);
     }
 
-    /** VR hra, ktera ted bezi (i pod menu Questu), nebo null. */
+    /**
+     * VR hra, ktera ted bezi (i pod menu Questu), nebo null. Quest hru pri otevreni
+     * menu muze rovnou zastavit - proto i hra, ktera odesla z popredi pred par vterinami.
+     */
     private String game(Neo.State s) {
-        if (s.usageKnown) return s.vrPkg;
+        if (s.usageKnown) return s.vrPkg != null ? s.vrPkg : s.recentVrPkg;
         return fgVr && fgPkg != null ? fgPkg : null;
     }
 
@@ -444,16 +614,19 @@ public class MetaService extends AccessibilityService {
             opens = 1;
             firstOpen = now;
         }
-        Log.d(TAG, "Menu Questu otevreno (" + opens + "), popredi=" + fgPkg);
+        Log.i(TAG, "Menu Questu otevreno (" + opens + ". za " + (now - firstOpen) + " ms), popredi=" + fgPkg);
         if (opens < 2) return false;
         opens = 0;
         if (now < suppressUntil) return false;
         final Neo.State s = Neo.state(this);
         if (s == null || !s.triple) return false;
+        Log.i(TAG, "3x Meta: " + s.describe());
         if (s.visible) {
-            // V Neu: 3x Meta = zpet do aplikace, ktera bezi na pozadi.
-            if (runningPkg == null) return false;
-            Log.i(TAG, "3x Meta v Neu -> zpet do " + runningPkg);
+            // V Neu: 3x Meta = zpet do aplikace, ktera bezi na pozadi (lista v Neu,
+            // i kdyz si ji Neo nasel samo).
+            final String back = runningPkg != null ? runningPkg : s.runningPkg;
+            if (back == null) return false;
+            Log.i(TAG, "3x Meta v Neu -> zpet do " + back);
             Neo.open(this, new Intent().putExtra(Neo.EXTRA_RESUME, true));
             return true;
         }

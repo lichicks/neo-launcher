@@ -117,7 +117,7 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 | `ui/DepthBlur.java` | Radiální rozmazání: AGSL shader (Android 13+), jinak obyčejný blur |
 | `ui/LiquidGlass.java` | Tekuté sklo horní bubliny: AGSL lom u okraje + rozklad barev, řetězený za blur |
 | `ui/ShadowSprite.java` | Předpočítané rozmazané stíny karet (box-shadow) |
-| `ui/Glass.java`, `OverlayHost.java`, `SettingsSheet.java`, `AppMenu.java`, `UpdateSheet.java` | Dialogy ve stylu skla visionOS (normální Android Views). `OverlayHost` je nechá „vyrůst“ na pružině z místa, odkud se otevřely. Nastavení = dashboard s dlaždicemi |
+| `ui/Glass.java`, `OverlayHost.java`, `SettingsSheet.java`, `AppMenu.java`, `UpdateSheet.java`, `PowerSheet.java`, `ConfirmSheet.java` | Dialogy ve stylu skla visionOS (normální Android Views). `OverlayHost` je nechá „vyrůst“ na pružině z místa, odkud se otevřely. Nastavení = dashboard s dlaždicemi |
 | `ui/GlassWidgets.java`, `ui/Cascade.java` | Přepínač, posuvník a ikona v kulatém skle, postupný nástup dlaždic |
 | `ui/Palette.java`, `ui/GlassSurface.java`, `ui/GlassDrawable.java` | Barevná paleta, jeden recept na sklo (Canvas i Drawable) |
 | `ui/Icons.java`, `ui/IconPaths.java`, `ui/SvgPath.java` | Ikony Lucide: vygenerované SVG cesty + parser (viz „Barvy, sklo a ikony“) |
@@ -200,6 +200,20 @@ nástup karet při otevření (`playIntro`). Hudba v rychlém menu: spíš ne
 (jen kdyby šla ukázat jen když něco hraje). Připomínka pauzy: ne.
 Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživatelem.
 
+**Pátý test 2026-09-30:** otevření po zapnutí Questu i Uspat fungují. Ve hře ale
+Meta pořád otevíralo Neo (uživatel by to snesl – „bylo to i u LL“ – ale volba má
+fungovat), 3× Meta nic a lišta běžící hry chyběla → Beat Saber běžel na pozadí
+a vybil baterii. Uživatel teď **chce, aby Neo samo vědělo, co běží na pozadí**
+(dřív nechtěl odhad ze statistik). Přání: oznámení o baterii i mimo Neo (jako
+Quest Game Optimizer: 20 %, 100 %), hezčí Vypnout (systémová nabídka Androidu
+je ošklivá; jako menu Questu Vypnout / Restartovat / Spánek). Do budoucna možná:
+Neo jako výchozí launcher (HOME) v Android nastavení. Opraveno v doplňku v1.2
+(viz „Meta tlačítko — doplněk“). Pravděpodobná příčina: Quest hru při otevření
+menu rovnou zastaví (STOPPED), takže `vrPkg` byl prázdný a kontrola „po hře“
+navíc brala menu jako konec hry; možná taky neaktualizovaný doplněk nebo
+nepovolený Přístup k využití → Neo to teď jednou za verzi samo nabídne
+(`maybePromptAddon`, `ConfirmSheet`). **Ověřit podle logu `NeoMeta`.**
+
 **Třetí test 2026-09-30:** nástup karet, bez paralaxy, Streamovat a Android
 nastavení fungují. Meta tlačítko ne: služba v Neu nešla zapnout (tlačítko
 Zapnout spadlo, Omezené nastavení) a navíc hledala špatné okno (systemux
@@ -275,7 +289,7 @@ místo `com.oculus.panelapp.library`) → přepsáno na doplněk jako u LL (viz
 - **3× Meta + lišta běžící aplikace** (`Prefs.metaTriple`, výchozí zapnuto):
   `MetaService.onMenuOpened` (doplněk) počítá „otevření menu Questu“ = dávky
   událostí systemux (události do `BURST_MS` 350 ms = jedno otevření); dvě
-  otevření do `TRIPLE_WINDOW_MS` 1,6 s = otevřít–zavřít–otevřít = 3× Meta.
+  otevření do `TRIPLE_WINDOW_MS` 2,2 s (do v1.2 1,6 s) = otevřít–zavřít–otevřít = 3× Meta.
   Ve hře/aplikaci → `runningPkg` = aplikace v popředí + otevře Neo; v Neu
   (běží-li něco) → intent `EXTRA_RESUME` = zpět do aplikace. Neo ukáže dole
   na panelu lištu (`NeoLauncherView.setRunningApp`, `drawRunBar`, tekuté sklo
@@ -440,6 +454,15 @@ místo `com.oculus.panelapp.library`) → přepsáno na doplněk jako u LL (viz
    ukončení hry se otevře Neo – a neotevře se při pouhé pauze? Při
    problému `adb -P 5038 logcat -s NeoMeta`.
 
+0. **Pátý test → doplněk v1.2 (v2.0.63+):** Neo nabídne „Nová verze Meta
+   tlačítka“ → Aktualizovat. Pak `adb -P 5038 logcat -s NeoMeta` a: spustit hru →
+   Meta (má zůstat menu Questu; řádek „Navigator … hra=…“) → 3× Meta (Neo s lištou;
+   „Menu Questu otevřeno (2. za … ms)“) → Ukončit hru v menu Questu (otevře se Neo?
+   neukáže lištu ukončené hry?). Lišta hry na pozadí i po otevření Nea z knihovny?
+   Upozornění baterie 20 % ve hře (oznámení / hláška – co z toho Quest ukáže?
+   Nejsou dvakrát?). Vypnout v rychlém menu → okno Nea → Restartovat / Vypnout
+   (doplněk klepne v systémové nabídce sám; „Nabidka vypnuti: klepnuto na …“).
+
 0. **Čtvrtý test 2026-09-30:** Meta doma a otevření po zapnutí FUNGUJÍ.
    Ve hře se otevíralo Neo (i s volbou menu Questu) a chyběla lišta → opraveno
    (UsageStats, doplněk v1.1 – v Neu „Aktualizovat“). Ověřit: ve hře Meta =
@@ -544,7 +567,7 @@ jako Lightning Launcher**: samostatná malá aplikace se službou přístupnosti
 - **Pravidla** (stejná jako dřív): doma Meta = Neo; když je Neo vidět, další
   stisk = menu Questu; ve VR hře menu Questu (`metaGameMenu`); po hře Neo
   (`metaAfterGame`); po zapnutí Questu Neo (`openOnBoot`); 3× Meta (dvě
-  otevření menu do 1,6 s) ze hry = Neo s lištou Pokračovat / Ukončit, v Neu
+  otevření menu do 2,2 s) ze hry = Neo s lištou Pokračovat / Ukončit, v Neu
   = zpět do hry (`metaTriple`); uspat / nabídka vypnutí / vynutit ukončení
   na příkaz z Nea. `MetaAddon.suppress` když Neo samo otevírá systém Questu.
 - **Co je v popředí = UsageStats v Neu, ne události oken** (od doplňku v1.1,
@@ -559,6 +582,34 @@ jako Lightning Launcher**: samostatná malá aplikace se službou přístupnosti
   událost domova jen naplánuje `checkAfterGame` za 1,5 s (Neo po hře jen při
   `endedVrPkg`). Bez oprávnění záložně události oken. Dlaždice Meta v Nastavení
   → Quest nabídne „Povolit“, když Neo Přístup k využití nemá.
+- **Od doplňku v1.2 (pátý test):** Quest hru při otevření menu nejspíš rovnou
+  zastaví (STOPPED) → `ForegroundApps.recentVrPkg` (VR hra PAUSED/STOPPED
+  < 6 s) a doplněk bere `game = vrPkg ?: recentVrPkg`. `checkAfterGame` nebere
+  jako konec hry nic, kolem čeho (±`NAV_NEAR_HOME_MS` 1,5 s) byl Navigator
+  (= menu přes hru); po hře posílá `neo.ended` (Neo pro ni lištu neukáže).
+  Popředí z událostí oken ignoruje systémové překryvy (nespustitelné balíčky).
+  3× Meta má okno 2,2 s a v Neu vrací i do hry z lišty, kterou si Neo našlo
+  samo (sloupec `runningPkg`).
+- **Hra na pozadí (Neo samo, od v2.0.63):** `ForegroundApps.bgVrPkg` = VR hra,
+  která byla naposledy v popředí (novější VR hra by ji na Questu ukončila), teď
+  v popředí není a nemá `FLAG_STOPPED` (vynucené ukončení). Ukončenou a jen
+  odloženou hru UsageStats neodliší – Android po STOPPED už `ACTIVITY_DESTROYED`
+  nepošle – takže lišta se může ukázat i u hry zavřené přes menu Questu (když ji
+  Quest nevynuceně neukončí). ✕ / Ukončit ji schová (`Prefs.dismissBackground`,
+  platí, dokud hra znovu neodejde do pozadí). `LauncherActivity.checkBackgroundGame`
+  v `onResume` (na pozadí přes `queryAsync`), zruší i lištu VR hry, která už neběží.
+- **Upozornění na baterii (doplněk, `Alerts`):** 20 % a 10 % při vybíjení, 100 %
+  při nabíjení; když je Neo vidět, nic (ukáže bublinu samo). Oznámení Androidu
+  (kanál „Baterie“, klepnutí otevře Neo) + hláška (Toast) – co z toho Quest ve hře
+  ukáže, je potřeba ověřit. Android 13+: povolení oznámení → průhledná
+  `PermissionActivity` doplňku (otevírá ji Neo, `MetaAddon.requestNotifications`).
+  Volba `Prefs.batteryAlerts` (Nastavení → Quest), sloupec `batteryAlerts`.
+- **Vypnout / Restartovat:** `ui/PowerSheet` (Uspat / Restartovat / Vypnout ve skle
+  Nea) → `MetaAddon.power(ctx, "off"|"restart")` → doplněk otevře
+  `GLOBAL_ACTION_POWER_DIALOG` a do 4 s v něm sám klepne na položku podle textu
+  (`POWER_OFF_LABELS` / `RESTART_LABELS`, prohledá všechna okna díky
+  `flagRetrieveInteractiveWindows`, nejdřív SystemUI). Nenajde-li ji, nabídka
+  zůstane otevřená.
 - **Heuristika z událostí oken, loguje:** `adb -P 5038 logcat -s NeoMeta`
   (od v1.1 i každé okno: „Okno: balíček třída [text]“).
 - Když má uživatel zapnutou i službu Lightning Launcheru, otevřou se po
@@ -569,7 +620,10 @@ jako Lightning Launcher**: samostatná malá aplikace se službou přístupnosti
 
 - Zvuková odezva při hoveru a spuštění
 - Vlastní tapeta / pozadí
-- Lišta běžící aplikace je hotová (3× Meta, viz výše). Ukazuje se jen po
+- **Neo jako výchozí launcher (HOME)** v Android nastavení místo launcheru Questu –
+  uživatel to zmínil „do budoucna“ (pátý test), zatím nedělat.
+- Lišta běžící aplikace je hotová (3× Meta, viz výše). Od pátého testu si ji Neo
+  hledá i samo (viz „Hra na pozadí“) – text níže je z doby před tím. Ukazovala se jen po
   3× Meta / Meta ze hry – uživatel NEchtěl odhad ze statistik (mohla by ukázat
   už zavřenou hru). Případně rozšířit: ukázat ji i po otevření Nea jinak.
 - Rozložení jako v Lightning Launcheru: hry velké karty, aplikace malá

@@ -1,3 +1,11 @@
+# Hra na pozadí, upozornění na baterii a vypnutí Questu
+• Neo si teď samo hlídá hru, která běží na pozadí, a dole ukáže lištu Pokračovat / Ukončit – i když Neo otevřeš jinak než přes Meta tlačítko. Hra už tak nebude potichu vybíjet baterku
+• Kdyby lišta ukazovala hru, kterou jsi už zavřel, klepni na ✕ – pro tuhle hru se neukáže, dokud ji zase nespustíš
+• Meta tlačítko ve hře lépe pozná, že hraješ (i když Quest hru pod menu pozastaví) – nechá menu Questu a Neo se přes hru neotevře. 3× Meta má víc času
+• Upozornění na slabou baterii (20 a 10 %) a na nabití na 100 % i mimo Neo, třeba ve hře. Vypnout jde v Nastavení → Quest
+• Vypnout v rychlém menu otevře nové okno Nea: Uspat, Restartovat, Vypnout – místo ošklivé systémové nabídky
+• Nová verze doplňku Meta tlačítka – Neo ti ji samo jednou nabídne. Když nemáš povolený Přístup k využití, Neo si o něj taky řekne (bez něj hru na pozadí nepozná)
+
 # Meta tlačítko ve hře
 • Ve hře teď Meta ukáže menu Questu (Pokračovat / Ukončit) a Neo se přes hru neotevře – když máš v Nastavení → Quest zapnuté „Ve hře menu Questu“
 • 3× Meta ve hře otevře Neo a dole je lišta s hrou, která běží na pozadí (Pokračovat / Ukončit)

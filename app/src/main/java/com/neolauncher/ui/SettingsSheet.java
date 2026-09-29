@@ -351,7 +351,11 @@ public final class SettingsSheet {
                         metaOn ? "Po startu headsetu se rovnou ukáže Neo"
                                 : "Potřebuje doplněk Meta tlačítka (vlevo)",
                         prefs.openOnBoot(), prefs::setOpenOnBoot),
-                infoTile(c, Icons.MOON, "Uspat a vypnout", "V rychlém menu – taky přes doplněk Meta tlačítka"));
+                actionTile(c, Icons.MOON, "Uspat, restartovat, vypnout",
+                        metaOn ? "Taky v rychlém menu (dlaždice Vypnout)" : "Potřebuje doplněk Meta tlačítka (vlevo)",
+                        "Otevřít", v -> {
+                            if (c instanceof LauncherActivity) ((LauncherActivity) c).showPowerSheet();
+                        }));
         boolean canWrite;
         try {
             canWrite = Settings.System.canWrite(c);
@@ -373,7 +377,16 @@ public final class SettingsSheet {
                             }
                         }),
                 infoTile(c, Icons.SLIDERS, "Rychlé menu", "Klepni na hodiny v horní liště – jas, hlasitost, Wi-Fi a funkce Questu"),
-                null);
+                toggleTile(c, Icons.ALERT, "Upozornění na baterii",
+                        metaOn ? "Slabá baterie (20 a 10 %) a nabito na 100 % – i ve hře"
+                                : "Potřebuje doplněk Meta tlačítka",
+                        prefs.batteryAlerts(), on -> {
+                            prefs.setBatteryAlerts(on);
+                            // Android 13+: doplnek se musi zeptat na povoleni oznameni.
+                            if (on && metaOn && c instanceof Activity && !MetaAddon.canNotify(c)) {
+                                MetaAddon.requestNotifications((Activity) c);
+                            }
+                        }));
     }
 
     private static void pageUpdates(Ctx x, LinearLayout page) {

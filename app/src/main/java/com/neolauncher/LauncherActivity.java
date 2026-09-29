@@ -12,6 +12,7 @@ import android.net.Uri;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.content.pm.PackageInstaller;
 import android.view.KeyEvent;
 import android.view.View;
@@ -25,6 +26,7 @@ import com.neolauncher.art.ArtworkLoader;
 import com.neolauncher.data.AppEntry;
 import com.neolauncher.data.AppSizes;
 import com.neolauncher.data.BatteryEstimate;
+import com.neolauncher.data.ForegroundApps;
 import com.neolauncher.data.Backup;
 import com.neolauncher.data.AppRepository;
 import com.neolauncher.data.Prefs;
@@ -35,11 +37,13 @@ import com.neolauncher.update.InstallReceiver;
 import com.neolauncher.update.Updater;
 import com.neolauncher.ui.AppMenu;
 import com.neolauncher.ui.CarouselView;
+import com.neolauncher.ui.ConfirmSheet;
 import com.neolauncher.ui.Glass;
 import com.neolauncher.ui.Icons;
 import com.neolauncher.ui.Palette;
 import com.neolauncher.ui.NeoLauncherView;
 import com.neolauncher.ui.OverlayHost;
+import com.neolauncher.ui.PowerSheet;
 import com.neolauncher.ui.QuickMenuView;
 import com.neolauncher.ui.SearchSheet;
 import com.neolauncher.ui.WhatsNewSheet;
@@ -172,10 +176,46 @@ public class LauncherActivity extends Activity
             final String label = appLabel(stopped);
             launcher.post(() -> notice(Icons.CHECK, "Ukončeno: " + label, Palette.COBALT_LIGHT, 3500));
         }
+        final String ended = i.getStringExtra(MetaAddon.EXTRA_ENDED);
+        if (ended != null) {
+            // Neo otevrene po skonceni hry -> listu "bezi na pozadi" pro ni neukazovat.
+            i.removeExtra(MetaAddon.EXTRA_ENDED);
+            prefs.dismissBackground(ended, System.currentTimeMillis());
+            if (ended.equals(MetaAddon.runningApp())) {
+                MetaAddon.setRunning(null);
+                syncRunningApp();
+            }
+        }
         if (i.getBooleanExtra(MetaAddon.EXTRA_RESUME, false)) {
             i.removeExtra(MetaAddon.EXTRA_RESUME);
             onRunningAction(NeoLauncherView.RUN_RESUME);
         }
+    }
+
+    /**
+     * Neo si hru na pozadi hlida i samo (nejen kdyz ho otevrel doplnek ze hry): posledni
+     * VR hra, ktera neni v popredi a nebyla ukoncena (UsageStats, viz ForegroundApps) ->
+     * lista Pokracovat / Ukoncit. Bez toho hra (Beat Saber) bezela nepozorovane na pozadi.
+     */
+    private void checkBackgroundGame() {
+        ForegroundApps.queryAsync(this, r -> {
+            if (isFinishing() || !r.known) return;
+            final String pkg = r.bgVrPkg != null ? r.bgVrPkg : r.vrPkg;
+            final long since = r.bgVrPkg != null ? r.bgSince : System.currentTimeMillis();
+            final String cur = MetaAddon.runningApp();
+            if (cur != null) {
+                // Lista uz neco ukazuje. VR hra, ktera na pozadi uz neni (ukoncena, nahradila
+                // ji jina VR hra), ale pryc - jinak nechat (2D aplikace z 3x Meta).
+                final AppEntry e = repo.find(cur);
+                if (e == null || !e.isVr() || cur.equals(pkg)) return;
+                MetaAddon.setRunning(null);
+                syncRunningApp();
+            }
+            if (pkg == null || prefs.isBackgroundDismissed(pkg, since)) return;
+            Log.i("NeoMeta", "Na pozadi bezi " + pkg + " -> lista");
+            MetaAddon.setRunning(pkg);
+            syncRunningApp();
+        });
     }
 
     /** Nazev aplikace (prejmenovani z Nea, jinak z Androidu). */
@@ -208,7 +248,10 @@ public class LauncherActivity extends Activity
         final String pkg = MetaAddon.runningApp();
         MetaAddon.clearRunning(this);
         launcher.setRunningApp(null, null);
-        if (pkg == null || action == NeoLauncherView.RUN_HIDE) return;
+        if (pkg == null) return;
+        // Schovana / ukoncena hra: listu uz neukazovat, dokud znovu neodejde do pozadi.
+        if (action != NeoLauncherView.RUN_RESUME) prefs.dismissBackground(pkg, System.currentTimeMillis());
+        if (action == NeoLauncherView.RUN_HIDE) return;
         final String label = appLabel(pkg);
         if (action == NeoLauncherView.RUN_RESUME) {
             AppEntry e = repo.find(pkg);
@@ -259,6 +302,7 @@ public class LauncherActivity extends Activity
         launcher.onClockTick();
         carousel.onClockTick();
         syncRunningApp();
+        checkBackgroundGame();
         // Pri navratu do launcheru (napr. po odinstalaci ve Store) prekontrolovat aplikace.
         long now = System.currentTimeMillis();
         if (now - lastRefreshMs > 1500) {
@@ -270,7 +314,10 @@ public class LauncherActivity extends Activity
         if (carouselShown) carousel.statsChanged();
         refreshSizes(false);
         // Az je okno rozlozene (dialog potrebuje rozmery panelu).
-        launcher.post(this::maybeShowWhatsNew);
+        launcher.post(() -> {
+            maybeShowWhatsNew();
+            maybePromptAddon();
+        });
         checkForUpdates(false);
     }
 
@@ -579,7 +626,11 @@ public class LauncherActivity extends Activity
             name = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception ignored) {
         }
-        View v = WhatsNewSheet.build(this, name, overlay::close);
+        View v = WhatsNewSheet.build(this, name, () -> {
+            overlay.close();
+            // Po novinkach pripadne nabidnout aktualizaci doplnku (az dialog zmizi).
+            launcher.postDelayed(this::maybePromptAddon, 500);
+        });
         if (v != null) overlay.show(v, null, null, launcher.frameRect(), Glass.dpi(this, 620));
     }
 
@@ -589,6 +640,54 @@ public class LauncherActivity extends Activity
         } catch (Exception e) {
             return 0;
         }
+    }
+
+    // --- Doplnek Meta tlacitka: aktualizace a povoleni ---------------------------------
+
+    private static final int PROMPT_UPDATE = 1, PROMPT_USAGE = 2, PROMPT_NOTIFY = 4;
+
+    /**
+     * Jednou za verzi Nea nabidne, co doplnek potrebuje, aby novinky opravdu fungovaly:
+     * novejsi verzi doplnku, Pristup k vyuziti (hra na pozadi) a oznameni (baterie).
+     * Bez toho se opravy z Nea k uzivateli vubec nedostanou (doplnek se sam neaktualizuje).
+     */
+    private void maybePromptAddon() {
+        if (isFinishing() || overlay.isOpen() || carouselShown || !MetaAddon.isInstalled(this)) return;
+        final long code = versionCode();
+        if (code <= 0) return;
+        final int kind;
+        final View v;
+        if (MetaAddon.needsUpdate(this)) {
+            kind = PROMPT_UPDATE;
+            v = ConfirmSheet.build(this, Icons.META, "Nová verze Meta tlačítka",
+                    "Lépe pozná hru na pozadí a menu Questu ve hře, upozorní na slabou baterii i ve hře "
+                            + "a umí vypnout a restartovat Quest. Quest se zeptá, jestli doplněk aktualizovat.",
+                    "Aktualizovat", "Později", this::installMetaAddon, overlay::close);
+        } else if (!MetaAddon.isEnabled(this)) {
+            return;
+        } else if (!usage.hasPermission()) {
+            kind = PROMPT_USAGE;
+            v = ConfirmSheet.build(this, Icons.CHART, "Povol Neu přístup k využití",
+                    "Bez něj Meta tlačítko nepozná, že běží hra, a Neo neukáže hru, která běží na pozadí. "
+                            + "V seznamu klepni na Neo Launcher a zapni přístup.",
+                    "Povolit", "Později", () -> {
+                        overlay.close();
+                        UsageInfo.requestPermission(this);
+                    }, overlay::close);
+        } else if (prefs.batteryAlerts() && !MetaAddon.canNotify(this)) {
+            kind = PROMPT_NOTIFY;
+            v = ConfirmSheet.build(this, Icons.ALERT, "Upozornění na baterii",
+                    "Aby Neo mohlo upozornit na slabou baterii i ve hře, povol Meta tlačítku oznámení.",
+                    "Povolit", "Později", () -> {
+                        overlay.close();
+                        MetaAddon.requestNotifications(this);
+                    }, overlay::close);
+        } else {
+            return;
+        }
+        if (prefs.addonPrompted(code, kind)) return;
+        prefs.setAddonPrompted(code, kind);
+        overlay.show(v, null, null, launcher.frameRect(), Glass.dpi(this, 520));
     }
 
     // --- Hledani -----------------------------------------------------------------
@@ -678,8 +777,7 @@ public class LauncherActivity extends Activity
                 if (!MetaAddon.sleep(this)) needMetaService();
                 return;
             case QuickMenuView.T_POWER:
-                overlay.close();
-                if (!MetaAddon.powerMenu(this)) needMetaService();
+                showPowerSheet();
                 return;
             default:
                 onOpenSettings();
@@ -687,6 +785,39 @@ public class LauncherActivity extends Activity
         }
         if (ok) overlay.close();
         else Toast.makeText(this, "Na tomto zařízení není k dispozici", Toast.LENGTH_SHORT).show();
+    }
+
+    /**
+     * Vlastni skleneny dialog Uspat / Restartovat / Vypnout (systemova nabidka Androidu
+     * na Questu vypada spatne). Restart a vypnuti provede doplnek Meta tlacitka.
+     */
+    public void showPowerSheet() {
+        if (!MetaAddon.isEnabled(this)) {
+            overlay.close();
+            needMetaService();
+            return;
+        }
+        overlay.show(PowerSheet.build(this, new PowerSheet.Actions() {
+            @Override
+            public void power(int what) {
+                overlay.close();
+                final boolean ok;
+                if (what == PowerSheet.SLEEP) {
+                    ok = MetaAddon.sleep(LauncherActivity.this);
+                } else {
+                    ok = MetaAddon.power(LauncherActivity.this,
+                            what == PowerSheet.RESTART ? MetaAddon.POWER_RESTART : MetaAddon.POWER_OFF);
+                    if (ok) showLive(Icons.POWER, what == PowerSheet.RESTART ? "Restartuji…" : "Vypínám…",
+                            NeoLauncherView.LIVE_SPINNER, 0);
+                }
+                if (!ok) needMetaService();
+            }
+
+            @Override
+            public void cancel() {
+                overlay.close();
+            }
+        }), null, null, launcher.frameRect(), Glass.dpi(this, 600));
     }
 
     /** Uspani / vypnuti umi jen sluzba Meta tlacitka (globalni akce pristupnosti). */
@@ -991,6 +1122,15 @@ public class LauncherActivity extends Activity
                 return true;
             case PackageInstaller.STATUS_SUCCESS:
                 if (addon) {
+                    if (MetaAddon.isEnabled(this)) {
+                        // Aktualizace - sluzba zustava zapnuta. Pripadne jeste povoleni oznameni.
+                        showLive(Icons.CHECK, "Meta tlačítko je aktuální", Palette.COBALT_LIGHT,
+                                NeoLauncherView.LIVE_ICON_ONLY, 3500);
+                        if (prefs.batteryAlerts() && !MetaAddon.canNotify(this)) {
+                            launcher.postDelayed(() -> MetaAddon.requestNotifications(this), 1200);
+                        }
+                        return true;
+                    }
                     // Doplnek je nainstalovany -> rovnou ho zapnout (Pristupnost).
                     showLive(Icons.CHECK, "Meta tlačítko nainstalováno – teď ho zapni", Palette.COBALT_LIGHT,
                             NeoLauncherView.LIVE_ICON_ONLY, 4000);

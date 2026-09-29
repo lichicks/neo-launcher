@@ -7,7 +7,7 @@ import android.util.Log;
 
 /**
  * Prikazy z Nea (jen se stejnym podpisem - opravneni com.neolauncher.permission.CONTROL):
- * uspat, nabidka vypnuti, ukoncit aplikaci, docasne ignorovat Meta tlacitko
+ * uspat, vypnout / restartovat, ukoncit aplikaci, docasne ignorovat Meta tlacitko
  * a zapomenout bezici aplikaci. Provede je bezici sluzba pristupnosti.
  */
 public class CommandReceiver extends BroadcastReceiver {
@@ -18,6 +18,8 @@ public class CommandReceiver extends BroadcastReceiver {
     static final String ACTION_CLEAR_RUNNING = "com.neolauncher.meta.CLEAR_RUNNING";
     static final String EXTRA_PKG = "pkg";
     static final String EXTRA_MS = "ms";
+    /** POWER: "off" / "restart" = rovnou klepnout v systemove nabidce, jinak ji jen otevrit. */
+    static final String EXTRA_WHAT = "what";
 
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -33,7 +35,7 @@ public class CommandReceiver extends BroadcastReceiver {
                 s.sleep();
                 break;
             case ACTION_POWER:
-                s.powerMenu();
+                s.powerMenu(intent.getStringExtra(EXTRA_WHAT));
                 break;
             case ACTION_FORCE_STOP:
                 s.startForceStop(intent.getStringExtra(EXTRA_PKG));

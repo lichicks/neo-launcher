@@ -84,6 +84,14 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
 - **Nové (29. 9., zatím neověřené na headsetu):** instalace APK z Nea (Nastavení → Aplikace),
   velikost her v menu karty + řazení „Velikost“, záloha a obnova nastavení (Nastavení → O Neo),
   paralaxa (po druhém testu odstraněna).
+- **Pátý test (30. 9.):** otevření po zapnutí a Uspat fungují. Ve hře ale Meta pořád
+  otevíralo Neo, 3× Meta nic a lišta hry na pozadí chyběla (Beat Saber vybil baterii).
+  Uživatel teď chce, aby Neo **samo vědělo, co běží na pozadí**. Opraveno (doplněk v1.2):
+  Neo si hru na pozadí najde samo ze statistik využití a ukáže lištu (✕ ji schová),
+  doplněk počítá i s tím, že Quest hru pod menu zastaví, upozornění na baterii i ve hře
+  (20 / 10 / 100 %), vlastní okno Vypnout (Uspat / Restartovat / Vypnout – doplněk klepne
+  v systémové nabídce sám). Neo jednou nabídne aktualizaci doplňku a Přístup k využití.
+  Do budoucna: Neo jako výchozí launcher v Android nastavení.
 - **Čtvrtý test (30. 9.):** Meta doma i otevření po zapnutí Questu fungují. Ve hře se ale
   otevíralo Neo a chyběla lišta Pokračovat / Ukončit → doplněk teď bere „co běží“ ze statistik
   využití v Neu (`data/ForegroundApps`), ne z událostí oken; doplněk v1.1.
@@ -146,11 +154,11 @@ Zvuky/haptika a počasí možná později.
 ## 5. Co je v plánu
 
 **Další krok:**
-1. Ověřit na headsetu Meta tlačítko (checklist bod 0 v `CLAUDE.md`) a doladit podle logů.
-2. **Lišta běžící aplikace** dole na panelu (pilulka jako horní bublina): skutečný název
-   aplikace, **Pokračovat** a **Ukončit**. Detekci i ukončení udělá doplněk Meta tlačítka
-   (Android 14 obyčejné aplikaci nedovolí zavřít jinou) – čte systémové menu Questu
-   a zmáčkne jeho „Ukončit“. Uživatel nechtěl jednodušší verzi s odhadem.
+1. Ověřit na headsetu Meta tlačítko ve hře, 3× Meta, lištu hry na pozadí, upozornění
+   na baterii a Vypnout / Restartovat (checklist bod 0 v `CLAUDE.md`) – a doladit podle
+   logu `adb -P 5038 logcat -s NeoMeta` (uživatel ho má poslat).
+2. Lišta běžící aplikace je hotová (3× Meta i vlastní kontrola v Neu). Když by ukazovala
+   hry zavřené přes menu Questu, hledat, jak Quest „Ukončit“ pozná (statistiky to neodliší).
 
 **Nové nápady (29. 9. večer, uživatel zatím nevybral; odhad výdrže, uspat/vypnout
 a dvojí/trojí Meta už jsou hotové):** úsporný režim při slabé baterii (vypne efekty, ztlumí jas),

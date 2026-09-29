@@ -14,13 +14,15 @@ import android.util.Log;
  */
 final class Neo {
     static final String PKG = "com.neolauncher.v1";
-    private static final String ACTIVITY = "com.neolauncher.LauncherActivity";
+    static final String ACTIVITY = "com.neolauncher.LauncherActivity";
     private static final Uri STATE = Uri.parse("content://" + PKG + ".shortcutStateProvider");
 
     /** Extra pro Neo (stejne klice jako v Neu - MetaAddon). */
     static final String EXTRA_RUNNING = "neo.running";
     static final String EXTRA_STOPPED = "neo.stopped";
     static final String EXTRA_RESUME = "neo.resume";
+    /** Neo otevrene po skonceni teto hry (lista "bezi na pozadi" pro ni neplati). */
+    static final String EXTRA_ENDED = "neo.ended";
 
     private Neo() {}
 
@@ -38,6 +40,20 @@ final class Neo {
          */
         boolean usageKnown;
         String topPkg, vrPkg, endedVrPkg;
+        /** VR hra, ktera odesla z popredi pred par vterinami (Quest ji pri menu muze zastavit). */
+        String recentVrPkg;
+        /** Posledni VR hra na pozadi (jen pro log). */
+        String bgVrPkg;
+        /** Aplikace v liste bezici aplikace v Neu (3x Meta v Neu = zpet do ni). */
+        String runningPkg;
+        /** Upozorneni na baterii i mimo Neo. */
+        boolean batteryAlerts = true;
+
+        String describe() {
+            return (usageKnown ? "UsageStats" : "bez UsageStats") + " top=" + topPkg + " vr=" + vrPkg
+                    + " recent=" + recentVrPkg + " ended=" + endedVrPkg + " bg=" + bgVrPkg
+                    + " lista=" + runningPkg + (visible ? " (Neo videt)" : "");
+        }
     }
 
     /** @return null = Neo neni nainstalovane / neodpovida */
@@ -55,6 +71,10 @@ final class Neo {
             s.topPkg = text(cur, "topPkg");
             s.vrPkg = text(cur, "vrPkg");
             s.endedVrPkg = text(cur, "endedVrPkg");
+            s.recentVrPkg = text(cur, "recentVrPkg");
+            s.bgVrPkg = text(cur, "bgVrPkg");
+            s.runningPkg = text(cur, "runningPkg");
+            s.batteryAlerts = flag(cur, "batteryAlerts", true);
             return s;
         } catch (Exception e) {
             Log.w(MetaService.TAG, "Stav Nea nejde precist", e);

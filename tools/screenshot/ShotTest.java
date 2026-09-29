@@ -403,6 +403,28 @@ public class ShotTest {
         overlay.show(menuView, cardAt, grid.frameRect(), Math.round(300 * d));
         pump(1200);
         capture(a, root, outDir + "/neo-appmenu.png");
+
+        // --- Vypnout Quest (Uspat / Restartovat / Vypnout) ---
+        overlay.close();
+        pump(500);
+        android.view.View power = com.neolauncher.ui.PowerSheet.build(a, new com.neolauncher.ui.PowerSheet.Actions() {
+            @Override public void power(int what) {}
+            @Override public void cancel() {}
+        });
+        overlay.show(power, null, null, grid.frameRect(), Math.round(600 * d));
+        pump(1200);
+        capture(a, root, outDir + "/neo-power.png");
+
+        // --- Nabidka aktualizace doplnku Meta tlacitka ---
+        overlay.close();
+        pump(500);
+        android.view.View prompt = com.neolauncher.ui.ConfirmSheet.build(a, com.neolauncher.ui.Icons.META,
+                "Nová verze Meta tlačítka", "Lépe pozná hru na pozadí a menu Questu ve hře, upozorní na slabou "
+                        + "baterii i ve hře a umí vypnout a restartovat Quest. Quest se zeptá, jestli doplněk aktualizovat.",
+                "Aktualizovat", "Později", () -> { }, () -> { });
+        overlay.show(prompt, null, null, grid.frameRect(), Math.round(520 * d));
+        pump(1200);
+        capture(a, root, outDir + "/neo-addon-prompt.png");
     }
 
     /** Prvni TextView s presne timto textem (pilulka kategorie v nastaveni). */

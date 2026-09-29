@@ -50,6 +50,9 @@ public final class Prefs {
     private static final String K_META_AFTER_GAME = "meta_after_game";
     private static final String K_OPEN_ON_BOOT = "open_on_boot";
     private static final String K_META_TRIPLE = "meta_triple";
+    private static final String K_BATTERY_ALERTS = "battery_alerts";
+    private static final String K_BG_DISMISSED = "bg_dismissed";
+    private static final String K_ADDON_PROMPT = "addon_prompted";
     private static final String K_MENU_HOLD = "menu_hold_ms";
     private static final String K_ONLINE_ART = "online_art";
     private static final String K_LAUNCH_ANIM = "launch_animation";
@@ -293,6 +296,56 @@ public final class Prefs {
     public void setMetaTriple(boolean b) {
         sp.edit().putBoolean(K_META_TRIPLE, b).apply();
         changed();
+    }
+
+    /** Upozorneni na slabou baterii / nabito i mimo Neo (doplnek Meta tlacitka, i ve hre). */
+    public boolean batteryAlerts() {
+        return sp.getBoolean(K_BATTERY_ALERTS, true);
+    }
+
+    public void setBatteryAlerts(boolean b) {
+        sp.edit().putBoolean(K_BATTERY_ALERTS, b).apply();
+        changed();
+    }
+
+    /**
+     * Listu hry na pozadi uzivatel schoval (nebo hra skoncila) v case {@code at}:
+     * pro tuhle hru se neukaze, dokud znovu neodejde do pozadi (bgSince > at).
+     */
+    public void dismissBackground(String pkg, long at) {
+        sp.edit().putString(K_BG_DISMISSED, pkg + "|" + at).apply();
+    }
+
+    public boolean isBackgroundDismissed(String pkg, long bgSince) {
+        final String s = sp.getString(K_BG_DISMISSED, null);
+        if (s == null || pkg == null) return false;
+        final int bar = s.lastIndexOf('|');
+        if (bar < 0 || !s.substring(0, bar).equals(pkg)) return false;
+        try {
+            return bgSince <= Long.parseLong(s.substring(bar + 1));
+        } catch (NumberFormatException e) {
+            return false;
+        }
+    }
+
+    /** Nabidka pro doplnek (aktualizace / povoleni, bitova maska) uz v teto verzi Nea byla. */
+    public boolean addonPrompted(long version, int kind) {
+        return (addonPromptMask(version) & kind) != 0;
+    }
+
+    public void setAddonPrompted(long version, int kind) {
+        sp.edit().putString(K_ADDON_PROMPT, version + ":" + (addonPromptMask(version) | kind)).apply();
+    }
+
+    private int addonPromptMask(long version) {
+        final String s = sp.getString(K_ADDON_PROMPT, "");
+        final int colon = s.indexOf(':');
+        if (colon < 0 || !s.substring(0, colon).equals(String.valueOf(version))) return 0;
+        try {
+            return Integer.parseInt(s.substring(colon + 1));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     /** Po zapnuti Questu otevrit Neo (sluzba Meta tlacitka). */

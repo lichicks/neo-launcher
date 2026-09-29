@@ -43,6 +43,14 @@ public final class MetaAddon {
     public static final String EXTRA_RUNNING = "neo.running";
     public static final String EXTRA_STOPPED = "neo.stopped";
     public static final String EXTRA_RESUME = "neo.resume";
+    /** Doplnek otevrel Neo po skonceni teto hry - lista "bezi na pozadi" pro ni neplati. */
+    public static final String EXTRA_ENDED = "neo.ended";
+
+    /** Co udelat s headsetem (PowerSheet): doplnek klepne v systemove nabidce vypnuti. */
+    public static final String POWER_OFF = "off";
+    public static final String POWER_RESTART = "restart";
+    private static final String PERMISSION_ACTIVITY = PKG + ".PermissionActivity";
+    private static final String POST_NOTIFICATIONS = "android.permission.POST_NOTIFICATIONS";
 
     private static final String ACTION_SLEEP = "com.neolauncher.meta.SLEEP";
     private static final String ACTION_POWER = "com.neolauncher.meta.POWER";
@@ -156,9 +164,35 @@ public final class MetaAddon {
         return send(c, new Intent(ACTION_SLEEP));
     }
 
-    /** Systemova nabidka vypnout / restartovat. */
-    public static boolean powerMenu(Context c) {
-        return send(c, new Intent(ACTION_POWER));
+    /**
+     * Vypnout / restartovat (POWER_OFF / POWER_RESTART): doplnek otevre systemovou
+     * nabidku vypnuti a sam v ni klepne na spravnou polozku. Obycejna aplikace
+     * headset vypnout nesmi.
+     */
+    public static boolean power(Context c, String what) {
+        return send(c, new Intent(ACTION_POWER).putExtra("what", what));
+    }
+
+    /** Smi doplnek ukazovat oznameni (Android 13+ se na to musi zeptat)? */
+    public static boolean canNotify(Context c) {
+        if (android.os.Build.VERSION.SDK_INT < 33) return true;
+        try {
+            return c.getPackageManager().checkPermission(POST_NOTIFICATIONS, PKG) == PackageManager.PERMISSION_GRANTED;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Doplnek se zepta na povoleni oznameni (vlastni pruhledna aktivita). */
+    public static boolean requestNotifications(Activity a) {
+        try {
+            a.startActivity(new Intent().setComponent(new ComponentName(PKG, PERMISSION_ACTIVITY))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            return true;
+        } catch (Exception e) {
+            Log.w(TAG, "Doplnek neumi pozadat o oznameni (starsi verze?)", e);
+            return false;
+        }
     }
 
     /** Ukonci aplikaci (doplnek klepne v Informacich o aplikaci na Vynutit ukonceni). */

@@ -454,7 +454,7 @@ místo `com.oculus.panelapp.library`) → přepsáno na doplněk jako u LL (viz
    ukončení hry se otevře Neo – a neotevře se při pouhé pauze? Při
    problému `adb -P 5038 logcat -s NeoMeta`.
 
-0. **Pátý test → doplněk v1.2 (v2.0.63+):** Neo nabídne „Nová verze Meta
+0. **Pátý test → doplněk v1.2 (v2.0.65+):** Neo nabídne „Nová verze Meta
    tlačítka“ → Aktualizovat. Pak `adb -P 5038 logcat -s NeoMeta` a: spustit hru →
    Meta (má zůstat menu Questu; řádek „Navigator … hra=…“) → 3× Meta (Neo s lištou;
    „Menu Questu otevřeno (2. za … ms)“) → Ukončit hru v menu Questu (otevře se Neo?
@@ -590,7 +590,7 @@ jako Lightning Launcher**: samostatná malá aplikace se službou přístupnosti
   Popředí z událostí oken ignoruje systémové překryvy (nespustitelné balíčky).
   3× Meta má okno 2,2 s a v Neu vrací i do hry z lišty, kterou si Neo našlo
   samo (sloupec `runningPkg`).
-- **Hra na pozadí (Neo samo, od v2.0.63):** `ForegroundApps.bgVrPkg` = VR hra,
+- **Hra na pozadí (Neo samo, od v2.0.65):** `ForegroundApps.bgVrPkg` = VR hra,
   která byla naposledy v popředí (novější VR hra by ji na Questu ukončila), teď
   v popředí není a nemá `FLAG_STOPPED` (vynucené ukončení). Ukončenou a jen
   odloženou hru UsageStats neodliší – Android po STOPPED už `ACTIVITY_DESTROYED`

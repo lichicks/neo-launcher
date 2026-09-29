@@ -1,6 +1,6 @@
 # Neo Launcher – předávací dokument (jak navázat)
 
-> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **27. 9. 2026, verze v2.0.41**),
+> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **29. 9. 2026, verze v2.0.4x**),
 > a jak na to navázat v novém chatu – i s málo kredity. Podrobný technický
 > kontext je v [`CLAUDE.md`](../CLAUDE.md) v kořeni repozitáře.
 
@@ -68,11 +68,16 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
 
 ## 3. Stav
 
-- Poslední verze: **v2.0.41** (testovací build z větve `claude/funny-ramanujan-xp8ba6`,
-  PR #1 do `main` je otevřený). APK: GitHub → Releases → `NeoLauncher-2.0.41.apk`.
-- **Nic z v2.0 zatím neběželo na headsetu.** Všechno je přeložené v CI a vyfocené
-  v emulaci (Robolectric), ale skutečné chování (laser, výkon, průhlednost, shadery)
-  se ukáže až na Questu. Checklist „Co otestovat na headsetu jako první“ je v `CLAUDE.md`.
+- Poslední verze: testovací buildy `v2.0.4x` z větve `claude/funny-ramanujan-xp8ba6`
+  (PR #1 do `main` je otevřený). APK: GitHub → Releases → nejnovější `NeoLauncher-2.0.xx.apk`.
+- **29. 9. první test na Questu: „funguje až podivuhodně super“.** Opraveno podle testu:
+  Meta tlačítko (vestavěná služba, viz níže), karusel (pryč „Spuštěno 0×“ a datum
+  instalace, nápověda volitelná), silnější světlo hry na skle, nástup karet při otevření.
+- **Meta tlačítko** otevírá Neo přes službu přístupnosti přímo v Neu (`MetaButtonService`):
+  zapíná se v Nastavení → Quest → „Meta tlačítko otevře Neo“. Doma Meta = Neo, když je
+  Neo otevřené, další stisk = menu Questu, ve hře menu Questu, po hře se otevře Neo.
+  Je to heuristika – **ještě neověřená na headsetu**; logy `adb -P 5038 logcat -s NeoMeta`.
+  Službu Lightning Launcheru v Přístupnosti vypnout (jinak se otevřou oba).
 - První instalace: sideload (adb / SideQuest / stáhnout APK v prohlížeči Questu),
   další verze už přes aktualizace v launcheru. Na PC běží starý adb na portu 5037 →
   vždy `adb -P 5038 install -r NeoLauncher-2.0.xx.apk`.
@@ -111,19 +116,16 @@ Zvuky/haptika a počasí možná později.
 
 ## 5. Co je v plánu
 
-**Další krok (až bude uživatel u headsetu, ~29. 9.):**
-1. Otestovat checklist z `CLAUDE.md` a opravit, co nebude sedět.
-2. Přesunout addon Meta tlačítka (**RedirectServices**, služba přístupnosti) do tohoto repa
-   a naučit ho neotevírat launcher přes běžící VR hru.
-3. **Lišta běžící aplikace** dole na panelu (pilulka jako horní bublina): skutečný název
-   aplikace, **Pokračovat** a **Ukončit**. Ukončení i detekci musí dělat addon
+**Další krok:**
+1. Ověřit na headsetu Meta tlačítko (checklist bod 0 v `CLAUDE.md`) a doladit podle logů.
+2. **Lišta běžící aplikace** dole na panelu (pilulka jako horní bublina): skutečný název
+   aplikace, **Pokračovat** a **Ukončit**. Detekci i ukončení udělá `MetaButtonService`
    (Android 14 obyčejné aplikaci nedovolí zavřít jinou) – čte systémové menu Questu
    a zmáčkne jeho „Ukončit“. Uživatel nechtěl jednodušší verzi s odhadem.
 
-**Nápady, které uživatel zatím nevybral** (nabídnuto 27. 9.):
-barevné světlo hovernuté hry na skle panelu; ovládání joystickem jako na konzoli;
-tlačítko „…“ na kartě místo držení; ovládání hudby v rychlém menu; volitelná připomínka
-pauzy; vlastní pozadí; nástup karet kaskádou; varování při plném úložišti.
+**Nápady, které uživatel zatím nevybral:** ovládání joystickem jako na konzoli;
+tlačítko „…“ na kartě místo držení; vlastní pozadí; varování při plném úložišti.
+Ovládání hudby jen pokud jde ukázat jen když něco hraje (spíš ne). Připomínka pauzy: ne.
 Starší nápady: rozložení jako Lightning Launcher (hry velké, aplikace kolečka),
 paralaxa mřížky, rychlé menu přímo z Meta tlačítka.
 

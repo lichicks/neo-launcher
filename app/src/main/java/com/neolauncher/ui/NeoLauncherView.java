@@ -12,6 +12,7 @@ import android.graphics.Matrix;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.Path;
+import android.graphics.RadialGradient;
 import android.graphics.RecordingCanvas;
 import android.graphics.RectF;
 import android.graphics.RenderEffect;
@@ -88,6 +89,11 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
      * a baterii - napul zanorena do horni hrany panelu (stred na frame.top).
      */
     private static final float ORN_H = 52f;
+    /** Nastup karet pri otevreni: delka, zpozdeni okraju proti stredu, rozestup a priblizeni na zacatku. */
+    private static final float INTRO_MS = 560f;
+    private static final float INTRO_STAGGER_MS = 170f;
+    private static final float INTRO_SPREAD = 0.16f;
+    private static final float INTRO_ZOOM = 0.10f;
     /** Polozky ornamentu (zalozky, stav) - soustredne s ornamentem: (52 - 40) / 2 = 6. */
     private static final float ORN_ITEM_H = 40f;
     private static final float ORN_INSET = 6f;
@@ -260,6 +266,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final Eased[] tabHover = {new Eased(0, 180, Eased.EASE_OUT),
             new Eased(0, 180, Eased.EASE_OUT), new Eased(0, 180, Eased.EASE_OUT)};
     private final Eased contentFade = new Eased(1, 280, Eased.EASE_OUT);
+    /** Nastup karet pri otevreni (playIntro): zacatek, meritko animaci systemu. */
+    private long introNs;
+    private float introScale = 1f;
     /** Logo Neo nahore v leve liste. */
     private final RectF brandRect = new RectF();
     private final RectF ornRect = new RectF();
@@ -307,6 +316,10 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     private final GlassSurface railGlass = new GlassSurface();
     private final GlassSurface tabGlass = new GlassSurface();
     private GlassSurface.Style panelStyle;
+    /** Svetlo hry na skle (drawGameLight). */
+    private Shader lightShader;
+    private int lightColor;
+    private final android.graphics.Matrix lightMatrix = new android.graphics.Matrix();
     private float panelStyleAlpha = -1f;
     private boolean panelStyleLight;
     /** Svetle sklo ve stylu visionOS (volba v nastaveni), cache podle kryti. */
@@ -586,6 +599,26 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     /** Hodiny + baterie (odtud "vyjede" rychle menu). */
     public RectF statusRect() {
         return new RectF(statusRect);
+    }
+
+    /**
+     * Nastup pri otevreni launcheru: karty se "poskladaji" na sva mista - cela
+     * mrizka se z lehkeho priblizeni stahne dovnitr, stred prvni, okraje
+     * o chlup pozdeji (bez odskoku). Stav jen z casu (introNs).
+     */
+    public void playIntro() {
+        final float scale = ValueAnimator.getDurationScale();
+        if (scale <= 0f) return;
+        final long now = System.nanoTime();
+        introNs = now;
+        introScale = scale;
+        contentFade.snap(0f);
+        contentFade.set(1f, now);
+        invalidate();
+    }
+
+    private boolean introActive(long now) {
+        return introNs != 0 && (now - introNs) / 1e6f < (INTRO_MS + INTRO_STAGGER_MS) * introScale;
     }
 
     /** Navrat z karuselu: obsah se plynule objevi. */
@@ -1348,6 +1381,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
 
         layoutChrome(now);
         drawGlass(canvas);
+        drawGameLight(canvas, now);
         if (canvas.isHardwareAccelerated()) {
             drawContentLayer(canvas, now);
             drawOrnamentBackdrop(canvas, now);
@@ -1368,7 +1402,7 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     }
 
     private boolean isAnimating(long now) {
-        if (blurAmount.active(now) || tabPos.active(now) || contentFade.active(now)
+        if (blurAmount.active(now) || tabPos.active(now) || contentFade.active(now) || introActive(now)
                 || brandHover.active(now) || brandTap.active(now) || batteryHover.active(now)
                 || dragLift.active(now) || railExpand.active(now)
                 || (isLowBattery() && now - lowBatterySinceNs < LOW_BATTERY_PULSE_NS)
@@ -1410,6 +1444,42 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
             panelStyleLight = light;
         }
         panelGlass.draw(c, frame, r, panelStyle, getResources().getDisplayMetrics().density);
+    }
+
+    /**
+     * Barevne svetlo hry na skle: kolem karty pod laserem se sklo panelu jemne
+     * rozsviti barvou jejiho obrazku (pricita se - jako svetlo, ne jako barva).
+     * Jeden radialni prechod pod kartami, shader se jen posouva matici.
+     */
+    private void drawGameLight(Canvas c, long now) {
+        final Card k = focused;
+        if (k == null || k == launchCard || artwork == null) return;
+        final float h = clamp(k.hover.get(now), 0f, 1f);
+        if (h <= 0.01f) return;
+        final int color = artwork.glowColor(k.app.pkg, 0xFFBFE6FF);
+        if (lightShader == null || lightColor != color) {
+            lightColor = color;
+            lightShader = new RadialGradient(0, 0, 1f, new int[]{(color & 0x00FFFFFF) | 0x66000000,
+                    (color & 0x00FFFFFF) | 0x1F000000, color & 0x00FFFFFF}, new float[]{0f, 0.45f, 1f},
+                    Shader.TileMode.CLAMP);
+        }
+        final float cx = cardLeft(k, now) + cardW / 2f;
+        final float cy = scrolledToScreenY(cardTop(k, now) + cardH / 2f);
+        final float rad = cardW * 1.5f;
+        lightMatrix.setScale(rad, rad * 0.8f);
+        lightMatrix.postTranslate(cx, cy);
+        lightShader.setLocalMatrix(lightMatrix);
+        c.save();
+        c.clipPath(framePath);
+        fill.setShader(lightShader);
+        fill.setColor(Color.WHITE);
+        fill.setAlpha(Math.round(255 * h));
+        fill.setBlendMode(BlendMode.PLUS);
+        c.drawRect(cx - rad, cy - rad, cx + rad, cy + rad, fill);
+        fill.setBlendMode(null);
+        fill.setShader(null);
+        fill.setAlpha(255);
+        c.restore();
     }
 
     /** Karty pod listou, ve vlastni vrstve s jedinym efektem hloubky ostrosti. */
@@ -1557,11 +1627,27 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
     }
 
     private void drawCard(Canvas c, Card k, long now, float dim, boolean allow3d) {
-        final float cx = cardLeft(k, now) + cardW / 2f;
-        final float cy = cardTop(k, now) + cardH / 2f;
+        float cx = cardLeft(k, now) + cardW / 2f;
+        float cy = cardTop(k, now) + cardH / 2f;
+        float scale = visualScale(k, now);
+        if (introActive(now) && frame.width() > 0 && frame.height() > 0) {
+            // Nastup: karta jde z lehce vzdalenejsi a vetsi pozice na sve misto,
+            // cim dal od stredu panelu, tim o chlup pozdeji (ease-out, zadny odskok).
+            final float gx = frame.centerX(), gy = frame.centerY();
+            final float dx = cx - gx, dy = cy - gy;
+            final float dn = clamp((float) Math.hypot(dx, dy)
+                    / (float) Math.hypot(frame.width() / 2f, frame.height() / 2f), 0f, 1f);
+            final float ms = (now - introNs) / 1e6f / introScale - dn * INTRO_STAGGER_MS;
+            final float p = clamp(ms / INTRO_MS, 0f, 1f);
+            final float e = 1f - (float) Math.pow(1f - p, 4);
+            final float spread = 1f + INTRO_SPREAD * (1f - e);
+            cx = gx + dx * spread;
+            cy = gy + dy * spread;
+            scale *= 1f + INTRO_ZOOM * (1f - e);
+        }
         // Pruzina muze lehce prekmitnout - na meritko ano, na pruhlednosti ne.
         final float h = clamp(k.hover.get(now), 0f, 1f);
-        drawCardAt(c, k, now, cx, cy, visualScale(k, now), k.rotX.get(now), k.rotY.get(now),
+        drawCardAt(c, k, now, cx, cy, scale, k.rotX.get(now), k.rotY.get(now),
                 h, dim, allow3d);
     }
 
@@ -1637,9 +1723,9 @@ public final class NeoLauncherView extends View implements ArtworkLoader.Listene
                 // Siroka (sprite velkeho stinu), aby presahla tmavy stin i okoli karty.
                 final int glow = artwork != null ? artwork.glowColor(k.app.pkg, 0xFFBFE6FF) : 0xFFBFE6FF;
                 // Aditivne (PLUS) - svetlo se pricte k okoli, misto aby ho zasedilo.
-                spritePaint.setColor((glow & 0x00FFFFFF) | (Math.round(200 * h) << 24));
+                spritePaint.setColor((glow & 0x00FFFFFF) | (Math.round(235 * h) << 24));
                 spritePaint.setBlendMode(BlendMode.PLUS);
-                hoverShadow.draw(c, -w2, -h2, w2, h2, dp(3) * h, spritePaint);
+                hoverShadow.draw(c, -w2, -h2, w2, h2, dp(5) * h, spritePaint);
                 spritePaint.setBlendMode(null);
                 spritePaint.setColor(Color.argb(Math.round(46 * h), 255, 255, 255));
                 glowSprite.draw(c, -w2, -h2, w2, h2, 0f, spritePaint);

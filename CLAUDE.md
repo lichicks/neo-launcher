@@ -179,9 +179,17 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
    ten smí být v jednom snímku jen v jednom rodiči, proto kopie pod lištou
    (backdrop) kreslí karty vždy naplocho.
 
-## Stav — co je hotové (v2.0, NEOTESTOVÁNO na headsetu)
+## Stav — co je hotové (v2.0)
 
-Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu**.
+**2026-09-29 první test na headsetu: „funguje až podivuhodně super“.**
+Zpětná vazba z testu (vyřešeno ve v2.0.4x): Meta tlačítko Neo neotevíralo
+(→ vestavěná služba `MetaButtonService`, viz níže), karusel ukazoval
+„Spuštěno 0×“ vedle hodin hraní (počítá jen spuštění z Nea → štítek pryč,
+datum instalace taky, nápověda dole = volba „Nápověda v karuselu“, výchozí
+vypnuto). Přání: silnější barevné světlo hry na skle (`drawGameLight`),
+nástup karet při otevření (`playIntro`). Hudba v rychlém menu: spíš ne
+(jen kdyby šla ukázat jen když něco hraje). Připomínka pauzy: ne.
+Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživatelem.
 
 - Mřížka 4 sloupce (nastavitelné 3–6), karty 1.6:1, radius 16, title pill
 - Hover: zvětšení 1.18 × perspektiva (translateZ 32 px v perspective 900 px),
@@ -307,6 +315,12 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
 
 ## Co otestovat na headsetu jako první
 
+0. **Meta tlačítko (v2.0.4x):** zapnout službu „Neo – Meta tlačítko“,
+   v Přístupnosti vypnout službu Lightning Launcheru. Doma Meta → Neo?
+   Znovu Meta → menu Questu? Ve hře Meta → menu Questu (ne Neo)? Po
+   ukončení hry se otevře Neo – a neotevře se při pouhé pauze? Při
+   problému `adb -P 5038 logcat -s NeoMeta`.
+
 1. Hover: najet na kartu, pak **přímo** na sousední (to byl bug 1b). Zvětšení +
    náklon musí fungovat vždy.
 2. Směr náklonu: strana pod kurzorem by se měla "zamáčknout" dozadu. Když je to
@@ -343,26 +357,38 @@ Vše níže je napsané a přeložené v CI, ale **ještě neběželo na Questu*
     průhledná část okna kolem panelu vidět jako rozmazaný obdélník
     (systémové rozmazání prostředí)? Velikost okna je 1176×664 dp.
 
-## Meta tlačítko (addon RedirectServices) — rozbor
+## Meta tlačítko — vestavěná služba `MetaButtonService` (od 2026-09-29)
 
-Addon (varianta *navigator*) je AccessibilityService, která poslouchá
-`com.oculus.systemux` a když se objeví okno s textem "Navigator"/"Navigátor"
-(= uživatel stiskl Meta tlačítko), otevře launcher. Neví nic o tom, jestli
-běží hra → **ve hře Meta tlačítko otevře launcher přes hru** (to uživateli vadí).
+Meta tlačítko do aplikací nechodí a přepsat natvrdo nejde (a uživatel se
+bál, že by se pak nedostal do nastavení Questu). Řešení jako v Lightning
+Launcheru, ale **přímo v Neu** (žádný zvláštní addon): služba přístupnosti
+`MetaButtonService` (`res/xml/meta_button_service.xml`), uživatel ji zapne
+jednou v Nastavení → Quest → „Meta tlačítko otevře Neo“ → Zapnout
+(otevře `Settings.ACTION_ACCESSIBILITY_SETTINGS`).
 
-**Rozhodnutí uživatele (2026-09-27):** zatím nechat addon, jak je (funguje
-docela v pohodě). **Další krok, až bude uživatel doma u headsetu (~29. 9.):**
-možnost 1 níže.
-
-Možnosti:
-1. **(vybráno na příště)** Addon přesunout do tohoto repa a naučit ho
-   neotevírat launcher, když je v popředí VR hra (sledovat
-   `TYPE_WINDOW_STATE_CHANGED` všech balíčků + typ aplikace jako
-   v `AppRepository`). Experimentální — jde otestovat jen na headsetu.
-2. Dvojí stisk Meta: addon vidí jen otevření Navigatoru, ne samotné tlačítko
-   → spolehlivě nejde.
-3. Bez addonu: Neo připnout do docku (od Horizon OS v63 stačí přetáhnout
-   ikonu) — jeden klik, Meta tlačítko zůstane systémové.
+- **Jak LL pozná Meta tlačítko** (`threethan/LightningLauncher`,
+  `RedirectServices/.../ShortcutAccessibilityService.java`, varianta
+  *navigator*): jen `com.oculus.systemux`, `TYPE_WINDOW_STATE_CHANGED`
+  s textem přesně `[Library]` nebo `[Navigator]` (lokalizace v
+  `src/navigator/res/values-*/target_name.xml`). Proto uživateli fungoval,
+  jen když se Navigator otevřel na záložce aplikací.
+- **Neo navíc:** Navigator na jiné záložce pozná podle tlačítka Knihovna
+  uvnitř okna (prohledá max. 400 uzlů, `LIBRARY_LABELS`).
+- **Pravidla:** doma Meta = Neo; když je Neo vidět (`fgPkg` = Neo a
+  `LauncherActivity.isVisible()`), další stisk = opravdové menu Questu;
+  ve VR hře menu Questu (volba „Ve hře menu Questu“, `Prefs.metaGameMenu`);
+  po skončení hry (hra byla v popředí > 4 s a objeví se
+  `com.oculus.vrshell`/`com.oculus.shellenv`) se otevře Neo (volba „Po
+  hře otevřít Neo“, `Prefs.metaAfterGame`). Když Neo samo otevírá systém
+  Questu (rychlé menu, `AppLauncher` panely), `MetaButtonService.suppress()`
+  na 4 s. Respektuje i `Prefs.allowShortcuts`.
+- **Vše heuristika z událostí oken, NEOVĚŘENO na headsetu.** Loguje:
+  `adb -P 5038 logcat -s NeoMeta` (popředí, Navigator, rozhodnutí). Když
+  „po hře“ otevře Neo i při pauze ve hře, je to tím, že vrshell pošle
+  událost i při otevření menu → vypnout volbu nebo zpřísnit `onHome`.
+- Pokud má uživatel zapnutou i službu Lightning Launcheru, otevřou se po
+  stisku oba launchery → v Přístupnosti nechat jen „Neo – Meta tlačítko“.
+- `ShortcutStateProvider` zůstává kvůli starému addonu (kompatibilita).
 
 ## Co zbývá / nápady
 
@@ -370,9 +396,8 @@ Možnosti:
 - Vlastní tapeta / pozadí
 - Hledání aplikací
 - Paralaxa celé mřížky podle ukazatele (víc 3D)
-- Addon RedirectServices přenést do tohoto repa (viz rozbor výše)
-- **Lišta běžící aplikace (rozhodnuto 2026-09-27, udělat 29. 9. spolu
-  s addonem):** dole na panelu pilulka ve stylu ornamentu (napůl zanořená
+- **Lišta běžící aplikace (rozhodnuto 2026-09-27; staví na
+  `MetaButtonService`, která už ví, co je v popředí):** dole na panelu pilulka ve stylu ornamentu (napůl zanořená
   do spodní hrany, `frame.bottom`), když na pozadí běží hra/aplikace:
   náhled + skutečný název (Quest u sideloadů píše „Neznámá aplikace“, my
   máme label z Androidu), tlačítka **Pokračovat** (znovu spustit = návrat

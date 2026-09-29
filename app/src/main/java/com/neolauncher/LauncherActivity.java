@@ -50,6 +50,7 @@ public class LauncherActivity extends Activity
     /** Automaticka kontrola aktualizaci nejvys jednou za 6 hodin. */
     private static final long UPDATE_CHECK_INTERVAL_MS = 6L * 60 * 60 * 1000;
     private static volatile boolean sForeground;
+    private static volatile boolean sVisible;
 
     private Prefs prefs;
     private AppRepository repo;
@@ -70,6 +71,11 @@ public class LauncherActivity extends Activity
     /** Pro addon Meta tlacitka: je launcher prave v popredi? */
     public static boolean isInForeground() {
         return sForeground;
+    }
+
+    /** Je okno launcheru videt (i kdyz je nad nim menu Questu)? Pro sluzbu Meta tlacitka. */
+    public static boolean isVisible() {
+        return sVisible;
     }
 
     @Override
@@ -120,15 +126,22 @@ public class LauncherActivity extends Activity
         lastRefreshMs = System.currentTimeMillis();
     }
 
+    /** Po onStart prehrat nastup karet (jednou pri kazdem ukazani launcheru). */
+    private boolean introPending;
+
     @Override
     protected void onStart() {
         super.onStart();
         registerReceivers();
+        sVisible = true;
+        // Launcher se prave ukazal (otevreni, navrat ze hry) -> v onResume nastup karet.
+        introPending = true;
     }
 
     @Override
     protected void onStop() {
         super.onStop();
+        sVisible = false;
         unregisterReceivers();
     }
 
@@ -136,6 +149,11 @@ public class LauncherActivity extends Activity
     protected void onResume() {
         super.onResume();
         sForeground = true;
+        if (introPending) {
+            introPending = false;
+            if (carouselShown) carousel.show();
+            else launcher.playIntro();
+        }
         launcher.onClockTick();
         carousel.onClockTick();
         // Pri navratu do launcheru (napr. po odinstalaci ve Store) prekontrolovat aplikace.
@@ -502,6 +520,8 @@ public class LauncherActivity extends Activity
     }
 
     private void openQuickTarget(int target) {
+        // Otevreni systemu Questu z rychleho menu neni zmacknuti Meta tlacitka.
+        MetaButtonService.suppress(4000);
         boolean ok;
         switch (target) {
             case QuickMenuView.T_WIFI:

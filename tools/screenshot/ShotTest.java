@@ -129,6 +129,12 @@ public class ShotTest {
         capture(a, v, outDir + "/warmup.png");
         pump(1500);
         capture(a, v, outDir + "/neo-idle.png");
+        // Nastup karet pri otevreni (playIntro) - snimek v prvni tretine animace.
+        v.playIntro();
+        Thread.sleep(160);
+        shadowOf(Looper.getMainLooper()).idle();
+        capture(a, v, outDir + "/neo-intro.png");
+        pump(900);
 
         final float d = a.getResources().getDisplayMetrics().density;
         // Kousek odrolovat (thumbstick), at prvni rada zajede pod matnou listu.

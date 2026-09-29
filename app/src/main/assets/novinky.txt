@@ -1,3 +1,12 @@
+# Meta tlačítko a nástup karet
+• Meta tlačítko teď otevře Neo samo: v Nastavení → Quest klepni u „Meta tlačítko otevře Neo“ na Zapnout a v Přístupnosti zapni službu „Neo – Meta tlačítko“. Doplněk z Lightning Launcheru už není potřeba
+• Když je Neo otevřené, další zmáčknutí Meta ukáže menu Questu – k nastavení Questu se dostaneš vždycky
+• Ve hře Meta ukáže menu Questu (Pokračovat / Ukončit), ne Neo přes hru
+• Po ukončení hry se rovnou otevře Neo (jde vypnout)
+• Při otevření se karty hezky poskládají na svá místa
+• Karta pod laserem víc svítí barvou hry do skla kolem sebe
+• Karusel: pryč je počet spuštění a datum instalace, nápověda dole jde zapnout v Nastavení → Vzhled
+
 # Nové sklo, barvy a ikonky
 • Sklo je skutečně průhledné: za oknem prosvítají rozmazané barvy her a okraj se leskne jako u opravdového skla (nahoře světlejší, po stranách slábne)
 • Nová barevná paleta – tmavá, perlová, šedomodrá a jen pár barevných akcentů (kobaltová, jantarová, purpurová)

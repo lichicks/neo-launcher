@@ -286,6 +286,20 @@ public final class AppRepository {
         return out;
     }
 
+    /** Je balicek VR hra/aplikace? (pro sluzbu Meta tlacitka, kdyz jeste neni seznam nacteny) */
+    public static boolean isVrPackage(PackageManager pm, String pkg) {
+        try {
+            final ApplicationInfo ai = pm.getApplicationInfo(pkg, PackageManager.GET_META_DATA);
+            final Set<String> vr = new HashSet<>();
+            final Intent i = new Intent(Intent.ACTION_MAIN).addCategory("com.oculus.intent.category.VR")
+                    .setPackage(pkg);
+            if (!pm.queryIntentActivities(i, 0).isEmpty()) vr.add(pkg);
+            return isVr(ai, vr);
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     private static boolean isVr(ApplicationInfo ai, Set<String> vrActivities) {
         if ("com.android.settings".equals(ai.packageName)) return false;
         if (ai.metaData != null) {

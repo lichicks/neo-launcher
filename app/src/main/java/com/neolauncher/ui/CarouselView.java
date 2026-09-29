@@ -608,8 +608,10 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
             drawCards(canvas, now, e);
             drawCaption(canvas, now);
             drawChips(canvas, now);
-            canvas.drawText("Joystick ← → přepíná   ·   klepnutí spustí   ·   podržení otevře menu",
-                    cx, getHeight() - dp(18), hintText);
+            if (prefs != null && prefs.carouselHint()) {
+                canvas.drawText("Joystick ← → přepíná   ·   klepnutí spustí   ·   podržení otevře menu",
+                        cx, getHeight() - dp(18), hintText);
+            }
         }
 
         if (launchK != Integer.MIN_VALUE) {
@@ -1007,18 +1009,8 @@ public final class CarouselView extends View implements ArtworkLoader.Listener {
         last.text = formatLast(stats != null ? stats.lastUsed(pkg) : 0L);
         chips.add(last);
 
-        Chip count = new Chip();
-        count.icon = ICON_PLAY;
-        count.text = "Spuštěno " + (stats != null ? stats.launchCount(pkg) : 0) + "×";
-        chips.add(count);
-
-        final long inst = stats != null ? stats.installTime(pkg) : 0L;
-        if (inst > 0) {
-            Chip in = new Chip();
-            in.icon = ICON_DOWNLOAD;
-            in.text = "Nainstalováno " + formatDate(inst, true);
-            chips.add(in);
-        }
+        // Pocet spusteni a datum instalace uz ne: pocet znal jen spusteni z Nea (u her
+        // spoustenych z knihovny Questu ukazoval 0x vedle hodin hrani - zmatek).
     }
 
     private void drawChips(Canvas c, long now) {

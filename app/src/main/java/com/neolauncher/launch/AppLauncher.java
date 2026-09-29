@@ -41,6 +41,8 @@ public final class AppLauncher {
 
         // Systemove panely Questu (systemux://...) otevira primo vrshell.
         if (quest && app.type == AppEntry.TYPE_PANEL) {
+            // Nastaveni / menu Questu otevrene z Nea neni zmacknuti Meta tlacitka.
+            com.neolauncher.MetaButtonService.suppress(4000);
             Intent i = pm.getLaunchIntentForPackage("com.oculus.vrshell");
             if (i == null) return false;
             i.setData(Uri.parse(app.pkg));

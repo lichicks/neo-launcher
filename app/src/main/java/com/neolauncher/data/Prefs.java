@@ -44,11 +44,14 @@ public final class Prefs {
     private static final String K_COLUMNS = "columns";
     private static final String K_SYSTEM_BLUR = "system_blur";
     private static final String K_SHORTCUTS = "allow_shortcuts";
+    private static final String K_META_GAME_MENU = "meta_game_menu";
+    private static final String K_META_AFTER_GAME = "meta_after_game";
     private static final String K_MENU_HOLD = "menu_hold_ms";
     private static final String K_ONLINE_ART = "online_art";
     private static final String K_LAUNCH_ANIM = "launch_animation";
     private static final String K_CLOSE_AFTER_LAUNCH = "close_after_launch";
     private static final String K_CAROUSEL = "carousel_mode";
+    private static final String K_CAROUSEL_HINT = "carousel_hint";
     private static final String K_UPDATE_TEST = "update_test_builds";
     private static final String K_UPDATE_LAST_CHECK = "update_last_check";
     private static final String K_UPDATE_DISMISSED = "update_dismissed";
@@ -193,6 +196,16 @@ public final class Prefs {
         changed();
     }
 
+    /** Napoveda k ovladani dole v karuselu (vychozi vypnuto). */
+    public boolean carouselHint() {
+        return sp.getBoolean(K_CAROUSEL_HINT, false);
+    }
+
+    public void setCarouselHint(boolean b) {
+        sp.edit().putBoolean(K_CAROUSEL_HINT, b).apply();
+        changed();
+    }
+
     /** Stahovat bannery her z online repozitaru (jako Lightning Launcher). */
     public boolean onlineArt() {
         return sp.getBoolean(K_ONLINE_ART, true);
@@ -239,6 +252,26 @@ public final class Prefs {
 
     public void setSystemBlur(boolean b) {
         sp.edit().putBoolean(K_SYSTEM_BLUR, b).apply();
+        changed();
+    }
+
+    /** Meta tlacitko ve VR hre: nechat menu Questu (Pokracovat / Ukoncit) misto Nea. */
+    public boolean metaGameMenu() {
+        return sp.getBoolean(K_META_GAME_MENU, true);
+    }
+
+    public void setMetaGameMenu(boolean b) {
+        sp.edit().putBoolean(K_META_GAME_MENU, b).apply();
+        changed();
+    }
+
+    /** Po skonceni VR hry rovnou otevrit Neo (sluzba Meta tlacitka). */
+    public boolean metaAfterGame() {
+        return sp.getBoolean(K_META_AFTER_GAME, true);
+    }
+
+    public void setMetaAfterGame(boolean b) {
+        sp.edit().putBoolean(K_META_AFTER_GAME, b).apply();
         changed();
     }
 

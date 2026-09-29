@@ -20,6 +20,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import com.neolauncher.art.ArtworkLoader;
+import com.neolauncher.MetaButtonService;
 import com.neolauncher.data.AppEntry;
 import com.neolauncher.data.AppRepository;
 import com.neolauncher.data.Platform;
@@ -211,7 +212,9 @@ public final class SettingsSheet {
         grid(c, page,
                 toggleTile(c, Icons.CAROUSEL, "Karusel (test)", "Karty ve vějíři. Taky 5× klepnout na logo",
                         prefs.carouselMode(), prefs::setCarouselMode),
-                null, null);
+                toggleTile(c, Icons.INFO, "Nápověda v karuselu", "Dole v karuselu ukázat, jak se ovládá",
+                        prefs.carouselHint(), prefs::setCarouselHint),
+                null);
     }
 
     private static void pageApps(Ctx x, LinearLayout page) {
@@ -276,15 +279,32 @@ public final class SettingsSheet {
                                 ? "Systémové matné sklo za panelem (projeví se po novém otevření)"
                                 : "Toto zařízení to nepodporuje (Quest 3/3S)",
                         prefs.systemBlur(), prefs::setSystemBlur),
-                toggleTile(c, Icons.META, "Meta tlačítko", "Povolí addon, který Nea otevře Meta tlačítkem",
-                        prefs.allowShortcuts(), prefs::setAllowShortcuts),
                 actionTile(c, Icons.HEADSET, "Nastavení Questu", "Systémová nastavení headsetu",
                         "Otevřít", v -> {
                             if (!(c instanceof Activity) || !AppLauncher.launch((Activity) c,
                                     new AppEntry("systemux://settings", "Nastavení Questu", AppEntry.TYPE_PANEL, false))) {
                                 Toast.makeText(c, "Na tomto zařízení není k dispozici", Toast.LENGTH_SHORT).show();
                             }
-                        }));
+                        }),
+                null);
+
+        // Meta tlacitko: sluzba pristupnosti primo v Neu (zapina se jednou v Pristupnosti).
+        final boolean metaOn = MetaButtonService.isEnabled(c);
+        grid(c, page,
+                actionTile(c, Icons.META, "Meta tlačítko otevře Neo", metaOn
+                                ? "Zapnuto. Když je Neo otevřené, další zmáčknutí ukáže menu Questu"
+                                : "Zapni službu „Neo – Meta tlačítko“ v Přístupnosti",
+                        metaOn ? "Nastavení" : "Zapnout", v -> {
+                            try {
+                                c.startActivity(MetaButtonService.settingsIntent());
+                            } catch (Exception e) {
+                                Toast.makeText(c, "Otevři Nastavení → Přístupnost ručně", Toast.LENGTH_LONG).show();
+                            }
+                        }),
+                toggleTile(c, Icons.PLAY, "Ve hře menu Questu", "Meta ve hře ukáže menu Questu (Pokračovat / Ukončit), ne Neo",
+                        prefs.metaGameMenu(), prefs::setMetaGameMenu),
+                toggleTile(c, Icons.EXIT, "Po hře otevřít Neo", "Když hru ukončíš, rovnou se ukáže Neo",
+                        prefs.metaAfterGame(), prefs::setMetaAfterGame));
         boolean canWrite;
         try {
             canWrite = Settings.System.canWrite(c);

@@ -1,6 +1,6 @@
 # Neo Launcher – předávací dokument (jak navázat)
 
-> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **29. 9. 2026, verze v2.0.50**),
+> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **29. 9. 2026, verze v2.0.52**),
 > a jak na to navázat v novém chatu – i s málo kredity. Podrobný technický
 > kontext je v [`CLAUDE.md`](../CLAUDE.md) v kořeni repozitáře.
 

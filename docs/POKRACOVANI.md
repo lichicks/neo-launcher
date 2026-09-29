@@ -1,6 +1,6 @@
 # Neo Launcher – předávací dokument (jak navázat)
 
-> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **29. 9. 2026, verze v2.0.4x**),
+> Tenhle soubor shrnuje, kam jsme se s Neem dostali (stav k **29. 9. 2026, verze v2.0.44**),
 > a jak na to navázat v novém chatu – i s málo kredity. Podrobný technický
 > kontext je v [`CLAUDE.md`](../CLAUDE.md) v kořeni repozitáře.
 
@@ -9,7 +9,10 @@
 ## 1. Jak pokračovat (návod pro Jana)
 
 ### A) Nejlepší a nejlevnější: Claude Code s tímhle repem
-1. Otevři novou session Claude Code (web / aplikace) s repozitářem **`lichicks/neo-launcher`**.
+Claude Code je součástí placených plánů (Pro / Max) – nemusí to být stejné kredity,
+na kterých vznikala tahle session. Stačí být přihlášený svým účtem s předplatným.
+1. Otevři **claude.ai/code** (nebo aplikaci Claude → Code) a založ novou session
+   s repozitářem **`lichicks/neo-launcher`** (GitHub propojený se stejným účtem).
 2. Claude si **sám načte `CLAUDE.md`** – nemusíš nic vysvětlovat ani nic vkládat.
 3. Napiš jen, co chceš změnit (+ screenshot z Questu, jestli jde o vzhled).
 4. Na konci ho požádej: „commitni a pushni“. GitHub pak sám postaví novou verzi
@@ -68,8 +71,8 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
 
 ## 3. Stav
 
-- Poslední verze: testovací buildy `v2.0.4x` z větve `claude/funny-ramanujan-xp8ba6`
-  (PR #1 do `main` je otevřený). APK: GitHub → Releases → nejnovější `NeoLauncher-2.0.xx.apk`.
+- Poslední verze: **v2.0.44** (testovací buildy z větve `claude/funny-ramanujan-xp8ba6`
+  PR #1 do `main` je otevřený). APK: GitHub → Releases → nejnovější `NeoLauncher-2.0.xx.apk`.
 - **29. 9. první test na Questu: „funguje až podivuhodně super“.** Opraveno podle testu:
   Meta tlačítko (vestavěná služba, viz níže), karusel (pryč „Spuštěno 0×“ a datum
   instalace, nápověda volitelná), silnější světlo hry na skle, nástup karet při otevření.

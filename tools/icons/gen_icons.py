@@ -64,6 +64,10 @@ ICONS = [
     ("CALENDAR", "calendar"),
     ("DOWNLOAD", "download"),
     ("CHEVRON_LEFT", "chevron-left"),
+    ("PACKAGE_PLUS", "package-plus"),
+    ("ARCHIVE", "archive"),
+    ("ARCHIVE_RESTORE", "archive-restore"),
+    ("DEPTH", "move-3d"),
 ]
 
 

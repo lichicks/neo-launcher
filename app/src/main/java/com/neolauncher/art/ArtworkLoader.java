@@ -372,6 +372,14 @@ public final class ArtworkLoader {
         });
     }
 
+    /** Po obnove ze zalohy (jine vlastni obrazky): zahodit obrazky v pameti. */
+    public void clearMemory() {
+        memory.evictAll();
+        fallbacks.clear();
+        glowColors.clear();
+        notifyChanged(null);
+    }
+
     private void notifyChanged(String pkg) {
         for (Listener l : listeners) l.onArtworkChanged(pkg);
     }

@@ -26,6 +26,8 @@ public final class Prefs {
     public static final int SORT_RECENT = 2;
     public static final int SORT_PLAYTIME = 3;
     public static final int SORT_SMART = 4;
+    /** Nejvetsi (zabrane misto) prvni - potrebuje "Pristup k vyuziti". */
+    public static final int SORT_SIZE = 5;
 
     /** Styl skla panelu: tmave z preview_neo.html, nebo svetlejsi jako ve visionOS. */
     public static final int GLASS_DARK = 0;
@@ -52,6 +54,7 @@ public final class Prefs {
     private static final String K_CLOSE_AFTER_LAUNCH = "close_after_launch";
     private static final String K_CAROUSEL = "carousel_mode";
     private static final String K_CAROUSEL_HINT = "carousel_hint";
+    private static final String K_PARALLAX = "parallax";
     private static final String K_UPDATE_TEST = "update_test_builds";
     private static final String K_UPDATE_LAST_CHECK = "update_last_check";
     private static final String K_UPDATE_DISMISSED = "update_dismissed";
@@ -88,6 +91,12 @@ public final class Prefs {
         for (Listener l : listeners) l.onPrefsChanged();
     }
 
+    /** Po obnove ze zalohy: zahodit nacachovane hodnoty a dat vedet posluchacum. */
+    public void reloadAfterRestore() {
+        favoritesCache = null;
+        changed();
+    }
+
     // --- Vzhled -------------------------------------------------------------
 
     public int tab() {
@@ -99,7 +108,7 @@ public final class Prefs {
     }
 
     public int sortMode() {
-        return clamp(sp.getInt(K_SORT, SORT_MANUAL), 0, 4);
+        return clamp(sp.getInt(K_SORT, SORT_MANUAL), 0, SORT_SIZE);
     }
 
     public void setSortMode(int m) {
@@ -193,6 +202,16 @@ public final class Prefs {
     public void setCarouselMode(boolean b) {
         if (b == carouselMode()) return;
         sp.edit().putBoolean(K_CAROUSEL, b).apply();
+        changed();
+    }
+
+    /** Paralaxa - karty se posouvaji za laserem, panel pusobi hloubeji (vychozi zapnuto). */
+    public boolean parallax() {
+        return sp.getBoolean(K_PARALLAX, true);
+    }
+
+    public void setParallax(boolean b) {
+        sp.edit().putBoolean(K_PARALLAX, b).apply();
         changed();
     }
 

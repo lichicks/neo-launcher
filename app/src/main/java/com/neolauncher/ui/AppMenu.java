@@ -40,7 +40,8 @@ public final class AppMenu {
         void uninstall();
     }
 
-    public static View build(Context c, AppEntry app, String label, boolean hasCustomImage,
+    /** @param size zabrane misto ("14,2 GB"), nebo null kdyz neni zname */
+    public static View build(Context c, AppEntry app, String label, String size, boolean hasCustomImage,
                              boolean favorite, Actions a) {
         LinearLayout root = new LinearLayout(c);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -55,10 +56,16 @@ public final class AppMenu {
         root.addView(title);
         String kind = app.type == AppEntry.TYPE_VR ? "VR hra"
                 : app.type == AppEntry.TYPE_PANEL ? "Systémový panel" : "2D aplikace";
-        TextView sub = Glass.text(c, kind + " · " + app.pkg, 12, Palette.text3(), false);
-        sub.setPadding(Glass.dpi(c, 14), Glass.dpi(c, 2), Glass.dpi(c, 14), Glass.dpi(c, 12));
+        // Typ a zabrane misto, pod tim nazev balicku (drobne).
+        TextView sub = Glass.text(c, kind + (size != null ? " · " + size : ""), 13, Palette.text2(), false);
+        sub.setPadding(Glass.dpi(c, 14), Glass.dpi(c, 2), Glass.dpi(c, 14), 0);
         sub.setSingleLine(true);
         root.addView(sub);
+        TextView pkg = Glass.text(c, app.pkg, 11, Palette.text3(), false);
+        pkg.setPadding(Glass.dpi(c, 14), Glass.dpi(c, 2), Glass.dpi(c, 14), Glass.dpi(c, 12));
+        pkg.setSingleLine(true);
+        pkg.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        root.addView(pkg);
         // Oddelovac zarovnany s textem polozek, pod nim kousek mista pro zvyrazneni prvni polozky.
         View div = Glass.divider(c);
         LinearLayout.LayoutParams dlp = (LinearLayout.LayoutParams) div.getLayoutParams();

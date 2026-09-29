@@ -7,14 +7,26 @@ import android.content.pm.PackageInstaller;
 import android.util.Log;
 import android.widget.Toast;
 
-/** Vysledek instalace aktualizace od systemu (PackageInstaller). */
+/** Vysledek instalace od systemu (PackageInstaller): aktualizace Nea nebo APK vybrane v Neu. */
 public class InstallReceiver extends BroadcastReceiver {
+    /** Nazev nainstalovane aplikace (nebo balicek, kdyz nazev nejde zjistit). */
+    private static String label(Context c, String pkg) {
+        if (pkg == null) return "aplikace";
+        try {
+            return String.valueOf(c.getPackageManager().getApplicationLabel(
+                    c.getPackageManager().getApplicationInfo(pkg, 0)));
+        } catch (Exception e) {
+            return pkg;
+        }
+    }
+
     private static final String TAG = "NeoUpdater";
 
     @Override
     public void onReceive(Context context, Intent intent) {
         int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS,
                 PackageInstaller.STATUS_FAILURE);
+        final boolean apk = ApkInstaller.KIND_APK.equals(intent.getStringExtra(ApkInstaller.EXTRA_KIND));
         switch (status) {
             case PackageInstaller.STATUS_PENDING_USER_ACTION: {
                 // System chce potvrzeni od uzivatele - otevrit jeho dialog.
@@ -33,12 +45,16 @@ public class InstallReceiver extends BroadcastReceiver {
             }
             case PackageInstaller.STATUS_SUCCESS:
                 // Po aktualizaci sebe sama nas system ukonci - neni co delat.
+                if (apk) {
+                    Toast.makeText(context, "Nainstalováno: " + label(context,
+                            intent.getStringExtra(PackageInstaller.EXTRA_PACKAGE_NAME)), Toast.LENGTH_LONG).show();
+                }
                 break;
             default: {
                 String msg = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
                 Log.w(TAG, "Instalace selhala: " + status + " " + msg);
                 if (status != PackageInstaller.STATUS_FAILURE_ABORTED) {
-                    Toast.makeText(context, "Aktualizace se nenainstalovala"
+                    Toast.makeText(context, (apk ? "Aplikace se nenainstalovala" : "Aktualizace se nenainstalovala")
                             + (msg != null ? ": " + msg : ""), Toast.LENGTH_LONG).show();
                 }
                 break;

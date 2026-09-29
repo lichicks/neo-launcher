@@ -168,6 +168,15 @@ public class ShotTest {
         dumpState(v);
         System.out.println("glow BONELAB=" + Integer.toHexString(art.glowColor("com.StressLevelZero.BONELAB", 0)));
         capture(a, v, outDir + "/neo-hover.png");
+        // Paralaxa: laser u praveho okraje panelu na karte vpravo nahore - mrizka
+        // (za sklem) se posune s laserem, lista a ornament proti nemu, obrazek karty
+        // jde za laserem a pres kartu prejede odlesk.
+        float rightLeft = (Float) f(v, "gridLeft") + 3 * (cardW + gp);
+        hover(v, rightLeft + cardW * 0.5f, top - (cardH + gp) + cardH * 0.5f);
+        pump(150);
+        hover(v, rightLeft + cardW * 0.92f, top - (cardH + gp) + cardH * 0.12f);
+        pump(1600);
+        capture(a, v, outDir + "/neo-parallax.png");
         dumpState(v);
 
         // Kliknuti na kartu -> animace spusteni "kukatko", 6x zpomalena
@@ -332,7 +341,7 @@ public class ShotTest {
         final AppEntry first = apps.get(0);
         final android.graphics.RectF cardAt = new android.graphics.RectF(grid.frameRect().left + 24 * d, grid.frameRect().top + 50 * d,
                 grid.frameRect().left + 290 * d, grid.frameRect().top + 216 * d);
-        android.view.View menuView = com.neolauncher.ui.AppMenu.build(a, first, first.systemLabel, false, true,
+        android.view.View menuView = com.neolauncher.ui.AppMenu.build(a, first, first.systemLabel, "6,4 GB", false, true,
                 new com.neolauncher.ui.AppMenu.Actions() {
                     @Override public void launch() {}
                     @Override public void favorite() {}

@@ -120,6 +120,8 @@ pravdy (`focused`), žádné callbacky, žádná recyklace.
 | `ui/GlassWidgets.java`, `ui/Cascade.java` | Přepínač, posuvník a ikona v kulatém skle, postupný nástup dlaždic |
 | `ui/Palette.java`, `ui/GlassSurface.java`, `ui/GlassDrawable.java` | Barevná paleta, jeden recept na sklo (Canvas i Drawable) |
 | `ui/Icons.java`, `ui/IconPaths.java`, `ui/SvgPath.java` | Ikony Lucide: vygenerované SVG cesty + parser (viz „Barvy, sklo a ikony“) |
+| `MetaButtonService.java` | Meta tlačítko otevře Neo (služba přístupnosti, viz níže) |
+| `data/AppSizes.java`, `data/Backup.java`, `update/ApkInstaller.java` | Velikost her, záloha nastavení (zip), instalace APK |
 
 ### Rozložení okna (od 2026-09-27, podle předloh z visionOS od uživatele)
 - **Skleněný panel** jen s mřížkou karet (všechny rohy zaoblené).
@@ -190,6 +192,28 @@ vypnuto). Přání: silnější barevné světlo hry na skle (`drawGameLight`),
 nástup karet při otevření (`playIntro`). Hudba v rychlém menu: spíš ne
 (jen kdyby šla ukázat jen když něco hraje). Připomínka pauzy: ne.
 Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživatelem.
+
+**Přidáno 2026-09-29 (po testu, na přání uživatele, NEOVĚŘENO na headsetu):**
+- **Instalace APK** (`update/ApkInstaller`): Nastavení → Aplikace → „Nainstalovat
+  APK“ → systémový výběr souboru (`ACTION_OPEN_DOCUMENT`, `*/*` + typ apk) →
+  PackageInstaller → Quest se zeptá. Výsledek v `InstallReceiver` (extra
+  `neo.install.kind=apk` → „Nainstalováno: …“). Jestli Quest výběr souborů
+  nemá, ukáže se hláška – pak by to chtělo vlastní seznam APK ve složce Download.
+- **Velikost her** (`data/AppSizes`, `StorageStatsManager`, stejné povolení jako
+  herní čas): v menu karty „VR hra · 14,2 GB“, řazení `Prefs.SORT_SIZE`
+  („Velikost“, největší první, přes `Signals.sizeBytes`). Počítá se na pozadí,
+  obnova max. 1× za 10 min.
+- **Záloha** (`data/Backup`): Nastavení → O Neo → Zálohovat / Obnovit. Zip se
+  `neo-zaloha.json` (SharedPreferences `neo`, `neo_recents`, `neo_launch_counts`
+  s typy) + `art-custom/*`. Po obnově `Prefs.reloadAfterRestore()` +
+  `ArtworkLoader.clearMemory()`.
+- **Paralaxa** (`NeoLauncherView`, konstanty `PAR_*`, volba `Prefs.parallax`,
+  výchozí zapnuto): panel = okno. Karty (za sklem) se posouvají **s** laserem
+  (`cardLeft/cardTop` + `parallaxX/Y`, takže i hit-test sedí), lišta a ornament
+  (před sklem) **proti** němu, na kartě pod laserem obrázek s laserem (zvětšený
+  o 7 %), název a štítky proti němu, přes kartu měkký odlesk v místě laseru.
+  Pomalá pružina `PAR_RESPONSE` 0,9 s. Když by to v brýlích „houpalo“, zmenšit
+  `PAR_GRID_*`.
 
 - Mřížka 4 sloupce (nastavitelné 3–6), karty 1.6:1, radius 16, title pill
 - Hover: zvětšení 1.18 × perspektiva (translateZ 32 px v perspective 900 px),
@@ -320,6 +344,10 @@ Detaily níže psané před testem nemusí všechny sedět – ověřuj s uživa
    Znovu Meta → menu Questu? Ve hře Meta → menu Questu (ne Neo)? Po
    ukončení hry se otevře Neo – a neotevře se při pouhé pauze? Při
    problému `adb -P 5038 logcat -s NeoMeta`.
+
+0b. **Nové 29. 9.:** instalace APK (otevře se výběr souborů?), velikost v menu
+   karty a řazení „Velikost“ (po povolení herního času), záloha → obnova,
+   paralaxa (nepůsobí v brýlích nepříjemně?), nástup karet při otevření.
 
 1. Hover: najet na kartu, pak **přímo** na sousední (to byl bug 1b). Zvětšení +
    náklon musí fungovat vždy.

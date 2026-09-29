@@ -21,6 +21,8 @@ import android.widget.Toast;
 
 import com.neolauncher.art.ArtworkLoader;
 import com.neolauncher.MetaButtonService;
+import com.neolauncher.update.ApkInstaller;
+import com.neolauncher.LauncherActivity;
 import com.neolauncher.data.AppEntry;
 import com.neolauncher.data.AppRepository;
 import com.neolauncher.data.Platform;
@@ -214,7 +216,8 @@ public final class SettingsSheet {
                         prefs.carouselMode(), prefs::setCarouselMode),
                 toggleTile(c, Icons.INFO, "Nápověda v karuselu", "Dole v karuselu ukázat, jak se ovládá",
                         prefs.carouselHint(), prefs::setCarouselHint),
-                null);
+                toggleTile(c, Icons.DEPTH, "Paralaxa", "Karty se jemně posouvají za laserem – panel působí do hloubky",
+                        prefs.parallax(), prefs::setParallax));
     }
 
     private static void pageApps(Ctx x, LinearLayout page) {
@@ -223,11 +226,12 @@ public final class SettingsSheet {
         final int[] holdOptions = {700, 1000, 1500};
         int holdSel = 1;
         for (int i = 0; i < holdOptions.length; i++) if (holdOptions[i] == prefs.menuHoldMs()) holdSel = i;
-        // Razeni pres celou sirku (5 moznosti). Oblibene jsou vzdy nahore.
+        // Razeni pres celou sirku (6 moznosti). Oblibene jsou vzdy nahore.
         grid(c, page,
                 wide(c, Icons.SORT, "Řazení", "Chytré = nové aplikace první, pak podle herního času. "
-                                + "Oblíbené (★ v menu karty) jsou vždy nahoře.",
-                        Glass.segmented(c, new String[]{"Vlastní", "Abecedně", "Naposledy", "Nejhranější", "Chytré"},
+                                + "Velikost = největší první. Oblíbené (★ v menu karty) jsou vždy nahoře.",
+                        Glass.segmented(c, new String[]{"Vlastní", "Abecedně", "Naposledy", "Nejhranější", "Chytré",
+                                        "Velikost"},
                                 prefs.sortMode(), m -> {
                                     prefs.setSortMode(m);
                                     x.onAppsChanged.run();
@@ -256,6 +260,12 @@ public final class SettingsSheet {
                                         + " GET_USAGE_STATS allow", Toast.LENGTH_LONG).show();
                             }
                         }));
+
+        // Sideload bez PC: APK stazene v prohlizeci Questu.
+        grid(c, page,
+                actionTile(c, Icons.PACKAGE_PLUS, "Nainstalovat APK", "Soubor stažený třeba v prohlížeči Questu – bez PC",
+                        "Vybrat", v -> startForResult(c, ApkInstaller.pickIntent(), LauncherActivity.REQ_PICK_APK)),
+                null, null);
 
         // Skryte aplikace pres celou sirku.
         LinearLayout hiddenTile = tileBase(c);
@@ -346,6 +356,13 @@ public final class SettingsSheet {
 
     private static void pageAbout(Ctx x, LinearLayout page) {
         final Context c = x.c;
+        // Zaloha: vsechna nastaveni, poradi, oblibene, prejmenovani a vlastni obrazky v jednom souboru.
+        grid(c, page,
+                actionTile(c, Icons.ARCHIVE, "Zálohovat nastavení", "Pořadí, oblíbené, jména i vlastní obrázky do jednoho souboru",
+                        "Uložit", v -> startForResult(c, LauncherActivity.backupExportIntent(), LauncherActivity.REQ_EXPORT)),
+                actionTile(c, Icons.ARCHIVE_RESTORE, "Obnovit ze zálohy", "Po přeinstalaci, resetu Questu nebo od kamaráda",
+                        "Vybrat", v -> startForResult(c, LauncherActivity.backupImportIntent(), LauncherActivity.REQ_IMPORT)),
+                null);
         grid(c, page,
                 infoTile(c, Icons.NEO, "Neo Launcher " + version(c), "Vlastní launcher pro Meta Quest 3S – "
                         + "sklo, karty vyskakující do prostoru, kukátko, karusel a rychlé menu."));
@@ -622,6 +639,17 @@ public final class SettingsSheet {
                 LinearLayout.LayoutParams.WRAP_CONTENT);
         if (page.getChildCount() > 0) lp.topMargin = Glass.dpi(c, Glass.GAP);
         page.addView(row, lp);
+    }
+
+    /** Systemovy vyber souboru; vysledek zpracuje LauncherActivity.onActivityResult. */
+    @SuppressWarnings("deprecation")
+    private static void startForResult(Context c, Intent i, int request) {
+        if (!(c instanceof Activity)) return;
+        try {
+            ((Activity) c).startActivityForResult(i, request);
+        } catch (Exception e) {
+            Toast.makeText(c, "Výběr souborů tu není k dispozici", Toast.LENGTH_LONG).show();
+        }
     }
 
     /** Kulate sklenene tlacitko s ikonou (zavrit). */

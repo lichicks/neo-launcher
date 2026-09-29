@@ -132,6 +132,11 @@ public final class AppRepository {
         long lastUsed(String pkg);
 
         boolean isNew(AppEntry e);
+
+        /** Zabrane misto v bajtech, -1 = nezname. */
+        default long sizeBytes(String pkg) {
+            return -1L;
+        }
     }
 
     private volatile Signals signals;
@@ -407,6 +412,16 @@ public final class AppRepository {
                     c = Long.compare(play.get(b.pkg), play.get(a.pkg));
                     if (c != 0) return c;
                     c = Long.compare(last.get(b.pkg), last.get(a.pkg));
+                    return c != 0 ? c : byLabel.compare(a, b);
+                });
+                break;
+            }
+            case Prefs.SORT_SIZE: {
+                // Nejvetsi prvni (uklid mista); nezname velikosti na konec, abecedne.
+                final Map<String, Long> size = new HashMap<>();
+                for (AppEntry e : list) size.put(e.pkg, sig != null ? sig.sizeBytes(e.pkg) : -1L);
+                list.sort((a, b) -> {
+                    int c = Long.compare(size.get(b.pkg), size.get(a.pkg));
                     return c != 0 ? c : byLabel.compare(a, b);
                 });
                 break;

@@ -22,10 +22,13 @@ import android.widget.Toast;
 
 import com.neolauncher.art.ArtworkLoader;
 import com.neolauncher.data.AppEntry;
+import com.neolauncher.data.AppSizes;
+import com.neolauncher.data.Backup;
 import com.neolauncher.data.AppRepository;
 import com.neolauncher.data.Prefs;
 import com.neolauncher.data.UsageInfo;
 import com.neolauncher.launch.AppLauncher;
+import com.neolauncher.update.ApkInstaller;
 import com.neolauncher.update.Updater;
 import com.neolauncher.ui.AppMenu;
 import com.neolauncher.ui.CarouselView;
@@ -47,6 +50,11 @@ public class LauncherActivity extends Activity
         implements NeoLauncherView.Host, AppRepository.Listener, OverlayHost.Listener, Prefs.Listener {
 
     private static final int REQ_PICK_IMAGE = 41;
+    /** Vyber APK k instalaci (Nastaveni -> Aplikace). */
+    public static final int REQ_PICK_APK = 42;
+    /** Zaloha nastaveni: kam ulozit / odkud obnovit. */
+    public static final int REQ_EXPORT = 43;
+    public static final int REQ_IMPORT = 44;
     /** Automaticka kontrola aktualizaci nejvys jednou za 6 hodin. */
     private static final long UPDATE_CHECK_INTERVAL_MS = 6L * 60 * 60 * 1000;
     private static volatile boolean sForeground;
@@ -60,6 +68,8 @@ public class LauncherActivity extends Activity
     private CarouselView carousel;
     private boolean carouselShown;
     private UsageInfo usage;
+    /** Zabrane misto her (menu karty, razeni podle velikosti). */
+    private AppSizes sizes;
     private int batteryPct = -1;
     private boolean batteryCharging, batteryFast;
     private OverlayHost overlay;
@@ -98,6 +108,7 @@ public class LauncherActivity extends Activity
         root.addView(launcher, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         usage = new UsageInfo(this);
+        sizes = new AppSizes(this);
         repo.setSignals(signals);
         launcher.setSignals(signals);
         carousel = new CarouselView(this);
@@ -165,6 +176,7 @@ public class LauncherActivity extends Activity
         if (prefs.sortMode() == Prefs.SORT_RECENT) showApps(true);
         if (carouselShown || sortNeedsUsage()) usage.refresh(false);
         if (carouselShown) carousel.statsChanged();
+        refreshSizes(false);
         // Az je okno rozlozene (dialog potrebuje rozmery panelu).
         launcher.post(this::maybeShowWhatsNew);
         checkForUpdates(false);
@@ -195,9 +207,18 @@ public class LauncherActivity extends Activity
 
     // --- Seznam aplikaci -------------------------------------------------------
 
+    /** Velikosti her na pozadi; po nacteni preradit, kdyz se radi podle velikosti. */
+    private void refreshSizes(boolean force) {
+        if (!usage.hasPermission()) return;
+        sizes.refresh(repo.apps(), force, () -> {
+            if (prefs.sortMode() == Prefs.SORT_SIZE) showApps(true);
+        });
+    }
+
     @Override
     public void onAppsChanged(List<AppEntry> apps) {
         showApps(true);
+        refreshSizes(false);
     }
 
     private void showApps(boolean animate) {
@@ -274,6 +295,11 @@ public class LauncherActivity extends Activity
         @Override
         public long lastUsed(String pkg) {
             return Math.max(prefs.lastLaunch(pkg), usage.lastUsed(pkg));
+        }
+
+        @Override
+        public long sizeBytes(String pkg) {
+            return sizes.get(pkg);
         }
 
         @Override
@@ -595,7 +621,8 @@ public class LauncherActivity extends Activity
     public void onAppMenu(AppEntry app, RectF cardRect) {
         final String label = prefs.labelFor(app);
         final boolean fav = prefs.isFavorite(app.pkg);
-        overlay.show(AppMenu.build(this, app, label, artwork.hasCustomImage(app.pkg), fav,
+        overlay.show(AppMenu.build(this, app, label, AppSizes.format(sizes.get(app.pkg)),
+                artwork.hasCustomImage(app.pkg), fav,
                 new AppMenu.Actions() {
                     @Override
                     public void launch() {
@@ -805,6 +832,17 @@ public class LauncherActivity extends Activity
     @SuppressWarnings("deprecation")
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        final Uri picked = resultCode == RESULT_OK && data != null ? data.getData() : null;
+        if (requestCode == REQ_PICK_APK) {
+            if (picked == null) return;
+            Toast.makeText(this, "Připravuji instalaci…", Toast.LENGTH_SHORT).show();
+            ApkInstaller.install(this, picked, err -> Toast.makeText(this, err, Toast.LENGTH_LONG).show());
+            return;
+        }
+        if (requestCode == REQ_EXPORT || requestCode == REQ_IMPORT) {
+            if (picked != null) onBackupFile(requestCode == REQ_EXPORT, picked);
+            return;
+        }
         if (requestCode != REQ_PICK_IMAGE) return;
         final String pkg = pendingImagePkg;
         pendingImagePkg = null;
@@ -814,6 +852,41 @@ public class LauncherActivity extends Activity
         Uri uri = data.getData();
         artwork.setCustomImage(e, uri, () -> Toast.makeText(this, "Obrázek nastaven",
                 Toast.LENGTH_SHORT).show());
+    }
+
+    // --- Zaloha nastaveni ---------------------------------------------------------
+
+    /** Vyber, kam ulozit zalohu (Nastaveni -> O Neo). */
+    public static Intent backupExportIntent() {
+        return new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("application/zip").putExtra(Intent.EXTRA_TITLE, Backup.fileName());
+    }
+
+    /** Vyber zalohy k obnoveni. */
+    public static Intent backupImportIntent() {
+        return new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE)
+                .setType("*/*").putExtra(Intent.EXTRA_MIME_TYPES,
+                        new String[]{"application/zip", "application/octet-stream"});
+    }
+
+    private void onBackupFile(boolean export, Uri uri) {
+        if (export) {
+            Backup.export(this, uri, err -> Toast.makeText(this,
+                    err != null ? err : "Záloha uložena", Toast.LENGTH_LONG).show());
+            return;
+        }
+        Backup.restore(this, uri, err -> {
+            if (err != null) {
+                Toast.makeText(this, err, Toast.LENGTH_LONG).show();
+                return;
+            }
+            // Vse znovu nacist: nastaveni, obrazky, poradi.
+            prefs.reloadAfterRestore();
+            artwork.clearMemory();
+            overlay.close();
+            showApps(true);
+            Toast.makeText(this, "Nastavení obnoveno ze zálohy", Toast.LENGTH_LONG).show();
+        });
     }
 
     // --- Baterie, hodiny, zmeny balicku ---------------------------------------------

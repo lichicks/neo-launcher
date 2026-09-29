@@ -1,3 +1,9 @@
+# Instalace APK, velikost her, záloha a paralaxa
+• Nastavení → Aplikace → Nainstalovat APK: vybereš soubor stažený třeba v prohlížeči Questu a nainstaluješ ho bez PC
+• Když podržíš kartu, v menu je vidět, kolik hra zabírá. V Nastavení → Aplikace přibylo řazení „Velikost“ (největší první). Obojí potřebuje stejné povolení jako herní čas
+• Nastavení → O Neo: záloha nastavení (pořadí, oblíbené, jména i vlastní obrázky) do jednoho souboru a obnova – po přeinstalaci, nebo ji pošli kamarádovi
+• Paralaxa: karty se jemně posouvají za laserem, horní lišta a levý panel proti němu, takže panel působí do hloubky. Na kartě pod laserem jde obrázek za laserem, název proti němu a přes kartu přejede odlesk (vypnout jde v Nastavení → Vzhled)
+
 # Meta tlačítko a nástup karet
 • Meta tlačítko teď otevře Neo samo: v Nastavení → Quest klepni u „Meta tlačítko otevře Neo“ na Zapnout a v Přístupnosti zapni službu „Neo – Meta tlačítko“. Doplněk z Lightning Launcheru už není potřeba
 • Když je Neo otevřené, další zmáčknutí Meta ukáže menu Questu – k nastavení Questu se dostaneš vždycky

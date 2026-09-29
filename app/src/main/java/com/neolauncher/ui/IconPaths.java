@@ -60,6 +60,10 @@ final class IconPaths {
     static final int CALENDAR = 43;
     static final int DOWNLOAD = 44;
     static final int CHEVRON_LEFT = 45;
+    static final int PACKAGE_PLUS = 46;
+    static final int ARCHIVE = 47;
+    static final int ARCHIVE_RESTORE = 48;
+    static final int DEPTH = 49;
 
     static final String[] DATA = {
             "M8 12a4 4 0 1 0 8 0a4 4 0 1 0 -8 0M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41", // SUN = sun
@@ -108,5 +112,9 @@ final class IconPaths {
             "M8 2v3M16 2v3M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-14a2 2 0 0 1 2 -2zM3 9h18", // CALENDAR = calendar
             "M12 15V3M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5 -5", // DOWNLOAD = download
             "M15 18l-6 -6 6 -6", // CHEVRON_LEFT = chevron-left
+            "M12 22V12M16 17h6M19 14v6M21 10.535V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.729l7 4a2 2 0 0 0 2 .001l1.675-.955M3.29 7 12 12l8.71-5M7.5 4.27l8.997 5.148", // PACKAGE_PLUS = package-plus
+            "M3 3h18a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-18a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1zM4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8M10 12h4", // ARCHIVE = archive
+            "M3 3h18a1 1 0 0 1 1 1v3a1 1 0 0 1 -1 1h-18a1 1 0 0 1 -1 -1v-3a1 1 0 0 1 1 -1zM4 8v11a2 2 0 0 0 2 2h2M20 8v11a2 2 0 0 1-2 2h-2M9 15l3 -3 3 3M12 12v9", // ARCHIVE_RESTORE = archive-restore
+            "M5 3v16h16M5 19l6 -6M2 6l3 -3 3 3M18 16l3 3 -3 3", // DEPTH = move-3d
     };
 }

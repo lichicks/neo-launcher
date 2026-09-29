@@ -57,6 +57,10 @@ public final class Icons {
     public static final int CALENDAR = IconPaths.CALENDAR;
     public static final int DOWNLOAD = IconPaths.DOWNLOAD;
     public static final int CHEVRON_LEFT = IconPaths.CHEVRON_LEFT;
+    public static final int PACKAGE_PLUS = IconPaths.PACKAGE_PLUS;
+    public static final int ARCHIVE = IconPaths.ARCHIVE;
+    public static final int ARCHIVE_RESTORE = IconPaths.ARCHIVE_RESTORE;
+    public static final int DEPTH = IconPaths.DEPTH;
 
     /** Cesty v prostoru 24x24, rozparsovane pri prvnim pouziti. */
     private static final Path[] CACHE = new Path[IconPaths.DATA.length];

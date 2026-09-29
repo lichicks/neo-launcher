@@ -81,6 +81,9 @@ Package `com.neolauncher.v1`. Je to 2D panel v prostoru Questu:
   Neo otevřené, další stisk = menu Questu, ve hře menu Questu, po hře se otevře Neo.
   Je to heuristika – **ještě neověřená na headsetu**; logy `adb -P 5038 logcat -s NeoMeta`.
   Službu Lightning Launcheru v Přístupnosti vypnout (jinak se otevřou oba).
+- **Nové (29. 9., zatím neověřené na headsetu):** instalace APK z Nea (Nastavení → Aplikace),
+  velikost her v menu karty + řazení „Velikost“, záloha a obnova nastavení (Nastavení → O Neo),
+  paralaxa (karty se posouvají za laserem, lišty proti němu, na kartě odlesk; jde vypnout).
 - První instalace: sideload (adb / SideQuest / stáhnout APK v prohlížeči Questu),
   další verze už přes aktualizace v launcheru. Na PC běží starý adb na portu 5037 →
   vždy `adb -P 5038 install -r NeoLauncher-2.0.xx.apk`.
@@ -126,7 +129,9 @@ Zvuky/haptika a počasí možná později.
    (Android 14 obyčejné aplikaci nedovolí zavřít jinou) – čte systémové menu Questu
    a zmáčkne jeho „Ukončit“. Uživatel nechtěl jednodušší verzi s odhadem.
 
-**Nápady, které uživatel zatím nevybral:** ovládání joystickem jako na konzoli;
+**Nápady, které uživatel zatím nevybral:** info bublina při delším najetí, štítek
+AKTUALIZOVÁNO, režim pro návštěvu, „Nevím, co hrát“, motivy (víc palet), sklo podle denní
+doby, oživené obrázky; ovládání joystickem jako na konzoli;
 tlačítko „…“ na kartě místo držení; vlastní pozadí; varování při plném úložišti.
 Ovládání hudby jen pokud jde ukázat jen když něco hraje (spíš ne). Připomínka pauzy: ne.
 Starší nápady: rozložení jako Lightning Launcher (hry velké, aplikace kolečka),
